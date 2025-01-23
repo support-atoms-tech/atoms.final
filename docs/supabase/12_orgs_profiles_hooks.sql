@@ -21,7 +21,7 @@ begin
     billing_plan,
     settings,
     max_members,
-    max_monthly_tokens
+    max_monthly_requests
   ) values (
     name || '''s Organization',
     generate_slug(name || '''s Organization'),
@@ -34,7 +34,7 @@ begin
       'require_2fa', false
     ),
     1,  -- personal orgs limited to 1 member
-    100000  -- 100k tokens for free tier
+    50
   )
   returning id into org_id;
 
@@ -202,17 +202,17 @@ $$;
 * TRIGGERS
 */
 -- Create user trigger
-create trigger on_auth_user_created
+create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
 
 -- Login trigger
-create trigger on_auth_user_login
+create or replace trigger on_auth_user_login
   after insert on auth.sessions
   for each row execute function handle_user_login();
 
 -- Delete user trigger
-create trigger on_auth_user_deleted
+create or replace trigger on_auth_user_deleted
   before delete on auth.users
   for each row execute function handle_deleted_user();
 

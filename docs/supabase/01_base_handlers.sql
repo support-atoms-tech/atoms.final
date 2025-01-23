@@ -116,40 +116,44 @@ returns trigger
 language plpgsql
 as $$
 declare
-    old_data jsonb;
-    new_data jsonb;
-    changed_fields jsonb;
+  old_data jsonb;
+  new_data jsonb;
+  changed_fields jsonb;
+  actor_id uuid;
 begin
-    -- Prepare the data based on operation type
-    if (TG_OP = 'DELETE') then
-        old_data = row_to_json(old)::jsonb;
-        new_data = null;
-    elsif (TG_OP = 'UPDATE') then
-        old_data = row_to_json(old)::jsonb;
-        new_data = row_to_json(new)::jsonb;
-    elsif (TG_OP = 'INSERT') then
-        old_data = null;
-        new_data = row_to_json(new)::jsonb;
-    end if;
+  -- Determine the actor_id
+  actor_id := coalesce(auth.uid(), '00000000-0000-0000-0000-000000000000');
 
-    -- Insert audit log
-    insert into audit_logs (
-        entity_id,
-        entity_type,
-        action,
-        actor_id,
-        old_data,
-        new_data
-    )
-    values (
-        coalesce(new.id, old.id),
-        TG_TABLE_NAME,
-        TG_OP,
-        auth.uid(),
-        old_data,
-        new_data
-    );
+  -- Prepare the data based on operation type
+  if (TG_OP = 'DELETE') then
+    old_data = row_to_json(old)::jsonb;
+    new_data = null;
+  elsif (TG_OP = 'UPDATE') then
+    old_data = row_to_json(old)::jsonb;
+    new_data = row_to_json(new)::jsonb;
+  elsif (TG_OP = 'INSERT') then
+    old_data = null;
+    new_data = row_to_json(new)::jsonb;
+  end if;
 
-    return coalesce(new, old);
+  -- Insert audit log
+  insert into audit_logs (
+    entity_id,
+    entity_type,
+    action,
+    actor_id,
+    old_data,
+    new_data
+  )
+  values (
+    coalesce(new.id, old.id),
+    TG_TABLE_NAME,
+    TG_OP,
+    actor_id,  -- Use the determined actor_id
+    old_data,
+    new_data
+  );
+
+  return coalesce(new, old);
 end;
 $$;
