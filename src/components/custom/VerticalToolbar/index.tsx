@@ -23,7 +23,7 @@ const VerticalToolbar = () => {
   return (
     <div className={cn(
       "fixed left-2 top-4 z-50 flex flex-col gap-2 transition-all duration-200",
-      state === "expanded" && "left-[17rem]"
+      state === "expanded" && "left-[16.5rem]"
     )}>
       <div className="flex items-center gap-1">
         <div className="h-10 w-10 flex items-center justify-center">

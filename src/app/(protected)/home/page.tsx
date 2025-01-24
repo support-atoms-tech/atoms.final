@@ -1,6 +1,3 @@
-'use server';
-
-// app/(protected)/dashboard/page.tsx
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/supabaseServer'
 import HomeDashboard from './components/HomeDashboard.client'

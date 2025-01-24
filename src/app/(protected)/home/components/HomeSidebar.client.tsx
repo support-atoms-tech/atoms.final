@@ -39,8 +39,8 @@ interface MenuItem {
 // Menu items with app router paths
 const items: MenuItem[] = [
   {
-    title: "Dashboard",
-    url: "/dashboard",
+    title: "Home",
+    url: "/home",
     icon: Home,
   },
   {

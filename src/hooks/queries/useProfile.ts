@@ -12,8 +12,10 @@ export function useProfile(userId: string) {
         .select('*')
         .eq('id', userId)
         .single()
-
-      if (error) throw error
+      if (error) {
+        console.log(error);
+        throw error
+      }
       return data as Profile
     },
     enabled: !!userId,

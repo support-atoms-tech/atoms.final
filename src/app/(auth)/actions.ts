@@ -20,7 +20,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect('/home')
 }
 
 export async function signup(formData: FormData) {
@@ -40,7 +40,7 @@ export async function signup(formData: FormData) {
         data: {
           full_name: name,
         },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/home`,
       },
     });
 
@@ -57,7 +57,7 @@ export async function signup(formData: FormData) {
     }
 
     revalidatePath('/', 'layout');
-    redirect('/dashboard');
+    redirect('/home');
   } catch (error) {
     return {
       error: 'An unexpected error occurred'

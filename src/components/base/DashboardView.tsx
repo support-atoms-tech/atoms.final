@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { useSettingsStore } from '@/store/settings.store';
 import { MonospaceGrid } from './MonospaceGrid';
@@ -23,8 +25,6 @@ export interface DashboardViewProps<T extends SupportedDataTypes = SupportedData
   emptyMessage?: string;
   gridItemRender?: (item: T) => React.ReactNode;
   renderDetails?: (item: T) => React.ReactNode;
-  onItemDelete?: (item: T) => void;
-  viewMode?: 'split' | 'full';
 }
 
 function DashboardView<T extends SupportedDataTypes>({
@@ -36,8 +36,6 @@ function DashboardView<T extends SupportedDataTypes>({
   emptyMessage = 'No items found.',
   gridItemRender,
   renderDetails,
-  onItemDelete,
-  viewMode = 'full'
 }: DashboardViewProps<T>) {
   const { viewMode: appViewMode } = useSettingsStore();
 
@@ -54,7 +52,7 @@ function DashboardView<T extends SupportedDataTypes>({
       <div className="animate-pulse">Loading...</div>
     );
   }
-
+  console.log(data);
   if (data.length === 0) {
     return <div className="text-center text-gray-500 dark:text-dark-text-secondary py-8">{emptyMessage}</div>;
   }
@@ -68,8 +66,6 @@ function DashboardView<T extends SupportedDataTypes>({
         handleGoToPage={handleGoToPage}
         gridItemRender={gridItemRender}
         renderDetails={renderDetails}
-        onItemDelete={onItemDelete}
-        viewMode={viewMode}
       />
     );
   }
@@ -82,6 +78,7 @@ function DashboardView<T extends SupportedDataTypes>({
       renderDetails={renderDetails}
       isLoading={isLoading}
       emptyMessage={emptyMessage}
+      showFilter={false}
     />
   );
 }
