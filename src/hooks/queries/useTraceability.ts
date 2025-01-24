@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import supabase from '@/lib/config/supabase'
+import { supabase } from '@/lib/supabase/supabaseBrowser'
 import { TraceLink, Assignment, AuditLog, Notification } from '@/types/base/traceability.types'
 import { EntityType } from '@/types/base/enums.types'
 import { queryKeys } from '@/lib/constants/queryKeys'
@@ -11,7 +11,6 @@ export function useTraceLinks(sourceId: string, sourceType: EntityType, queryFil
     queryKey: queryKeys.traceLinks.bySource(sourceId, sourceType),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'trace_links',
         {
           ...queryFilters,
@@ -32,7 +31,6 @@ export function useReverseTraceLinks(targetId: string, targetType: EntityType, q
     queryKey: queryKeys.traceLinks.byTarget(targetId, targetType),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'trace_links',
         {
           ...queryFilters,
@@ -53,7 +51,6 @@ export function useAssignments(entityId: string, entityType: EntityType, queryFi
     queryKey: queryKeys.assignments.byEntity(entityId, entityType),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'assignments',
         {
           ...queryFilters,
@@ -74,7 +71,6 @@ export function useUserAssignments(userId: string, queryFilters?: Omit<QueryFilt
     queryKey: queryKeys.assignments.byUser(userId),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'assignments',
         {
           ...queryFilters,
@@ -95,7 +91,6 @@ export function useAuditLogs(entityId: string, entityType: string, queryFilters?
     queryKey: queryKeys.auditLogs.byEntity(entityId, entityType),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'audit_logs',
         {
           ...queryFilters,
@@ -117,7 +112,6 @@ export function useNotifications(userId: string, queryFilters?: Omit<QueryFilter
     queryKey: queryKeys.notifications.byUser(userId),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'notifications',
         {
           ...queryFilters,
@@ -138,7 +132,6 @@ export function useUnreadNotificationsCount(userId: string) {
     queryKey: queryKeys.notifications.unreadCount(userId),
     queryFn: async () => {
       const { count } = await buildQuery(
-        supabase,
         'notifications',
         {
           filters: [

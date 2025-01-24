@@ -42,6 +42,7 @@ export const queryKeys = {
     list: (filters: Record<string, any>) => [...queryKeys.organizations.lists(), { filters }] as const,
     details: () => [...queryKeys.organizations.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.organizations.details(), id] as const,
+    byUser: (userId: string) => [...queryKeys.organizations.all, 'byUser', userId] as const,
   },
   traceLinks: {
     all: ['traceLinks'] as const,

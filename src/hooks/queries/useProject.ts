@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import supabase from '@/lib/config/supabase'
+import { supabase } from '@/lib/supabase/supabaseBrowser'
 import { queryKeys } from '@/lib/constants/queryKeys'
 import { Project } from '@/types/base/projects.types'
 

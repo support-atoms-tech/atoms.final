@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
+import ConfirmEmailMessage from './message';
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -25,6 +26,13 @@ export default function RegisterPage() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState(searchParams.get('error') || '');
     const [isLoading, setIsLoading] = useState(false);
+
+    const message = searchParams.get('message');
+    
+    // If we have a message, show the confirmation message component
+    if (message) {
+        return <ConfirmEmailMessage />;
+    }
 
     useEffect(() => {
         const errorMsg = searchParams.get('error');

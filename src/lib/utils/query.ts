@@ -1,5 +1,5 @@
 import { PostgrestFilterBuilder } from '@supabase/postgrest-js'
-import { SupabaseClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase/supabaseBrowser'
 import { Filter, QueryFilters, Sort } from '@/types/base/filters.types'
 import { Database } from '@/types/base/database.types'
 
@@ -70,7 +70,6 @@ export function applyPagination<T extends TableName>(
 }
 
 export async function buildQuery<T extends TableName>(
-    supabase: SupabaseClient<Database>,
     table: T,
     queryFilters?: QueryFilters,
     select: string = '*'

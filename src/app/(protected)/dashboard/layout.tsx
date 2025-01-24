@@ -1,19 +1,28 @@
-// import { SidebarProvider } from '@/components/ui/sidebar';
-// import { AppSidebar } from '@/components/private/sidebar/AppSidebar';
-// import VerticalToolbar from '@/components/private/VerticalToolbar';
+import { createClient } from '@/lib/supabase/supabaseServer';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { HomeSidebar } from './components/HomeSidebar.client';
+import VerticalToolbar from '@/components/custom/VerticalToolbar';
 
-// export default function ProtectedLayout({
-//     children,
-// }: {
-//     children: React.ReactNode;
-// }) {
-//     return (
-//         <SidebarProvider>
-//             <AppSidebar />
-//             <div className="relative flex-1 p-16">
-//                 {children}
-//                 <VerticalToolbar />
-//             </div>
-//         </SidebarProvider>
-//     );
-// }
+export default async function ProtectedLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+
+    return (
+        <SidebarProvider>
+            <HomeSidebar user={user} profile={profile} />
+            <div className="relative flex-1 p-16">
+                {children}
+                <VerticalToolbar />
+            </div>
+        </SidebarProvider>
+    );
+}

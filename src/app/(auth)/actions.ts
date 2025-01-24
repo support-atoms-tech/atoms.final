@@ -38,14 +38,13 @@ export async function signup(formData: FormData) {
       ...data,
       options: {
         data: {
-          name: name,
+          full_name: name,
         },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
       },
     });
 
     if (error) {
-      console.error('Signup error:', error);
       return {
         error: error.message
       };
@@ -64,4 +63,16 @@ export async function signup(formData: FormData) {
       error: 'An unexpected error occurred'
     };
   }
+}
+
+export async function signOut() {
+  const supabase = await createClient()
+  const { error } = await supabase.auth.signOut()
+
+  if (error) {
+    throw error
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/login')
 }

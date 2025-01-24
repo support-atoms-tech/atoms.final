@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import supabase from '@/lib/config/supabase'
+import { supabase } from '@/lib/supabase/supabaseBrowser'
 import { queryKeys } from '@/lib/constants/queryKeys'
 import { Requirement } from '@/types/base/requirements.types'
 import { QueryFilters } from '@/types/base/filters.types'
@@ -27,7 +27,6 @@ export function useRequirements(queryFilters?: QueryFilters) {
     queryKey: queryKeys.requirements.list(queryFilters || {}),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'requirements',
         queryFilters
       )
@@ -41,7 +40,6 @@ export function useDocumentRequirements(documentId: string, queryFilters?: Omit<
     queryKey: queryKeys.requirements.byDocument(documentId),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'requirements',
         {
           ...queryFilters,
@@ -62,7 +60,6 @@ export function useBlockRequirements(blockId: string, queryFilters?: Omit<QueryF
     queryKey: queryKeys.requirements.byBlock(blockId),
     queryFn: async () => {
       const { data } = await buildQuery(
-        supabase,
         'requirements',
         {
           ...queryFilters,
