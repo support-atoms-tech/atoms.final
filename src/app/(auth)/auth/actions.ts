@@ -34,6 +34,9 @@ export async function signup(formData: FormData) {
   const name = formData.get('name') as string;
 
   try {
+    //Clear the session if it exists
+    await supabase.auth.signOut();
+
     const { data: authData, error } = await supabase.auth.signUp({
       ...data,
       options: {

@@ -8,8 +8,8 @@ import { useContextStore } from "@/store/context.store";
 
 export default function OrgDashboard({ orgId, userId }: { orgId: string, userId: string }) {
     const router = useRouter();
-    const { setCurrentProjectId } = useContextStore();
-    const { data: projects, isLoading } = useProjectsByMembershipForOrg(orgId, userId);
+    const { currentOrgId, currentUserId, setCurrentProjectId } = useContextStore();
+    const { data: projects, isLoading } = useProjectsByMembershipForOrg(currentOrgId as string, currentUserId as string);
 
     const columns: Column[] = [
         {

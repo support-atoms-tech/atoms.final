@@ -75,7 +75,7 @@ export function useOrganizationsByMembership(userId: string) {
             // Fetch the organization IDs the user is part of
             const { data: memberships, error: membershipsError } = await supabase
                 .from('organization_members')
-                .select('org_id')
+                .select('organization_id')
                 .eq('user_id', userId)
                 .eq('status', 'active')
                 .eq('is_deleted', false);
@@ -90,7 +90,7 @@ export function useOrganizationsByMembership(userId: string) {
                 return []; // Return an empty array if no memberships are found
             }
 
-            const organizationIds = memberships.map((member) => member.org_id) as string[];
+            const organizationIds = memberships.map((member) => member.organization_id) as string[];
 
             const { data: organizations, error: organizationsError } = await supabase
                 .from('organizations')

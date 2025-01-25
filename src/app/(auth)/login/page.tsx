@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { login } from '../actions'
+import { login } from '../auth/actions'
 import Link from 'next/link'
 import {
   Card,

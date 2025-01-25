@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signup } from '../actions';
+import { signup } from '../auth/actions';
 import Link from 'next/link';
 import {
     Card,
@@ -20,6 +20,8 @@ import ConfirmEmailMessage from './message';
 export default function RegisterPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const message = searchParams.get('message');
+    
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -27,17 +29,15 @@ export default function RegisterPage() {
     const [error, setError] = useState(searchParams.get('error') || '');
     const [isLoading, setIsLoading] = useState(false);
 
-    const message = searchParams.get('message');
-    
-    // If we have a message, show the confirmation message component
-    if (message) {
-        return <ConfirmEmailMessage />;
-    }
-
     useEffect(() => {
         const errorMsg = searchParams.get('error');
         if (errorMsg) setError(errorMsg);
     }, [searchParams]);
+
+    // If we have a message, show the confirmation message component
+    if (message) {
+        return <ConfirmEmailMessage />;
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -65,12 +65,12 @@ export default function RegisterPage() {
                 router.push(`/signup?message=${encodeURIComponent(result.message)}`);
             }
         } catch (err) {
+            console.error(err);
             setError('An unexpected error occurred');
         } finally {
             setIsLoading(false);
         }
     };
-
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">

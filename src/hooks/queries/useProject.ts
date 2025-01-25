@@ -86,7 +86,7 @@ export function useProjectsByMembershipForOrg(orgId: string, userId: string) {
             const { data, error } = await supabase
                 .from('project_members')
                 .select('project_id')
-                .eq('organization_id', orgId)
+                .eq('org_id', orgId)
                 .eq('user_id', userId)
                 .eq('status', 'active')
                 .order('created_at', { ascending: false })

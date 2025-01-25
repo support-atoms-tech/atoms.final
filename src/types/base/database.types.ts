@@ -543,6 +543,7 @@ export type Database = {
           member_count: number | null
           metadata: Json | null
           name: string
+          owner_id: string | null
           settings: Json | null
           slug: string
           status: Database["public"]["Enums"]["user_status"] | null
@@ -567,6 +568,7 @@ export type Database = {
           member_count?: number | null
           metadata?: Json | null
           name: string
+          owner_id?: string | null
           settings?: Json | null
           slug: string
           status?: Database["public"]["Enums"]["user_status"] | null
@@ -591,6 +593,7 @@ export type Database = {
           member_count?: number | null
           metadata?: Json | null
           name?: string
+          owner_id?: string | null
           settings?: Json | null
           slug?: string
           status?: Database["public"]["Enums"]["user_status"] | null
@@ -725,6 +728,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           last_accessed_at: string | null
+          org_id: string | null
           permissions: Json | null
           project_id: string
           role: Database["public"]["Enums"]["project_role"]
@@ -739,6 +743,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           last_accessed_at?: string | null
+          org_id?: string | null
           permissions?: Json | null
           project_id: string
           role?: Database["public"]["Enums"]["project_role"]
@@ -753,6 +758,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           last_accessed_at?: string | null
+          org_id?: string | null
           permissions?: Json | null
           project_id?: string
           role?: Database["public"]["Enums"]["project_role"]
@@ -761,6 +767,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "project_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "project_members_project_id_fkey"
             columns: ["project_id"]
@@ -1634,6 +1647,13 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role_type"]
         }
         Returns: string
+      }
+      is_project_owner_or_admin: {
+        Args: {
+          project_id: string
+          user_id: string
+        }
+        Returns: boolean
       }
       is_valid_email: {
         Args: {

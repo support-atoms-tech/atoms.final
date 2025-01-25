@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 // import { useAuth } from "@/hooks/useAuth";
 // import History from "./History";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 // import { CreatePanel } from "@/components/private";
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Profile } from '@/types';
@@ -29,6 +29,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { CreatePanel } from "@/components/base/panels/CreatePanel";
 
 interface MenuItem {
   title: string;
@@ -63,6 +65,8 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({ user, profile }: DashboardSidebarProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
+  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -83,8 +87,29 @@ export function DashboardSidebar({ user, profile }: DashboardSidebarProps) {
     }
   };
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        // Move focus to a visible element before hiding the sidebar
+        const firstFocusableElement = document.querySelector('.main-content button, .main-content [href], .main-content input');
+        if (firstFocusableElement) {
+          (firstFocusableElement as HTMLElement).focus();
+        }
+
+        // Hide the sidebar
+        setIsSidebarHidden(true);
+      } else {
+        // Show the sidebar
+        setIsSidebarHidden(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <Sidebar>
+    <Sidebar inert={isSidebarHidden}>
       <SidebarContent className="px-3 py-2">
         <SidebarGroup>
           <SidebarGroupLabel className="flex items-center gap-2 px-1 mb-6">
@@ -111,6 +136,24 @@ export function DashboardSidebar({ user, profile }: DashboardSidebarProps) {
                   </SidebarMenuItem>
                 </Link>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full relative z-20"
+                    onClick={() => setIsCreatePanelOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Create New</span>
+                  </Button>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <CreatePanel
+                isOpen={isCreatePanelOpen}
+                onClose={() => setIsCreatePanelOpen(false)}
+                showTabs="show"
+              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
