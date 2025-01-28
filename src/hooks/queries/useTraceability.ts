@@ -4,7 +4,7 @@ import { TraceLink, Assignment, AuditLog, Notification } from '@/types/base/trac
 import { EntityType } from '@/types/base/enums.types'
 import { queryKeys } from '@/lib/constants/queryKeys'
 import { QueryFilters } from '@/types/base/filters.types'
-import { buildQuery } from '@/lib/utils/query'
+import { buildQuery } from '@/lib/utils/queryFactory'
 
 export function useTraceLinks(sourceId: string, sourceType: EntityType, queryFilters?: Omit<QueryFilters, 'filters'>) {
   return useQuery({

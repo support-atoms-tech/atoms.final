@@ -3,7 +3,7 @@
 import React from 'react';
 import { FileText } from 'lucide-react';
 import { motion, LayoutGroup } from 'framer-motion';
-import { transitionConfig } from '@/lib/animations';
+import { transitionConfig } from '@/lib/utils/animations';
 import { Organization, Project, Requirement } from '@/types';
 
 type SupportedDataTypes = Organization | Project | Requirement;

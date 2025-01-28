@@ -5,7 +5,7 @@ import { X, ExternalLink, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { detailsVariants } from '@/lib/animations';
+import { detailsVariants } from '@/lib/utils/animations';
 import {
     DropdownMenu,
     DropdownMenuContent,

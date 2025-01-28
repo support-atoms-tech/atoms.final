@@ -2,7 +2,7 @@
 
 import { Table, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useSettingsStore } from '@/store/settings.store';
+import { useSettingsStore } from '@/lib/store/settings.store';
 import {
   Tooltip,
   TooltipContent,

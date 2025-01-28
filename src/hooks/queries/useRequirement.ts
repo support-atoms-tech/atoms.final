@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase/supabaseBrowser'
 import { queryKeys } from '@/lib/constants/queryKeys'
 import { Requirement } from '@/types/base/requirements.types'
 import { QueryFilters } from '@/types/base/filters.types'
-import { buildQuery } from '@/lib/utils/query'
+import { buildQuery } from '@/lib/utils/queryFactory'
 
 export function useRequirement(requirementId: string) {
   return useQuery({

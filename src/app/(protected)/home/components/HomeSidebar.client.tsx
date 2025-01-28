@@ -10,6 +10,7 @@ import { useState } from "react";
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Profile } from '@/types';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@/lib/providers/user.provider';
 
 import {
   DropdownMenu,
@@ -55,12 +56,9 @@ const items: MenuItem[] = [
   },
 ];
 
-interface HomeSidebarProps {
-  user: SupabaseUser | null;
-  profile: Profile | null;
-}
 
-export function HomeSidebar({ user, profile }: HomeSidebarProps) {
+export function HomeSidebar() {
+  const { user, profile } = useUser();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 

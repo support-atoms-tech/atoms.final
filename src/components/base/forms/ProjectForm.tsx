@@ -23,17 +23,17 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { useProjectStore } from '@/lib/store/projectStore';
+import { useProjectStore } from '@/lib/store/project.store';
 import { ProjectStatus, Visibility } from '@/types/base/enums.types';
 import { useCreateProject } from '@/hooks/mutations/useProjectMutations';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase/supabaseBrowser';
 
 const projectFormSchema = z.object({
     name: z.string().min(1, 'Project name is required'),
     description: z.string().optional(),
     status: z.nativeEnum(ProjectStatus),
     visibility: z.nativeEnum(Visibility),
-    tags: z.array(z.string()).optional(),
 });
 
 type ProjectFormValues = z.infer<typeof projectFormSchema>;
@@ -73,7 +73,6 @@ export default function ProjectForm({ onSuccess }: ProjectFormProps) {
                 name: data.name,
                 status: data.status,
                 description: data.description || null,
-                tags: data.tags || null,
                 visibility: data.visibility,
                 organization_id: userProfile.current_organization_id || userProfile.personal_organization_id || '',
                 owned_by: userProfile.id,
@@ -81,11 +80,35 @@ export default function ProjectForm({ onSuccess }: ProjectFormProps) {
                     source: 'web_app',
                     template_version: '1.0',
                 },
-                settings: null,
                 slug: data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
                 created_by: userProfile.id,
                 updated_by: userProfile.id,
             });
+
+            // const project = await supabase.from('projects').insert({
+            //     name: data.name,
+            //     slug: data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            //     description: data.description || null,
+            //     status: data.status,
+            //     visibility: data.visibility,
+            //     organization_id: userProfile.current_organization_id || userProfile.personal_organization_id || '',
+            //     owned_by: userProfile.id,
+            //     metadata: {
+            //         source: 'web_app',
+            //         template_version: '1.0',
+            //     },
+            //     created_by: userProfile.id,
+            //     updated_by: userProfile.id,
+            // }).select().single();
+
+            // if (project.error) {
+            //     console.error('Failed to create project', project.error);
+            //     throw new Error(project.error.message);
+            // }
+
+            // console.log('Project created successfully', project.data);
+            
+            
             toast({
                 variant: 'default',
                 title: 'Success',

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { transitionConfig } from '@/lib/animations';
+import { transitionConfig } from '@/lib/utils/animations';
 import { cn } from '@/lib/utils';
 import { Organization, Project, Requirement } from '@/types';
 

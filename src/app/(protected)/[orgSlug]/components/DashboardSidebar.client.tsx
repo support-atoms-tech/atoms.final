@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { CreatePanel } from "@/components/base/panels/CreatePanel";
+import { useUser } from "@/lib/providers/user.provider";
 
 interface MenuItem {
   title: string;
@@ -57,16 +58,12 @@ const items: MenuItem[] = [
   },
 ];
 
-interface DashboardSidebarProps {
-  user: SupabaseUser | null;
-  profile: Profile | null;
-}
-
-export function DashboardSidebar({ user, profile }: DashboardSidebarProps) {
+export function DashboardSidebar() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+  const { user, profile } = useUser();
 
   const handleSignOut = async () => {
     try {

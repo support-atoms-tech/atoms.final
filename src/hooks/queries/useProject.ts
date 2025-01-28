@@ -90,6 +90,7 @@ export function useProjectsByMembershipForOrg(orgId: string, userId: string) {
                 .eq('user_id', userId)
                 .eq('status', 'active')
                 .order('created_at', { ascending: false })
+            console.log('Project members', data);
             if (error) throw error
             const projectIds = data.map((member) => member.project_id)
             const { data: projects, error: projectError } = await supabase

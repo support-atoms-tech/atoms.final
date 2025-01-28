@@ -4,14 +4,17 @@ import DashboardView, { Column, SupportedDataTypes } from "@/components/base/Das
 import { Organization } from "@/types";
 import { useOrganizationsByMembership } from "@/hooks/queries/useOrganization";
 import { useRouter } from "next/navigation";
-import { useContextStore } from "@/store/context.store";
-
-export default function HomeDashboard({ userId }: { userId: string }) {
+import { useContextStore } from "@/lib/store/context.store";
+import RenderCounter from "@/components/RerenderCount";
+import { useUser } from '@/lib/providers/user.provider';
+import { useOrganization } from '@/lib/providers/organization.provider';
+export default function HomeDashboard() {
+    const { user } = useUser();
     const router = useRouter();
     const { setCurrentUserId, setCurrentOrgId } = useContextStore();
-    const { data: organizations, isLoading } = useOrganizationsByMembership(userId);
+    const { setOrganization } = useOrganization();
+    const { data: organizations, isLoading } = useOrganizationsByMembership(user?.id || '');
 
-    //setCurrentUserId(userId);
 
     const columns: Column[] = [
         {
@@ -33,18 +36,21 @@ export default function HomeDashboard({ userId }: { userId: string }) {
     ];
 
     const handleRowClick = (item: SupportedDataTypes) => {
-        setCurrentUserId(userId);
-        setCurrentOrgId((item as Organization).id);
+        setCurrentUserId(user?.id || '');
+        setOrganization(item as Organization);
         router.push(`/${(item as Organization).slug}`);
     };
 
     return (
-        <DashboardView
-            data={organizations || []}
-            columns={columns}
-            isLoading={isLoading}
-            emptyMessage="No organizations found."
-            onRowClick={handleRowClick}
-        />
+        <>
+            <DashboardView
+                data={organizations || []}
+                columns={columns}
+                isLoading={isLoading}
+                emptyMessage="No organizations found."
+                onRowClick={handleRowClick}
+            />
+            <RenderCounter />
+        </>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useContextStore } from "@/store/context.store";
+import { useContextStore } from "@/lib/store/context.store";
 import OrgDashboard from "./components/OrgDashboard.client";
 
 export default function OrgTemplate() {
