@@ -41,12 +41,12 @@ export function useCreateRequirement() {
                         level: input.level,
                         name: input.name,
                         original_requirement: input.original_requirement,
-                        priority: input.priority,
-                        status: input.status,
+                        priority: input.priority.toLowerCase(),
+                        status: input.status.toLowerCase(),
                         tags: input.tags,
                         created_by: input.created_by,
                         updated_by: input.updated_by,
-                        data: input.data || {},
+                        properties: input.properties || {},
                         version: 1,
                     })
                     .select()

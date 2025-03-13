@@ -14,6 +14,8 @@ import {
     getUserProfileServer,
     getUserProjectsServer,
 } from '@/lib/db/server';
+import { Document } from '@/types/base/documents.types';
+import { DocumentSchema } from '@/types/validation/documents.validation';
 
 // Cache this function to prevent multiple executions in the same request
 export const prefetchUserDashboard = cache(
@@ -104,12 +106,15 @@ export const fetchProjectData = cache(
                     return data;
                 }),
                 getProjectDocumentsServer(projectId).then((data) => {
+                    // Parse the data with DocumentSchema and explicitly type as Document[]
+                    const parsedDocuments: Document[] = data.map((doc) => DocumentSchema.parse(doc)) as Document[];
+                    
                     // Update cache
                     client.setQueryData(
                         queryKeys.documents.byProject(projectId),
-                        data,
+                        parsedDocuments,
                     );
-                    return data;
+                    return parsedDocuments;
                 }),
             ]);
         }

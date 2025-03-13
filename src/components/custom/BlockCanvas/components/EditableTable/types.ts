@@ -1,4 +1,4 @@
-export type EditableColumnType = 'text' | 'select' | 'number' | 'date';
+export type EditableColumnType = 'text' | 'select' | 'multi_select' | 'number' | 'date';
 
 export interface ValidationRule {
     validate: (value: string | number | Date | null) => boolean;
@@ -19,7 +19,7 @@ export interface ColumnValidation {
 }
 
 // Type for the possible values in a cell
-export type CellValue = string | number | Date | null;
+export type CellValue = string | number | Date | string[] | null;
 
 export interface EditableColumn<T> {
     header: string;
@@ -51,6 +51,7 @@ export interface EditableTableProps<
     showFilter?: boolean;
     filterComponent?: React.ReactNode;
     isEditMode?: boolean;
+    alwaysShowAddRow?: boolean; // Always show the "Add New Row" row, even when there are no items
 }
 
 export interface TableSideMenuProps {

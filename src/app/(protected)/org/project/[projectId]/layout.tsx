@@ -1,17 +1,21 @@
-// src/app/(protected)/org/[orgId]/[projectId]/layout.tsx
+// src/app/(protected)/org/project/[projectId]/layout.tsx
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
+import { getCookie } from '@/app/(protected)/org/actions';
+import Sidebar from '@/components/base/Sidebar';
+import VerticalToolbar from '@/components/custom/VerticalToolbar';
 import { ProjectPageSkeleton } from '@/components/custom/skeletons/ProjectPageSkeleton';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import { getQueryClient } from '@/lib/constants/queryClient';
 import { fetchProjectData } from '@/lib/db/utils/prefetchData';
 import { ProjectProvider } from '@/lib/providers/project.provider';
 import { Project } from '@/types';
+import { Document } from '@/types/base/documents.types';
 
 interface ProjectLayoutProps {
     children: React.ReactNode;
     params: Promise<{
-        orgId: string;
         projectId: string;
     }>;
 }
@@ -20,7 +24,7 @@ export default async function ProjectLayout({
     children,
     params,
 }: ProjectLayoutProps) {
-    const { orgId, projectId } = await params;
+    const { projectId } = await params;
 
     if (!projectId) notFound();
 
@@ -28,20 +32,31 @@ export default async function ProjectLayout({
 
     try {
         // Fetch project data, documents, etc.
+        const preferredOrgId = (await getCookie('preferred_org_id'))?.value;
+        if (!preferredOrgId) notFound();
+
         const { project, documents } = await fetchProjectData(
-            orgId,
+            preferredOrgId,
             projectId,
             queryClient,
         );
-        console.log('documents', documents);
 
         if (!project) notFound();
 
         return (
-            <ProjectProvider initialProject={project as Project}>
-                <Suspense fallback={<ProjectPageSkeleton />}>
-                    {children}
-                </Suspense>
+            <ProjectProvider
+                initialProject={project as Project}
+                initialDocuments={documents as Document[]}
+            >
+                <SidebarProvider>
+                    <Sidebar />
+                    <div className="relative flex-1 p-16">
+                        <Suspense fallback={<ProjectPageSkeleton />}>
+                            {children}
+                        </Suspense>
+                    </div>
+                    <VerticalToolbar />
+                </SidebarProvider>
             </ProjectProvider>
         );
     } catch (error) {

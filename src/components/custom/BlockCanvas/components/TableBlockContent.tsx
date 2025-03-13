@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { SidePanel } from '@/components/base/panels/SidePanel';
 import { EditableTable } from '@/components/custom/BlockCanvas/components/EditableTable';
 import { DynamicRequirement } from '@/components/custom/BlockCanvas/hooks/useRequirementActions';
+import { PropertyType } from '@/components/custom/BlockCanvas/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Requirement } from '@/types/base/requirements.types';
 
@@ -17,8 +18,9 @@ interface TableBlockContentProps {
         isNew: boolean,
     ) => Promise<void>;
     onDeleteRequirement: (dynamicReq: DynamicRequirement) => Promise<void>;
-    onAddColumn: (name: string, dataType: string) => Promise<void>;
+    onAddColumn: (name: string, dataType: PropertyType) => Promise<void>;
     isEditMode: boolean;
+    alwaysShowAddRow?: boolean;
 }
 
 export const TableBlockContent: React.FC<TableBlockContentProps> = ({
@@ -28,6 +30,7 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = ({
     onDeleteRequirement,
     onAddColumn,
     isEditMode,
+    alwaysShowAddRow = false,
 }) => {
     const { userProfile } = useAuth();
     const [selectedRequirement, setSelectedRequirement] =
@@ -54,6 +57,7 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = ({
                 emptyMessage="Click the 'New Row' below to add your first requirement."
                 showFilter={true}
                 isEditMode={isEditMode}
+                alwaysShowAddRow={alwaysShowAddRow}
             />
 
             <SidePanel

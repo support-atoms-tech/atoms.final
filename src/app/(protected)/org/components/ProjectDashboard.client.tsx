@@ -9,20 +9,30 @@ import { CreatePanel } from '@/components/base/panels/CreatePanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useProjectDocuments } from '@/hooks/queries/useDocument';
+import { useOrganization } from '@/lib/providers/organization.provider';
 import { useProject } from '@/lib/providers/project.provider';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Document } from '@/types/base/documents.types';
 import { Requirement } from '@/types/base/requirements.types';
 import { RequirementSchema } from '@/types/validation';
+import { setCookie } from '@/app/(protected)/org/actions';
+import { useCookies } from 'next-client-cookies';
 
 export default function ProjectPage() {
     const router = useRouter();
-    const params = useParams<{ orgId: string; projectId: string }>();
+    const cookies = useCookies();
+    const params = useParams<{ projectId: string }>();
     const { project } = useProject();
+    const { currentOrganization } = useOrganization();
     const [showCreateDocumentPanel, setShowCreateDocumentPanel] =
         useState(false);
     const { data: documents, isLoading: documentsLoading } =
         useProjectDocuments(project?.id || '');
+
+    const orgId = cookies.get('preffered_org_id');
+    if (orgId && currentOrganization?.id !== orgId) {
+        cookies.set('preffered_org_id', orgId);
+    }
 
     const { data: requirements, isLoading: requirementsLoading } = useQuery({
         queryKey: ['requirements', project?.id],
@@ -113,15 +123,11 @@ export default function ProjectPage() {
     ];
 
     const handleRowClick = (item: Requirement) => {
-        router.push(
-            `/org/${params.orgId}/${params.projectId}/requirements/${item.id}`,
-        );
+        router.push(`/org/project/${params.projectId}/requirements/${item.id}`);
     };
 
     const handleDocumentClick = (doc: Document) => {
-        router.push(
-            `/org/${params.orgId}/${params.projectId}/documents/${doc.id}`,
-        );
+        router.push(`/org/project/${params.projectId}/documents/${doc.id}`);
     };
 
     const isLoading = documentsLoading || requirementsLoading;

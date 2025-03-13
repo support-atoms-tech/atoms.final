@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
+import { setCookie } from '@/app/(protected)/org/actions';
 import { CreatePanel } from '@/components/base/panels/CreatePanel';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,7 +45,7 @@ const items: MenuItem[] = [
     },
 ];
 
-export default function Sidebar() {
+function Sidebar() {
     const router = useRouter();
     const pathname = usePathname();
     const [isLoading, setIsLoading] = useState(false);
@@ -84,6 +85,7 @@ export default function Sidebar() {
     const navigateToPlayground = useCallback(() => {
         if (personalOrg) {
             console.log('Navigating to playground:', personalOrg.id);
+            setCookie('preferred_org_id', personalOrg.id);
             router.push(`/org/${personalOrg.id}`);
         } else {
             console.log('No personal organization found');
@@ -93,6 +95,7 @@ export default function Sidebar() {
     const navigateToEnterprise = useCallback(() => {
         if (primaryEnterpriseOrg) {
             console.log('Navigating to enterprise:', primaryEnterpriseOrg.id);
+            setCookie('preferred_org_id', primaryEnterpriseOrg.id);
             router.push(`/org/${primaryEnterpriseOrg.id}`);
         } else {
             console.log('No enterprise organization found');
@@ -305,3 +308,5 @@ export default function Sidebar() {
         </SidebarContainer>
     );
 }
+
+export default Sidebar;

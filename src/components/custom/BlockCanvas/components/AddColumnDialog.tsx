@@ -20,11 +20,26 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { PropertyType } from '@/components/custom/BlockCanvas/types';
 
 interface AddColumnDialogProps {
-    onAddColumn: (name: string, dataType: string) => Promise<void>;
+    onAddColumn: (name: string, dataType: PropertyType) => Promise<void>;
     disabled?: boolean;
 }
+
+// Define property type options with display names
+const PROPERTY_TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
+    { value: 'text', label: 'Text' },
+    { value: 'number', label: 'Number' },
+    { value: 'date', label: 'Date' },
+    { value: 'boolean', label: 'Boolean' },
+    { value: 'select', label: 'Select (Dropdown)' },
+    { value: 'multi_select', label: 'Multi-Select' },
+    { value: 'user', label: 'User' },
+    { value: 'url', label: 'URL' },
+    { value: 'email', label: 'Email' },
+    { value: 'rich_text', label: 'Rich Text' },
+];
 
 export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
     onAddColumn,
@@ -32,7 +47,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
 }) => {
     const [open, setOpen] = useState(false);
     const [columnName, setColumnName] = useState('');
-    const [dataType, setDataType] = useState('string');
+    const [dataType, setDataType] = useState<PropertyType>('text');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +75,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
             await onAddColumn(columnName, dataType);
             setOpen(false);
             setColumnName('');
-            setDataType('string');
+            setDataType('text');
         } catch (err) {
             console.error('Failed to add column:', err);
             setError('Failed to add column. Please try again.');
@@ -111,7 +126,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                             </Label>
                             <Select
                                 value={dataType}
-                                onValueChange={setDataType}
+                                onValueChange={(value) => setDataType(value as PropertyType)}
                             >
                                 <SelectTrigger
                                     className="col-span-3"
@@ -120,15 +135,11 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                                     <SelectValue placeholder="Select data type" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="string">Text</SelectItem>
-                                    <SelectItem value="number">
-                                        Number
-                                    </SelectItem>
-                                    <SelectItem value="date">Date</SelectItem>
-                                    <SelectItem value="boolean">
-                                        Boolean
-                                    </SelectItem>
-                                    <SelectItem value="enum">Select</SelectItem>
+                                    {PROPERTY_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>

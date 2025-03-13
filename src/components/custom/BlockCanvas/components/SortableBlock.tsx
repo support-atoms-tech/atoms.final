@@ -19,6 +19,7 @@ export const SortableBlock: React.FC<BlockProps> = ({
     onDelete,
     isEditMode,
     onDoubleClick,
+    properties,
 }) => {
     const {
         attributes,
@@ -90,6 +91,7 @@ export const SortableBlock: React.FC<BlockProps> = ({
                     isEditMode={isEditMode}
                     onDelete={onDelete}
                     onDoubleClick={onDoubleClick}
+                    properties={properties}
                 />
             )}
         </div>

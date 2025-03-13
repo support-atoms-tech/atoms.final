@@ -43,6 +43,7 @@ export function EditableTable<
     showFilter = true,
     filterComponent,
     isEditMode = false,
+    alwaysShowAddRow = false,
 }: EditableTableProps<T>) {
     const [sortKey, setSortKey] = React.useState<keyof T | null>(null);
     const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('asc');
@@ -101,9 +102,20 @@ export function EditableTable<
 
     // Update editing data when data changes or edit mode is toggled
     React.useEffect(() => {
-        // Skip if data hasn't changed and we're not toggling edit mode
+        // Check if data has changed by comparing the IDs
+        const dataIds = data.map(item => item.id).sort().join(',');
+        const prevDataIds = previousDataRef.current.map(item => item.id).sort().join(',');
+        const hasDataChanged = dataIds !== prevDataIds;
+        
+        // Check if properties have changed by comparing the keys in the first item
+        const hasPropertiesChanged = data.length > 0 && previousDataRef.current.length > 0 && 
+            JSON.stringify(Object.keys(data[0]).sort()) !== 
+            JSON.stringify(Object.keys(previousDataRef.current[0]).sort());
+        
+        // Skip if data hasn't changed, properties haven't changed, and we're not toggling edit mode
         if (
-            JSON.stringify(data) === JSON.stringify(previousDataRef.current) &&
+            !hasDataChanged && 
+            !hasPropertiesChanged &&
             Object.keys(editingData).length > 0 === localIsEditMode
         ) {
             return;
@@ -210,22 +222,24 @@ export function EditableTable<
         const newItem = columns.reduce((acc, col) => {
             switch (col.type) {
                 case 'select':
-                    acc[col.accessor as keyof T] = (col.options?.[0] ??
-                        '') as T[keyof T];
+                    // Initialize select fields with null instead of empty string
+                    acc[col.accessor as keyof T] = null as T[keyof T];
+                    break;
+                case 'multi_select':
+                    // Initialize multi-select fields with empty array
+                    acc[col.accessor as keyof T] = [] as unknown as T[keyof T];
                     break;
                 case 'text':
                     acc[col.accessor as keyof T] = '' as T[keyof T];
                     break;
                 case 'number':
-                    acc[col.accessor as keyof T] = '0' as T[keyof T];
+                    acc[col.accessor as keyof T] = null as T[keyof T];
                     break;
                 case 'date':
-                    acc[col.accessor as keyof T] = new Date()
-                        .toISOString()
-                        .split('T')[0] as T[keyof T];
+                    acc[col.accessor as keyof T] = null as T[keyof T];
                     break;
                 default:
-                    acc[col.accessor as keyof T] = '' as T[keyof T];
+                    acc[col.accessor as keyof T] = null as T[keyof T];
             }
             return acc;
         }, {} as T);
@@ -253,6 +267,10 @@ export function EditableTable<
                 const { new: _newItem, ...rest } = prev;
                 return rest;
             });
+            
+            // Reset local edit mode to match global edit mode
+            // This ensures we properly exit edit mode after creating a new requirement
+            setLocalIsEditMode(false);
         } catch (error) {
             console.error('Failed to save new row:', error);
         }
@@ -272,10 +290,19 @@ export function EditableTable<
         _rowIndex: number,
         _colIndex: number,
     ) => {
-        const isEditing = localIsEditMode || item.id === 'new';
-        const value = isEditing
-            ? editingData[item.id as string]?.[column.accessor]
-            : item[column.accessor];
+        // Only put the new row in edit mode when adding a new requirement
+        // This fixes the issue with empty fields in existing rows when creating a new requirement
+        const isEditing = (localIsEditMode && !isAddingNew) || item.id === 'new';
+        
+        // Handle the case where the property doesn't exist yet
+        let value: CellValue;
+        if (isEditing && editingData[item.id as string]) {
+            // Use the value from editingData if it exists
+            value = editingData[item.id as string]?.[column.accessor] ?? null;
+        } else {
+            // Use the value from the item, defaulting to null if it doesn't exist
+            value = item[column.accessor] ?? null;
+        }
 
         return (
             <CellRenderer
@@ -332,11 +359,8 @@ export function EditableTable<
                             )}
                         </AnimatePresence>
 
-                        {sortedData.length === 0 && !isAddingNew ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                                {emptyMessage}
-                            </div>
-                        ) : (
+                        {/* Always show the table with columns when alwaysShowAddRow is true, even if there are no items */}
+                        {(sortedData.length > 0 || isAddingNew || alwaysShowAddRow) ? (
                             <div className="relative">
                                 <Table className="[&_tr:last-child_td]:border-b-2 [&_tr]:border-b [&_td]:py-1 [&_th]:py-1 [&_td]:border-r [&_td:last-child]:border-r-0 [&_th]:border-r [&_th:last-child]:border-r-0">
                                     <TableHeader>
@@ -496,8 +520,8 @@ export function EditableTable<
                                                 </TableCell>
                                             </TableRow>
                                         )}
-                                        {/* Mock row for adding new items */}
-                                        {!isAddingNew && (
+                                        {/* Mock row for adding new items - always show when alwaysShowAddRow is true */}
+                                        {(!isAddingNew) && (
                                             <TableRow
                                                 className={cn(
                                                     'font-mono cursor-pointer group/mock-row',
@@ -518,7 +542,7 @@ export function EditableTable<
                                                             {colIndex === 0 ? (
                                                                 <div className="flex items-center gap-2">
                                                                     <Plus className="h-4 w-4" />
-                                                                    New Row
+                                                                    Add New Row
                                                                 </div>
                                                             ) : (
                                                                 '...'
@@ -533,6 +557,10 @@ export function EditableTable<
                                         )}
                                     </TableBody>
                                 </Table>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-muted-foreground">
+                                {emptyMessage}
                             </div>
                         )}
                     </div>

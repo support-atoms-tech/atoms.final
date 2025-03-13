@@ -50,4 +50,5 @@ export const RequirementSchema = z.object({
     updated_by: z.string().nullable(),
     version: z.number(),
     data: z.record(z.string(), z.any()).nullable().optional(),
+    properties: z.record(z.string(), z.any()).nullable().optional(),
 }) satisfies z.ZodType<Requirement>;

@@ -6,6 +6,13 @@ import {
     RequirementStatus,
 } from './enums.types';
 
+export type RequirementPropertyKV = {
+    key: string;
+    value: string;
+};
+
+export type RequirementProperties = Record<string, any>;
+
 export type Requirement = {
     id: string;
     ai_analysis: Json | null;
@@ -29,11 +36,7 @@ export type Requirement = {
     updated_at: string | null;
     updated_by: string | null;
     version: number;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Support both properties and data for backward compatibility
+    properties?: RequirementProperties | null;
     data?: Record<string, any> | null;
-};
-
-export type RequirementPropertyKV = {
-    key: string;
-    value: string;
 };

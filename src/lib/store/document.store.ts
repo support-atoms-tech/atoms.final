@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { unstable_batchedUpdates } from 'react-dom';
 
 import { Block, Document } from '@/types/base/documents.types';
 
@@ -32,7 +33,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     setCurrentDocument: (document) => set({ currentDocument: document }),
 
     // Block actions
-    setBlocks: (blocks) => set({ blocks }),
+    setBlocks: (blocks) => {
+        // Use setTimeout to ensure this update happens outside of the render cycle
+        setTimeout(() => {
+            set({ blocks });
+        }, 0);
+    },
 
     addBlock: (block) => {
         const blocks = get().blocks;

@@ -48,7 +48,7 @@ export default function OrgPage() {
 
     const handleProjectClick = (project: Project) => {
         setCurrentProjectId(project.id);
-        router.push(`/org/${orgId}/${project.id}`);
+        router.push(`/org/project/${project.id}`);
     };
 
     const handleExternalDocsClick = () => {
@@ -58,7 +58,7 @@ export default function OrgPage() {
     return (
         <Suspense fallback={<OrgDashboardSkeleton />}>
             <OrgDashboard
-                organization={organization}
+                organization={organization as Organization}
                 orgLoading={orgLoading}
                 projects={projects}
                 projectsLoading={projectsLoading}
