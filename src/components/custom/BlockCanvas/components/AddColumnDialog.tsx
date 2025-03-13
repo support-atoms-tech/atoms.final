@@ -1,6 +1,7 @@
 import { PlusCircle } from 'lucide-react';
 import React, { useState } from 'react';
 
+import { PropertyType } from '@/components/custom/BlockCanvas/types';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -20,7 +21,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { PropertyType } from '@/components/custom/BlockCanvas/types';
 
 interface AddColumnDialogProps {
     onAddColumn: (name: string, dataType: PropertyType) => Promise<void>;
@@ -126,7 +126,9 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                             </Label>
                             <Select
                                 value={dataType}
-                                onValueChange={(value) => setDataType(value as PropertyType)}
+                                onValueChange={(value) =>
+                                    setDataType(value as PropertyType)
+                                }
                             >
                                 <SelectTrigger
                                     className="col-span-3"
@@ -136,7 +138,10 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {PROPERTY_TYPE_OPTIONS.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
                                             {option.label}
                                         </SelectItem>
                                     ))}

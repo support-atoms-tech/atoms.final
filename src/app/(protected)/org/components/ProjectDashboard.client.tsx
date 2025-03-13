@@ -1,9 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useCookies } from 'next-client-cookies';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { setCookie } from '@/app/(protected)/org/actions';
 import DashboardView, { Column } from '@/components/base/DashboardView';
 import { CreatePanel } from '@/components/base/panels/CreatePanel';
 import { Badge } from '@/components/ui/badge';
@@ -15,8 +17,6 @@ import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Document } from '@/types/base/documents.types';
 import { Requirement } from '@/types/base/requirements.types';
 import { RequirementSchema } from '@/types/validation';
-import { setCookie } from '@/app/(protected)/org/actions';
-import { useCookies } from 'next-client-cookies';
 
 export default function ProjectPage() {
     const router = useRouter();

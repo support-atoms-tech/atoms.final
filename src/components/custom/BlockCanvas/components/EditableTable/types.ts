@@ -1,4 +1,9 @@
-export type EditableColumnType = 'text' | 'select' | 'multi_select' | 'number' | 'date';
+export type EditableColumnType =
+    | 'text'
+    | 'select'
+    | 'multi_select'
+    | 'number'
+    | 'date';
 
 export interface ValidationRule {
     validate: (value: string | number | Date | null) => boolean;

@@ -1,26 +1,32 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { v4 as uuidv4 } from 'uuid';
 import { useParams } from 'next/navigation';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
+    BlockType,
     BlockWithRequirements,
+    DefaultPropertyKeys,
     Property,
     PropertyType,
     UseBlockActionsProps,
-    BlockType,
-    DefaultPropertyKeys
 } from '@/components/custom/BlockCanvas/types';
 import {
     useCreateBlock,
     useDeleteBlock,
     useUpdateBlock,
 } from '@/hooks/mutations/useBlockMutations';
+import {
+    BLOCKS_GUTTER_SIZE,
+    BLOCK_TEXT_DEFAULT_HEIGHT,
+} from '@/lib/constants/blocks';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { useDocumentStore } from '@/lib/store/document.store';
-import { Json } from '@/types/base/database.types';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
-import { BLOCK_TEXT_DEFAULT_HEIGHT, BLOCKS_GUTTER_SIZE } from '@/lib/constants/blocks';
-import { RequirementStatus, RequirementPriority } from '@/types/base/enums.types';
+import { Json } from '@/types/base/database.types';
+import {
+    RequirementPriority,
+    RequirementStatus,
+} from '@/types/base/enums.types';
 
 export const useBlockActions = ({
     documentId,
@@ -90,7 +96,7 @@ export const useBlockActions = ({
             org_id: orgId,
             project_id: projectId,
         };
-        
+
         return newBlock;
     };
 
@@ -115,14 +121,16 @@ export const useBlockActions = ({
             org_id: orgId,
             project_id: projectId,
         };
-        
+
         return newBlock;
     };
 
     // Create default properties for a block (using the new properties table)
     const createDefaultBlockProperties = async (blockId: string) => {
         if (!userProfile?.id) {
-            console.error('Cannot create default properties without user profile');
+            console.error(
+                'Cannot create default properties without user profile',
+            );
             return [];
         }
 
@@ -131,7 +139,9 @@ export const useBlockActions = ({
         try {
             // Use URL params for org_id and project_id instead of extracting from blocks
             if (!orgId || !projectId) {
-                console.error('No organization or project ID available in URL params');
+                console.error(
+                    'No organization or project ID available in URL params',
+                );
                 return [];
             }
 
@@ -152,7 +162,7 @@ export const useBlockActions = ({
                     created_by: userProfile.id,
                     updated_by: userProfile.id,
                     is_deleted: false,
-                    is_schema: true
+                    is_schema: true,
                 },
                 {
                     org_id: orgId,
@@ -169,7 +179,7 @@ export const useBlockActions = ({
                     created_by: userProfile.id,
                     updated_by: userProfile.id,
                     is_deleted: false,
-                    is_schema: true
+                    is_schema: true,
                 },
                 {
                     org_id: orgId,
@@ -186,7 +196,7 @@ export const useBlockActions = ({
                     created_by: userProfile.id,
                     updated_by: userProfile.id,
                     is_deleted: false,
-                    is_schema: true
+                    is_schema: true,
                 },
                 {
                     org_id: orgId,
@@ -205,7 +215,7 @@ export const useBlockActions = ({
                     created_by: userProfile.id,
                     updated_by: userProfile.id,
                     is_deleted: false,
-                    is_schema: true
+                    is_schema: true,
                 },
                 {
                     org_id: orgId,
@@ -224,8 +234,8 @@ export const useBlockActions = ({
                     created_by: userProfile.id,
                     updated_by: userProfile.id,
                     is_deleted: false,
-                    is_schema: true
-                }
+                    is_schema: true,
+                },
             ];
 
             // Insert all properties in a single batch
@@ -240,12 +250,12 @@ export const useBlockActions = ({
             }
 
             console.log('Created default properties:', data);
-            
+
             // Invalidate queries to ensure fresh data
             queryClient.invalidateQueries({
-                queryKey: queryKeys.properties.byBlock(blockId)
+                queryKey: queryKeys.properties.byBlock(blockId),
             });
-            
+
             return data as Property[];
         } catch (error) {
             console.error('Failed to create default properties:', error);
@@ -284,9 +294,11 @@ export const useBlockActions = ({
                     requirements: [],
                     order: prev.length, // Add the order field explicitly
                     org_id: orgId,
-                    project_id: projectId
+                    project_id: projectId,
                 };
-                return [...prev, newBlock].sort((a, b) => a.position - b.position);
+                return [...prev, newBlock].sort(
+                    (a, b) => a.position - b.position,
+                );
             });
             console.log('🔄 Local state updated with new block');
 

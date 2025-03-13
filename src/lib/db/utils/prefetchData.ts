@@ -107,8 +107,10 @@ export const fetchProjectData = cache(
                 }),
                 getProjectDocumentsServer(projectId).then((data) => {
                     // Parse the data with DocumentSchema and explicitly type as Document[]
-                    const parsedDocuments: Document[] = data.map((doc) => DocumentSchema.parse(doc)) as Document[];
-                    
+                    const parsedDocuments: Document[] = data.map((doc) =>
+                        DocumentSchema.parse(doc),
+                    ) as Document[];
+
                     // Update cache
                     client.setQueryData(
                         queryKeys.documents.byProject(projectId),

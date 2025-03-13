@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import { unstable_batchedUpdates } from 'react-dom';
+import { create } from 'zustand';
 
 import { Block, Document } from '@/types/base/documents.types';
 

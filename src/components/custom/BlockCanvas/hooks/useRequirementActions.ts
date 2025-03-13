@@ -48,16 +48,24 @@ export const useRequirementActions = ({
         return propsList.reduce(
             (acc, prop) => {
                 // Skip core fields that are stored directly on the requirement
-                if (!['name', 'description', 'req_id', 'external_id', 'id'].includes(prop.key.toLowerCase())) {
+                if (
+                    ![
+                        'name',
+                        'description',
+                        'req_id',
+                        'external_id',
+                        'id',
+                    ].includes(prop.key.toLowerCase())
+                ) {
                     // Include all properties, even if they have null values
                     // This ensures that new columns are saved
                     let value = dynamicReq[prop.name];
-                    
+
                     // Convert display values back to enum values for select properties
                     if (prop.type === 'select' && value) {
                         value = parseDisplayValueToEnum(value as string);
                     }
-                    
+
                     acc[prop.key] = value;
                 }
                 return acc;
@@ -72,11 +80,12 @@ export const useRequirementActions = ({
         if (!localRequirements) {
             return [];
         }
-        
+
         return localRequirements.map((req) => {
             // Generate an external ID if one doesn't exist
-            const externalId = req.external_id || `REQ-${req.id.substring(0, 6)}`;
-            
+            const externalId =
+                req.external_id || `REQ-${req.id.substring(0, 6)}`;
+
             // Start with the requirement basic fields
             const dynamicReq: DynamicRequirement = {
                 id: req.id, // Keep this for internal reference but don't display it
@@ -86,30 +95,34 @@ export const useRequirementActions = ({
                 Status: formatEnumValueForDisplay(req.status),
                 Priority: formatEnumValueForDisplay(req.priority),
             };
-            
-            // Set the External ID 
+
+            // Set the External ID
             dynamicReq['External ID'] = externalId;
-            
+
             // Add all custom properties from the requirement's properties field
             if (req.properties) {
                 // Make sure properties is treated as an object (handle potential JSONB serialization issues)
-                const propertiesObj = typeof req.properties === 'string' 
-                    ? JSON.parse(req.properties) 
-                    : req.properties;
-                
+                const propertiesObj =
+                    typeof req.properties === 'string'
+                        ? JSON.parse(req.properties)
+                        : req.properties;
+
                 // First pass: Add all properties from the requirement's properties JSONB
                 Object.entries(propertiesObj).forEach(([key, value]) => {
                     // Skip undefined or null values
                     if (value === undefined || value === null) return;
-                    
+
                     // Find the property definition to get the display name
-                    const property = properties?.find(p => p.key.toLowerCase() === key.toLowerCase());
-                    
+                    const property = properties?.find(
+                        (p) => p.key.toLowerCase() === key.toLowerCase(),
+                    );
+
                     if (property) {
                         // Use the property name (display name) as the key
                         // Format select values for display
                         if (property.type === 'select' && value) {
-                            dynamicReq[property.name] = formatEnumValueForDisplay(value as string);
+                            dynamicReq[property.name] =
+                                formatEnumValueForDisplay(value as string);
                         } else {
                             dynamicReq[property.name] = value;
                         }
@@ -119,49 +132,55 @@ export const useRequirementActions = ({
                         dynamicReq[key] = value;
                     }
                 });
-                
+
                 // Second pass: Ensure all properties defined in schema are included
                 if (properties) {
                     properties.forEach((prop) => {
                         // If property hasn't been set yet, try to find it in req.properties or set to null
                         if (dynamicReq[prop.name] === undefined) {
                             const propertyValue = propertiesObj[prop.key];
-                            
+
                             // Format select values for display
                             if (prop.type === 'select' && propertyValue) {
-                                dynamicReq[prop.name] = formatEnumValueForDisplay(propertyValue as string);
+                                dynamicReq[prop.name] =
+                                    formatEnumValueForDisplay(
+                                        propertyValue as string,
+                                    );
                             } else {
-                                dynamicReq[prop.name] = propertyValue !== undefined ? propertyValue : null;
+                                dynamicReq[prop.name] =
+                                    propertyValue !== undefined
+                                        ? propertyValue
+                                        : null;
                             }
                         }
                     });
                 }
             }
-            
+
             return dynamicReq;
         });
     };
-    
+
     // Helper function to format enum values for display
     const formatEnumValueForDisplay = (value: string): string => {
         if (!value) return '';
-        
+
         // Handle snake_case values (e.g., "in_progress" -> "In Progress")
         if (value.includes('_')) {
             return value
                 .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');
         }
-        
+
         // Handle simple values (e.g., "draft" -> "Draft")
         return value.charAt(0).toUpperCase() + value.slice(1);
     };
-    
+
     // Helper function to convert display values back to enum values
     const parseDisplayValueToEnum = (displayValue: string): string => {
         if (!displayValue) return '';
-        
+
         // Convert "In Progress" -> "in_progress"
         return displayValue.toLowerCase().replace(/\s+/g, '_');
     };
@@ -179,8 +198,12 @@ export const useRequirementActions = ({
             let requirementId = dynamicReq.id;
 
             // Convert display values back to enum values
-            const status = parseDisplayValueToEnum(dynamicReq['Status'] as string);
-            const priority = parseDisplayValueToEnum(dynamicReq['Priority'] as string);
+            const status = parseDisplayValueToEnum(
+                dynamicReq['Status'] as string,
+            );
+            const priority = parseDisplayValueToEnum(
+                dynamicReq['Priority'] as string,
+            );
 
             if (isNew) {
                 // Generate a UUID for new requirements
@@ -189,8 +212,10 @@ export const useRequirementActions = ({
                 // Extract name, description, and external_id from dynamic requirement
                 const name = dynamicReq['Name'] || 'New Requirement';
                 const description = dynamicReq['Description'] || '';
-                const externalId = dynamicReq['External ID'] || `REQ-${tempId.substring(0, 6)}`;
-                
+                const externalId =
+                    dynamicReq['External ID'] ||
+                    `REQ-${tempId.substring(0, 6)}`;
+
                 // Use parsed values or defaults
                 const statusValue = status || RequirementStatus.draft;
                 const priorityValue = priority || RequirementPriority.medium;
@@ -257,14 +282,16 @@ export const useRequirementActions = ({
                     name: dynamicReq['Name'] || originalReq.name,
                     description:
                         dynamicReq['Description'] || originalReq.description,
-                    external_id: 
-                        dynamicReq['External ID'] || originalReq.external_id || `REQ-${originalReq.id.substring(0, 6)}`,
-                    status: status ? 
-                        (status as RequirementStatus) : 
-                        originalReq.status,
-                    priority: priority ? 
-                        (priority as RequirementPriority) : 
-                        originalReq.priority,
+                    external_id:
+                        dynamicReq['External ID'] ||
+                        originalReq.external_id ||
+                        `REQ-${originalReq.id.substring(0, 6)}`,
+                    status: status
+                        ? (status as RequirementStatus)
+                        : originalReq.status,
+                    priority: priority
+                        ? (priority as RequirementPriority)
+                        : originalReq.priority,
                     properties: propertiesObject,
                     updated_by: userId,
                 };

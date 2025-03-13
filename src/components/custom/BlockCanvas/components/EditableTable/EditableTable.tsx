@@ -1,34 +1,24 @@
 'use client';
 
-import { CaretSortIcon } from '@radix-ui/react-icons';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { Check, Plus, Trash2, X } from 'lucide-react';
 import * as React from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import { cn } from '@/lib/utils';
+import { Table, TableBody } from '@/components/ui/table';
 import { transitionConfig } from '@/lib/utils/animations';
 
-import { CellRenderer } from './CellRenderer';
-import { TableSideMenu } from './TableSideMenu';
+import {
+    AddRowPlaceholder,
+    DataTableRow,
+    DeleteConfirmDialog,
+    EmptyState,
+    NewRowForm,
+    TableControls,
+    TableHeader,
+    TableLoadingSkeleton,
+} from './components';
+import { useTableSort } from './hooks/useTableSort';
+import { TableState, tableReducer } from './reducers/tableReducer';
 import { CellValue, EditableColumn, EditableTableProps } from './types';
 
 export function EditableTable<
@@ -45,180 +35,113 @@ export function EditableTable<
     isEditMode = false,
     alwaysShowAddRow = false,
 }: EditableTableProps<T>) {
-    const [sortKey, setSortKey] = React.useState<keyof T | null>(null);
-    const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('asc');
-    const [_hoveredCell, setHoveredCell] = React.useState<{
-        row: number;
-        col: number;
-    } | null>(null);
-    const [editingData, setEditingData] = React.useState<Record<string, T>>({});
-    const [isAddingNew, setIsAddingNew] = React.useState(false);
-    const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-    const [itemToDelete, setItemToDelete] = React.useState<T | null>(null);
-    const [editingTimeouts, setEditingTimeouts] = React.useState<
-        Record<string, NodeJS.Timeout>
-    >({});
-    const previousDataRef = React.useRef<T[]>([]);
-    const [isHoveringTable, setIsHoveringTable] = React.useState(false);
-    const [localIsEditMode, setLocalIsEditMode] = React.useState(isEditMode);
-
-    React.useEffect(() => {
-        setLocalIsEditMode(isEditMode);
-    }, [isEditMode]);
-
-    // Clear all editing timeouts on unmount
-    React.useEffect(() => {
-        return () => {
-            Object.values(editingTimeouts).forEach((timeout) =>
-                clearTimeout(timeout),
-            );
-        };
-    }, [editingTimeouts]);
-
-    const sortedData = React.useMemo(() => {
-        return [...data].sort((a, b) => {
-            if (!sortKey) return 0;
-            const aValue = a[sortKey];
-            const bValue = b[sortKey];
-
-            // Handle null/undefined values
-            if (aValue == null && bValue == null) return 0;
-            if (aValue == null) return sortOrder === 'asc' ? -1 : 1;
-            if (bValue == null) return sortOrder === 'asc' ? 1 : -1;
-
-            // Handle Date objects
-            if (aValue instanceof Date && bValue instanceof Date) {
-                return sortOrder === 'asc'
-                    ? aValue.getTime() - bValue.getTime()
-                    : bValue.getTime() - aValue.getTime();
-            }
-
-            // Handle regular values
-            return sortOrder === 'asc'
-                ? String(aValue).localeCompare(String(bValue))
-                : String(bValue).localeCompare(String(aValue));
-        });
-    }, [data, sortKey, sortOrder]);
-
-    // Update editing data when data changes or edit mode is toggled
-    React.useEffect(() => {
-        // Check if data has changed by comparing the IDs
-        const dataIds = data.map(item => item.id).sort().join(',');
-        const prevDataIds = previousDataRef.current.map(item => item.id).sort().join(',');
-        const hasDataChanged = dataIds !== prevDataIds;
-        
-        // Check if properties have changed by comparing the keys in the first item
-        const hasPropertiesChanged = data.length > 0 && previousDataRef.current.length > 0 && 
-            JSON.stringify(Object.keys(data[0]).sort()) !== 
-            JSON.stringify(Object.keys(previousDataRef.current[0]).sort());
-        
-        // Skip if data hasn't changed, properties haven't changed, and we're not toggling edit mode
-        if (
-            !hasDataChanged && 
-            !hasPropertiesChanged &&
-            Object.keys(editingData).length > 0 === localIsEditMode
-        ) {
-            return;
-        }
-
-        previousDataRef.current = data;
-
-        if (localIsEditMode && data.length > 0) {
-            const initialEditData = data.reduce(
-                (acc, item) => {
-                    if (item.id) {
-                        acc[item.id as string] = { ...item };
-                    }
-                    return acc;
-                },
-                {} as Record<string, T>,
-            );
-            setEditingData(initialEditData);
-        } else if (!localIsEditMode) {
-            setEditingData({});
-            setIsAddingNew(false);
-            Object.values(editingTimeouts).forEach((timeout) =>
-                clearTimeout(timeout),
-            );
-            setEditingTimeouts({});
-        }
-    }, [localIsEditMode, data, editingData, editingTimeouts]);
-
-    const handleDeleteClick = (item: T) => {
-        setItemToDelete(item);
-        setDeleteConfirmOpen(true);
+    // Initialize the state with useReducer
+    const initialState: TableState<T> = {
+        localIsEditMode: isEditMode,
+        editingData: {},
+        isAddingNew: false,
+        sortKey: null,
+        sortOrder: 'asc',
+        hoveredCell: null,
+        itemToDelete: null,
+        deleteConfirmOpen: false,
+        editingTimeouts: {},
     };
 
-    const handleDeleteConfirm = async () => {
-        if (!itemToDelete) return;
+    const [state, dispatch] = useReducer(tableReducer, initialState);
+    const {
+        localIsEditMode,
+        editingData,
+        isAddingNew,
+        sortKey,
+        sortOrder,
+        hoveredCell,
+        itemToDelete,
+        deleteConfirmOpen,
+    } = state;
 
-        try {
-            await onDelete?.(itemToDelete);
-            setDeleteConfirmOpen(false);
-            setItemToDelete(null);
-        } catch (error) {
-            console.error('Failed to delete:', error);
-        }
-    };
+    const [isHoveringTable, setIsHoveringTable] = useState(false);
 
-    const handleCellChange = (
-        itemId: string,
-        accessor: keyof T,
-        value: CellValue,
-    ) => {
-        // Update local state immediately
-        setEditingData((prev) => ({
-            ...prev,
-            [itemId]: {
-                ...prev[itemId],
-                [accessor]: value,
-            },
-        }));
+    // Use the extracted custom hooks
+    const { sortedData, handleSort } = useTableSort(data, sortKey);
 
-        // Don't auto-save if this is a new row
-        if (itemId === 'new') return;
+    // Effect to init edit data when entering edit mode
+    useEffect(() => {
+        if (isEditMode !== localIsEditMode) {
+            dispatch({ type: 'SET_EDIT_MODE', payload: isEditMode });
 
-        // Clear existing timeout for this item if it exists
-        if (editingTimeouts[itemId]) {
-            clearTimeout(editingTimeouts[itemId]);
-        }
-
-        // Set new timeout for debounced save
-        const timeoutId = setTimeout(async () => {
-            try {
-                const editedItem = {
-                    ...editingData[itemId],
-                    [accessor]: value,
-                };
-
-                const savedItem = await onSave?.(editedItem, false);
-
-                // Update editing data with saved values
-                if (savedItem) {
-                    setEditingData((prev) => ({
-                        ...prev,
-                        [itemId]: savedItem,
-                    }));
-                }
-
-                // Clear the timeout from state after successful save
-                setEditingTimeouts((prev) => {
-                    const { [itemId]: _removedTimeout, ...rest } = prev;
-                    return rest;
+            if (isEditMode && data.length > 0) {
+                const initialEditData = data.reduce(
+                    (acc, item) => {
+                        if (item.id) {
+                            acc[item.id as string] = { ...item };
+                        }
+                        return acc;
+                    },
+                    {} as Record<string, T>,
+                );
+                dispatch({
+                    type: 'SET_INITIAL_EDIT_DATA',
+                    payload: initialEditData,
                 });
-            } catch (error) {
-                console.error('Failed to save:', error);
+            } else if (!isEditMode) {
+                dispatch({ type: 'RESET_EDIT_STATE' });
             }
-        }, 500); // 500ms debounce
+        }
+    }, [isEditMode, localIsEditMode, data]);
 
-        // Store the new timeout
-        setEditingTimeouts((prev) => ({
-            ...prev,
-            [itemId]: timeoutId,
-        }));
-    };
+    // Clean up timeouts on unmount
+    useEffect(() => {
+        return () => {
+            dispatch({ type: 'RESET_EDIT_STATE' });
+        };
+    }, []);
 
-    const handleMockRowClick = () => {
+    // Action handlers
+    const handleCellChange = useCallback(
+        (itemId: string, accessor: keyof T, value: CellValue) => {
+            dispatch({
+                type: 'SET_CELL_VALUE',
+                payload: { itemId, accessor, value },
+            });
+
+            // Don't auto-save if this is a new row
+            if (itemId === 'new' || !onSave) return;
+
+            // Clear existing timeout for this item if it exists
+            if (state.editingTimeouts[itemId]) {
+                clearTimeout(state.editingTimeouts[itemId]);
+                dispatch({ type: 'CLEAR_TIMEOUT', payload: itemId });
+            }
+
+            // Set new timeout for debounced save
+            const timeoutId = setTimeout(async () => {
+                try {
+                    const editedItem = {
+                        ...state.editingData[itemId],
+                        [accessor]: value,
+                    };
+
+                    await onSave(editedItem, false);
+
+                    // Clear the timeout from state after successful save
+                    dispatch({ type: 'CLEAR_TIMEOUT', payload: itemId });
+                } catch (error) {
+                    console.error('Failed to save:', error);
+                }
+            }, 500); // 500ms debounce
+
+            // Store the new timeout
+            dispatch({
+                type: 'SET_TIMEOUT',
+                payload: { itemId, timeoutId },
+            });
+        },
+        [state.editingData, state.editingTimeouts, onSave],
+    );
+
+    const handleAddNewRow = useCallback(() => {
+        // Create empty row
         const newItem = columns.reduce((acc, col) => {
             switch (col.type) {
                 case 'select':
@@ -245,87 +168,62 @@ export function EditableTable<
         }, {} as T);
 
         newItem.id = 'new';
-        setEditingData((prev) => ({
-            ...prev,
-            new: newItem,
-        }));
-        setIsAddingNew(true);
-    };
 
-    const handleSaveNewRow = async () => {
+        dispatch({
+            type: 'SET_INITIAL_EDIT_DATA',
+            payload: { ...editingData, new: newItem },
+        });
+        dispatch({ type: 'START_ADD_ROW' });
+    }, [columns, editingData]);
+
+    const handleSaveNewRow = useCallback(async () => {
         const newItem = editingData['new'];
-        if (!newItem) return;
+        if (!newItem || !onSave) return;
 
         try {
             // Remove the temporary id before saving
             const { id: _tempId, ...itemWithoutId } = newItem;
-            await onSave?.(itemWithoutId as T, true);
+            await onSave(itemWithoutId as T, true);
 
             // Clear editing state after successful save
-            setIsAddingNew(false);
-            setEditingData((prev) => {
-                const { new: _newItem, ...rest } = prev;
-                return rest;
-            });
-            
+            dispatch({ type: 'CANCEL_ADD_ROW' });
+
             // Reset local edit mode to match global edit mode
-            // This ensures we properly exit edit mode after creating a new requirement
-            setLocalIsEditMode(false);
+            dispatch({ type: 'SET_EDIT_MODE', payload: false });
         } catch (error) {
             console.error('Failed to save new row:', error);
         }
-    };
+    }, [editingData, onSave]);
 
-    const handleCancelNewRow = () => {
-        setIsAddingNew(false);
-        setEditingData((prev) => {
-            const { new: _newItem, ...rest } = prev;
-            return rest;
-        });
-    };
+    const handleCancelNewRow = useCallback(() => {
+        dispatch({ type: 'CANCEL_ADD_ROW' });
+    }, []);
 
-    const renderCell = (
-        item: T,
-        column: EditableColumn<T>,
-        _rowIndex: number,
-        _colIndex: number,
-    ) => {
-        // Only put the new row in edit mode when adding a new requirement
-        // This fixes the issue with empty fields in existing rows when creating a new requirement
-        const isEditing = (localIsEditMode && !isAddingNew) || item.id === 'new';
-        
-        // Handle the case where the property doesn't exist yet
-        let value: CellValue;
-        if (isEditing && editingData[item.id as string]) {
-            // Use the value from editingData if it exists
-            value = editingData[item.id as string]?.[column.accessor] ?? null;
-        } else {
-            // Use the value from the item, defaulting to null if it doesn't exist
-            value = item[column.accessor] ?? null;
+    const handleDeleteClick = useCallback((item: T) => {
+        dispatch({ type: 'OPEN_DELETE_CONFIRM', payload: item });
+    }, []);
+
+    const handleDeleteConfirm = useCallback(async () => {
+        if (!itemToDelete || !onDelete) return;
+
+        try {
+            await onDelete(itemToDelete);
+            dispatch({ type: 'CLOSE_DELETE_CONFIRM' });
+        } catch (error) {
+            console.error('Failed to delete:', error);
         }
+    }, [itemToDelete, onDelete]);
 
-        return (
-            <CellRenderer
-                item={item}
-                column={column}
-                isEditing={isEditing}
-                value={value}
-                onCellChange={handleCellChange}
-            />
-        );
-    };
+    const handleHoverCell = useCallback((row: number, col: number) => {
+        dispatch({
+            type: 'SET_HOVERED_CELL',
+            payload: { row, col },
+        });
+    }, []);
 
+    // Render table with smaller components
     if (isLoading) {
-        return (
-            <div className="space-y-4 animate-pulse">
-                <div className="h-10 bg-muted rounded-lg" />
-                <div className="space-y-2">
-                    {[...Array(5)].map((_, i) => (
-                        <div key={i} className="h-16 bg-muted rounded-lg" />
-                    ))}
-                </div>
-            </div>
-        );
+        return <TableLoadingSkeleton columns={columns.length} />;
     }
 
     return (
@@ -345,248 +243,91 @@ export function EditableTable<
                             !localIsEditMode && setIsHoveringTable(false)
                         }
                     >
-                        {/* Slide-out Controls */}
+                        {/* Controls */}
                         <AnimatePresence>
-                            {isHoveringTable && !localIsEditMode && (
-                                <TableSideMenu
-                                    showFilter={showFilter}
-                                    filterComponent={filterComponent}
-                                    onNewRow={handleMockRowClick}
-                                    onEnterEditMode={() =>
-                                        setLocalIsEditMode(true)
-                                    }
-                                />
-                            )}
+                            <TableControls
+                                showFilter={showFilter}
+                                filterComponent={filterComponent}
+                                onNewRow={handleAddNewRow}
+                                onEnterEditMode={() =>
+                                    dispatch({
+                                        type: 'SET_EDIT_MODE',
+                                        payload: true,
+                                    })
+                                }
+                                isVisible={isHoveringTable && !localIsEditMode}
+                            />
                         </AnimatePresence>
 
-                        {/* Always show the table with columns when alwaysShowAddRow is true, even if there are no items */}
-                        {(sortedData.length > 0 || isAddingNew || alwaysShowAddRow) ? (
+                        {/* Table */}
+                        {sortedData.length > 0 ||
+                        isAddingNew ||
+                        alwaysShowAddRow ? (
                             <div className="relative">
                                 <Table className="[&_tr:last-child_td]:border-b-2 [&_tr]:border-b [&_td]:py-1 [&_th]:py-1 [&_td]:border-r [&_td:last-child]:border-r-0 [&_th]:border-r [&_th:last-child]:border-r-0">
-                                    <TableHeader>
-                                        <TableRow>
-                                            {columns.map((column) => (
-                                                <TableHead
-                                                    key={column.header}
-                                                    style={{
-                                                        width: column.width
-                                                            ? `${column.width}px`
-                                                            : undefined,
-                                                    }}
-                                                >
-                                                    <Button
-                                                        variant="ghost"
-                                                        onClick={() => {
-                                                            if (
-                                                                column.isSortable
-                                                            ) {
-                                                                if (
-                                                                    sortKey ===
-                                                                    column.accessor
-                                                                ) {
-                                                                    setSortOrder(
-                                                                        sortOrder ===
-                                                                            'asc'
-                                                                            ? 'desc'
-                                                                            : 'asc',
-                                                                    );
-                                                                } else {
-                                                                    setSortKey(
-                                                                        column.accessor,
-                                                                    );
-                                                                    setSortOrder(
-                                                                        'asc',
-                                                                    );
-                                                                }
-                                                            }
-                                                        }}
-                                                        className={cn(
-                                                            'h-8 text-left font-medium',
-                                                            column.isSortable &&
-                                                                'cursor-pointer',
-                                                        )}
-                                                        disabled={
-                                                            !column.isSortable
-                                                        }
-                                                    >
-                                                        {column.header}
-                                                        {column.isSortable && (
-                                                            <CaretSortIcon className="ml-2 h-4 w-4" />
-                                                        )}
-                                                    </Button>
-                                                </TableHead>
-                                            ))}
-                                            {localIsEditMode && (
-                                                <TableHead
-                                                    style={{ width: '100px' }}
-                                                >
-                                                    Actions
-                                                </TableHead>
-                                            )}
-                                        </TableRow>
-                                    </TableHeader>
+                                    <TableHeader
+                                        columns={columns}
+                                        sortKey={sortKey}
+                                        sortOrder={sortOrder}
+                                        onSort={handleSort}
+                                        isEditMode={localIsEditMode}
+                                    />
                                     <TableBody>
+                                        {/* Existing rows */}
                                         {sortedData.map((item, rowIndex) => (
-                                            <TableRow
+                                            <DataTableRow
                                                 key={item.id}
-                                                className="font-mono"
-                                            >
-                                                {columns.map(
-                                                    (column, colIndex) => (
-                                                        <TableCell
-                                                            key={`${String(item.id)}-${String(column.accessor)}`}
-                                                            onMouseEnter={() =>
-                                                                setHoveredCell({
-                                                                    row: rowIndex,
-                                                                    col: colIndex,
-                                                                })
-                                                            }
-                                                            onMouseLeave={() =>
-                                                                setHoveredCell(
-                                                                    null,
-                                                                )
-                                                            }
-                                                        >
-                                                            {renderCell(
-                                                                item,
-                                                                column,
-                                                                rowIndex,
-                                                                colIndex,
-                                                            )}
-                                                        </TableCell>
-                                                    ),
-                                                )}
-                                                {localIsEditMode && (
-                                                    <TableCell>
-                                                        <div className="flex gap-2">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() =>
-                                                                    handleDeleteClick(
-                                                                        item,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
-                                                )}
-                                            </TableRow>
+                                                item={item}
+                                                columns={columns}
+                                                isEditing={
+                                                    localIsEditMode &&
+                                                    !isAddingNew
+                                                }
+                                                editingData={editingData}
+                                                onCellChange={handleCellChange}
+                                                onDelete={handleDeleteClick}
+                                                onHoverCell={handleHoverCell}
+                                                rowIndex={rowIndex}
+                                            />
                                         ))}
+
                                         {/* New row being added */}
                                         {isAddingNew && (
-                                            <TableRow className="font-mono">
-                                                {columns.map(
-                                                    (column, colIndex) => (
-                                                        <TableCell
-                                                            key={`new-${String(column.accessor)}`}
-                                                        >
-                                                            {renderCell(
-                                                                {
-                                                                    ...editingData[
-                                                                        'new'
-                                                                    ],
-                                                                } as T,
-                                                                column,
-                                                                -1,
-                                                                colIndex,
-                                                            )}
-                                                        </TableCell>
-                                                    ),
-                                                )}
-                                                <TableCell>
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={
-                                                                handleSaveNewRow
-                                                            }
-                                                        >
-                                                            <Check className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={
-                                                                handleCancelNewRow
-                                                            }
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
+                                            <NewRowForm
+                                                columns={columns}
+                                                editingData={editingData}
+                                                onCellChange={handleCellChange}
+                                                onSave={handleSaveNewRow}
+                                                onCancel={handleCancelNewRow}
+                                            />
                                         )}
-                                        {/* Mock row for adding new items - always show when alwaysShowAddRow is true */}
-                                        {(!isAddingNew) && (
-                                            <TableRow
-                                                className={cn(
-                                                    'font-mono cursor-pointer group/mock-row',
-                                                )}
-                                                onClick={handleMockRowClick}
-                                            >
-                                                {columns.map(
-                                                    (column, colIndex) => (
-                                                        <TableCell
-                                                            key={`mock-${String(column.accessor)}`}
-                                                            className={cn(
-                                                                'text-muted-foreground/50',
-                                                                colIndex ===
-                                                                    0 &&
-                                                                    'font-medium',
-                                                            )}
-                                                        >
-                                                            {colIndex === 0 ? (
-                                                                <div className="flex items-center gap-2">
-                                                                    <Plus className="h-4 w-4" />
-                                                                    Add New Row
-                                                                </div>
-                                                            ) : (
-                                                                '...'
-                                                            )}
-                                                        </TableCell>
-                                                    ),
-                                                )}
-                                                {localIsEditMode && (
-                                                    <TableCell />
-                                                )}
-                                            </TableRow>
+
+                                        {/* Add new row placeholder */}
+                                        {!isAddingNew && (
+                                            <AddRowPlaceholder
+                                                columns={columns}
+                                                onClick={handleAddNewRow}
+                                                isEditMode={localIsEditMode}
+                                            />
                                         )}
                                     </TableBody>
                                 </Table>
                             </div>
                         ) : (
-                            <div className="text-center py-8 text-muted-foreground">
-                                {emptyMessage}
-                            </div>
+                            <EmptyState message={emptyMessage} />
                         )}
                     </div>
                 </div>
             </motion.div>
 
-            <AlertDialog
+            {/* Delete confirmation */}
+            <DeleteConfirmDialog
                 open={deleteConfirmOpen}
-                onOpenChange={setDeleteConfirmOpen}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently
-                            delete this requirement.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteConfirm}>
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                onOpenChange={(open) =>
+                    !open && dispatch({ type: 'CLOSE_DELETE_CONFIRM' })
+                }
+                onConfirm={handleDeleteConfirm}
+            />
         </LayoutGroup>
     );
 }

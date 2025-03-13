@@ -1,35 +1,38 @@
 'use client';
 
-import React, { useEffect, useCallback, useState } from 'react';
+import { useParams } from 'next/navigation';
+import React, { useCallback, useEffect, useState } from 'react';
 
+import { useProperties } from '@/components/custom/BlockCanvas/hooks/useProperties';
 import {
     DynamicRequirement,
     useRequirementActions,
 } from '@/components/custom/BlockCanvas/hooks/useRequirementActions';
-import { useProperties } from '@/components/custom/BlockCanvas/hooks/useProperties';
-import { BlockProps, PropertyType } from '@/components/custom/BlockCanvas/types';
+import {
+    BlockProps,
+    PropertyType,
+} from '@/components/custom/BlockCanvas/types';
 import { useAuth } from '@/hooks/useAuth';
-import { useParams } from 'next/navigation';
+import { useOrganization } from '@/lib/providers/organization.provider';
 import { useDocumentStore } from '@/lib/store/document.store';
 import { Requirement } from '@/types/base/requirements.types';
-import { EditableColumn, EditableColumnType } from './EditableTable/types';
 
+import { EditableColumn, EditableColumnType } from './EditableTable/types';
 import { TableBlockContent } from './TableBlockContent';
 import { TableBlockLoadingState } from './TableBlockLoadingState';
-import { useOrganization } from '@/lib/providers/organization.provider';
 
 // Helper function to format enum values for display
 const formatEnumValueForDisplay = (value: string): string => {
     if (!value) return '';
-    
+
     // Handle snake_case values (e.g., "in_progress" -> "In Progress")
     if (value.includes('_')) {
         return value
             .split('_')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
     }
-    
+
     // Handle simple values (e.g., "draft" -> "Draft")
     return value.charAt(0).toUpperCase() + value.slice(1);
 };
@@ -44,7 +47,7 @@ export const TableBlock: React.FC<BlockProps> = ({
     const { currentOrganization } = useOrganization();
     const orgId = currentOrganization?.id as string;
     const projectId = params?.projectId as string;
-    
+
     const [_selectedRequirement, _setSelectedRequirement] =
         useState<Requirement | null>(null);
     const [localRequirements, setLocalRequirements] = useState<Requirement[]>(
@@ -97,19 +100,25 @@ export const TableBlock: React.FC<BlockProps> = ({
 
         // Add columns from properties, excluding any ID-related properties
         const propertyColumns = blockProperties
-            .filter(prop => {
+            .filter((prop) => {
                 // Exclude any ID-related properties
                 const lowerKey = prop.key.toLowerCase();
                 const lowerName = prop.name.toLowerCase();
-                return !['id', 'req_id'].some(idField => 
-                    lowerKey.includes(idField) || lowerName.includes(idField)
-                ) && lowerKey !== 'external_id' && lowerName !== 'external id';
+                return (
+                    !['id', 'req_id'].some(
+                        (idField) =>
+                            lowerKey.includes(idField) ||
+                            lowerName.includes(idField),
+                    ) &&
+                    lowerKey !== 'external_id' &&
+                    lowerName !== 'external id'
+                );
             })
-            .map(prop => {
+            .map((prop) => {
                 // Map property type to EditableColumnType
                 let columnType: EditableColumnType = 'text';
                 let options: string[] | undefined;
-                
+
                 switch (prop.type) {
                     case 'number':
                         columnType = 'number';
@@ -121,12 +130,17 @@ export const TableBlock: React.FC<BlockProps> = ({
                         columnType = 'select';
                         // Handle options from the property's options field
                         if (prop.options && typeof prop.options === 'object') {
-                            const optionsObj = prop.options as Record<string, unknown>;
+                            const optionsObj = prop.options as Record<
+                                string,
+                                unknown
+                            >;
                             if (Array.isArray(optionsObj.values)) {
                                 const rawValues = optionsObj.values as string[];
-                                
+
                                 // Format the enum values for display
-                                options = rawValues.map(value => formatEnumValueForDisplay(value));
+                                options = rawValues.map((value) =>
+                                    formatEnumValueForDisplay(value),
+                                );
                             }
                         }
                         break;
@@ -134,19 +148,24 @@ export const TableBlock: React.FC<BlockProps> = ({
                         columnType = 'multi_select';
                         // Handle options from the property's options field
                         if (prop.options && typeof prop.options === 'object') {
-                            const optionsObj = prop.options as Record<string, unknown>;
+                            const optionsObj = prop.options as Record<
+                                string,
+                                unknown
+                            >;
                             if (Array.isArray(optionsObj.values)) {
                                 const rawValues = optionsObj.values as string[];
-                                
+
                                 // Format the enum values for display
-                                options = rawValues.map(value => formatEnumValueForDisplay(value));
+                                options = rawValues.map((value) =>
+                                    formatEnumValueForDisplay(value),
+                                );
                             }
                         }
                         break;
                     default:
                         columnType = 'text';
                 }
-                
+
                 const column: EditableColumn<DynamicRequirement> = {
                     header: prop.name,
                     accessor: prop.name as keyof DynamicRequirement,
@@ -156,7 +175,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                     required: prop.is_required,
                     isSortable: true,
                 };
-                
+
                 return column;
             });
 
@@ -165,9 +184,10 @@ export const TableBlock: React.FC<BlockProps> = ({
     }, [blockProperties]);
 
     // Generate columns from properties
-    const columns = blockProperties && blockProperties.length > 0 
-        ? getColumnsFromProperties() 
-        : [];
+    const columns =
+        blockProperties && blockProperties.length > 0
+            ? getColumnsFromProperties()
+            : [];
 
     // Fetch properties only if not passed from parent
     useEffect(() => {
@@ -190,7 +210,7 @@ export const TableBlock: React.FC<BlockProps> = ({
 
         try {
             await saveRequirement(dynamicReq, isNew, userProfile.id);
-            
+
             // Exit edit mode after creating a new requirement
             if (isNew) {
                 setTimeout(() => {
@@ -222,7 +242,9 @@ export const TableBlock: React.FC<BlockProps> = ({
         try {
             // Use orgId and projectId from URL params
             if (!orgId || !projectId) {
-                console.error('No organization or project ID available in URL params');
+                console.error(
+                    'No organization or project ID available in URL params',
+                );
                 return;
             }
 
@@ -277,7 +299,9 @@ export const TableBlock: React.FC<BlockProps> = ({
                             Description: req.description || '',
                             Status: formatEnumValueForDisplay(req.status),
                             Priority: formatEnumValueForDisplay(req.priority),
-                            'External ID': req.external_id || `REQ-${req.id.substring(0, 6)}`,
+                            'External ID':
+                                req.external_id ||
+                                `REQ-${req.id.substring(0, 6)}`,
                             [name]: '', // Add the new property with empty value
                         };
 
@@ -290,7 +314,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                     }),
                 );
             }
-            
+
             // Refresh properties to ensure the UI is updated with the new property
             if (fetchProperties) {
                 await fetchProperties();
@@ -307,14 +331,16 @@ export const TableBlock: React.FC<BlockProps> = ({
 
     // Determine if we're in a loading state
     const isLoading = propertiesLoading;
-    
+
     // If we're in a loading state, show a loading indicator
     if (isLoading) {
-        return <TableBlockLoadingState 
-            isLoading={isLoading} 
-            isError={false} 
-            error={null} 
-        />;
+        return (
+            <TableBlockLoadingState
+                isLoading={isLoading}
+                isError={false}
+                error={null}
+            />
+        );
     }
 
     // Even if we have no properties or requirements, we should still show the table
@@ -324,7 +350,8 @@ export const TableBlock: React.FC<BlockProps> = ({
             <div className="p-4 text-center">
                 <p>No properties found for this table.</p>
                 <p className="text-sm text-muted-foreground mt-2">
-                    Properties will be automatically created when you add a new table.
+                    Properties will be automatically created when you add a new
+                    table.
                 </p>
             </div>
         );

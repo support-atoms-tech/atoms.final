@@ -19,6 +19,7 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Table, Type } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { SortableBlock } from '@/components/custom/BlockCanvas/components/SortableBlock';
@@ -32,9 +33,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { useDocumentRealtime } from '@/hooks/queries/useDocumentRealtime';
 import { useAuth } from '@/hooks/useAuth';
-import { useDocumentStore } from '@/lib/store/document.store';
-import { useParams } from 'next/navigation';
 import { useOrganization } from '@/lib/providers/organization.provider';
+import { useDocumentStore } from '@/lib/store/document.store';
 
 const dropAnimationConfig = {
     ...defaultDropAnimation,
@@ -42,22 +42,28 @@ const dropAnimationConfig = {
 };
 
 export function BlockCanvas({ documentId }: BlockCanvasProps) {
-    const { blocks: originalBlocks, propertiesByBlock, isLoading, setLocalBlocks: setOriginalLocalBlocks } =
-        useDocumentRealtime(documentId);
+    const {
+        blocks: originalBlocks,
+        propertiesByBlock,
+        isLoading,
+        setLocalBlocks: setOriginalLocalBlocks,
+    } = useDocumentRealtime(documentId);
     const { reorderBlocks, isEditMode, setIsEditMode } = useDocumentStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [activeId, setActiveId] = useState<string | null>(null);
     const { userProfile } = useAuth();
     const { currentOrganization } = useOrganization();
     const params = useParams();
-    
+
     // Get org_id and project_id from URL params for new blocks
     const orgId = currentOrganization?.id as string;
     const projectId = params?.projectId as string;
-    
+
     // Add order property to each block if it doesn't exist
-    const [enhancedBlocks, setEnhancedBlocks] = useState<BlockWithRequirements[]>([]);
-    
+    const [enhancedBlocks, setEnhancedBlocks] = useState<
+        BlockWithRequirements[]
+    >([]);
+
     // Adapt the blocks to include order property
     useEffect(() => {
         if (originalBlocks) {
@@ -67,50 +73,57 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                     ...block,
                     order: block.position || index, // Use position as order or fallback to index
                 } as BlockWithRequirements;
-                
+
                 // Only add these optional properties if they exist and have the right type
                 if ('org_id' in block && typeof block.org_id === 'string') {
                     enhancedBlock.org_id = block.org_id;
                 } else if (orgId) {
                     enhancedBlock.org_id = orgId;
                 }
-                
-                if ('project_id' in block && typeof block.project_id === 'string') {
+
+                if (
+                    'project_id' in block &&
+                    typeof block.project_id === 'string'
+                ) {
                     enhancedBlock.project_id = block.project_id;
                 } else if (projectId) {
                     enhancedBlock.project_id = projectId;
                 }
-                
+
                 return enhancedBlock;
             });
             setEnhancedBlocks(blocksWithOrder);
         }
     }, [originalBlocks, orgId, projectId]);
-    
+
     // Wrapper for setLocalBlocks that adds order
-    const setEnhancedLocalBlocks = useCallback((updater: React.SetStateAction<BlockWithRequirements[]>) => {
-        setOriginalLocalBlocks((prev) => {
-            // First convert prev blocks to enhanced blocks
-            const prevEnhanced = prev.map((block, index) => {
-                const enhancedBlock = {
-                    ...block,
-                    order: block.position || index,
-                } as BlockWithRequirements;
-                
-                return enhancedBlock;
+    const setEnhancedLocalBlocks = useCallback(
+        (updater: React.SetStateAction<BlockWithRequirements[]>) => {
+            setOriginalLocalBlocks((prev) => {
+                // First convert prev blocks to enhanced blocks
+                const prevEnhanced = prev.map((block, index) => {
+                    const enhancedBlock = {
+                        ...block,
+                        order: block.position || index,
+                    } as BlockWithRequirements;
+
+                    return enhancedBlock;
+                });
+
+                // Apply the updater function to get next state
+                const nextState =
+                    typeof updater === 'function'
+                        ? updater(prevEnhanced)
+                        : updater;
+
+                // Convert back to format expected by original setter
+                // Just pass through as the base properties are still there
+                return nextState;
             });
-            
-            // Apply the updater function to get next state
-            const nextState = typeof updater === 'function' 
-                ? updater(prevEnhanced) 
-                : updater;
-                
-            // Convert back to format expected by original setter
-            // Just pass through as the base properties are still there
-            return nextState;
-        });
-    }, [setOriginalLocalBlocks]);
-    
+        },
+        [setOriginalLocalBlocks],
+    );
+
     const {
         handleAddBlock,
         handleUpdateBlock,
@@ -182,8 +195,12 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
             return;
         }
 
-        const oldIndex = enhancedBlocks.findIndex((block) => block.id === active.id);
-        const newIndex = enhancedBlocks.findIndex((block) => block.id === over.id);
+        const oldIndex = enhancedBlocks.findIndex(
+            (block) => block.id === active.id,
+        );
+        const newIndex = enhancedBlocks.findIndex(
+            (block) => block.id === over.id,
+        );
 
         if (oldIndex !== -1 && newIndex !== -1) {
             const newBlocks = arrayMove(enhancedBlocks, oldIndex, newIndex).map(
@@ -209,7 +226,7 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     if (isLoading) {
         return (
             <div className="relative min-h-[500px] space-y-4">
-                <TableBlockLoadingState 
+                <TableBlockLoadingState
                     isLoading={true}
                     isError={false}
                     error={null}
@@ -220,7 +237,9 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
 
     // Get active block with order property
     const activeBlock = enhancedBlocks?.find((block) => block.id === activeId);
-    const activeBlockProperties = activeBlock ? propertiesByBlock[activeBlock.id] || [] : [];
+    const activeBlockProperties = activeBlock
+        ? propertiesByBlock[activeBlock.id] || []
+        : [];
 
     return (
         <div className="relative min-h-[500px] space-y-4">

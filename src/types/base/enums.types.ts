@@ -102,6 +102,7 @@ export const RequirementPriority = {
     low: 'low',
     medium: 'medium',
     high: 'high',
+    critical: 'critical',
 } as const;
 export type RequirementPriority =
     (typeof RequirementPriority)[keyof typeof RequirementPriority];
@@ -111,7 +112,7 @@ export const RequirementStatus = {
     archived: 'archived',
     draft: 'draft',
     deleted: 'deleted',
-    pending: 'pending',
+    in_review: 'in_review',
     in_progress: 'in_progress',
     approved: 'approved',
     rejected: 'rejected',

@@ -11,7 +11,7 @@ export enum DefaultPropertyKeys {
     DESCRIPTION = 'description',
     STATUS = 'status',
     PRIORITY = 'priority',
-    ID = 'id'
+    ID = 'id',
 }
 
 export interface BlockContent {
@@ -36,7 +36,7 @@ export interface BlockWithRequirements extends Block {
 
 export enum BlockType {
     text = 'text',
-    table = 'table'
+    table = 'table',
 }
 
 export interface BlockProps {
@@ -94,9 +94,9 @@ export interface Property {
 }
 
 // Enum for property types
-export type PropertyType = 
-    | 'text' 
-    | 'number' 
+export type PropertyType =
+    | 'text'
+    | 'number'
     | 'boolean'
     | 'date'
     | 'select'

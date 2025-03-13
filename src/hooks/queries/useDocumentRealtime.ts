@@ -1,13 +1,13 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 
+import { Property } from '@/components/custom/BlockCanvas/types';
 import { useDocumentStore } from '@/lib/store/document.store';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Block } from '@/types/base/documents.types';
 import { Requirement } from '@/types/base/requirements.types';
 import { BlockSchema } from '@/types/validation/blocks.validation';
 import { RequirementSchema } from '@/types/validation/requirements.validation';
-import { Property } from '@/components/custom/BlockCanvas/types';
 
 type BlockWithRequirements = Block & { requirements: Requirement[] };
 
@@ -35,7 +35,7 @@ const fetchInitialData = async (documentId: string) => {
 
     if (requirementsError) {
         console.error('Error fetching requirements:', requirementsError);
-        throw requirementsError
+        throw requirementsError;
     }
 
     if (requirementsError) {
@@ -61,12 +61,12 @@ const fetchInitialData = async (documentId: string) => {
     const requirements = requirementsData.map((req) => {
         // Ensure all requirement data is properly parsed
         const parsedReq = RequirementSchema.parse(req);
-        
+
         // Make sure properties field is preserved from raw data
         if (req.properties && !parsedReq.properties) {
             parsedReq.properties = req.properties;
         }
-        
+
         return parsedReq;
     });
     const properties = propertiesData as Property[];
@@ -95,19 +95,19 @@ const fetchInitialData = async (documentId: string) => {
                 acc[prop.block_id].push(prop);
             }
             return acc;
-        }, 
-        {} as Record<string, Property[]>
+        },
+        {} as Record<string, Property[]>,
     );
 
     // Merge blocks with their requirements, preserving ALL requirement fields
     return {
         blocks: blocks.map((block) => ({
             ...block,
-            requirements: (requirementsByBlock[block.id] || []).map(req => ({
-                ...req,  // This ensures ALL requirement fields are preserved
+            requirements: (requirementsByBlock[block.id] || []).map((req) => ({
+                ...req, // This ensures ALL requirement fields are preserved
             })),
         })),
-        propertiesByBlock
+        propertiesByBlock,
     };
 };
 
@@ -115,7 +115,9 @@ export function useDocumentRealtime(documentId: string) {
     const { addBlock, updateBlock, deleteBlock, setBlocks } =
         useDocumentStore();
     const [blocks, setLocalBlocks] = useState<BlockWithRequirements[]>([]);
-    const [propertiesByBlock, setPropertiesByBlock] = useState<Record<string, Property[]>>({});
+    const [propertiesByBlock, setPropertiesByBlock] = useState<
+        Record<string, Property[]>
+    >({});
     const [isLoading, setIsLoading] = useState(true);
 
     // Helper function to update both states - moved outside useEffect and memoized
@@ -127,12 +129,12 @@ export function useDocumentRealtime(documentId: string) {
         ) => {
             setLocalBlocks((prev) => {
                 const updated = updateFn(prev);
-                
+
                 // Use setTimeout to ensure document store update happens outside of render cycle
                 setTimeout(() => {
                     setBlocks(updated as unknown as Block[]);
                 }, 0);
-                
+
                 return updated;
             });
         },
@@ -172,9 +174,9 @@ export function useDocumentRealtime(documentId: string) {
             if (error) {
                 console.error('Error deleting block properties:', error);
             }
-            
+
             // Update local properties state
-            setPropertiesByBlock(prev => {
+            setPropertiesByBlock((prev) => {
                 const newState = { ...prev };
                 delete newState[blockId];
                 return newState;
@@ -213,13 +215,13 @@ export function useDocumentRealtime(documentId: string) {
                                     ? prev
                                     : [
                                           ...prev,
-                                          { 
-                                              ...newBlock, 
-                                              requirements: [] // Empty array but with proper typing
+                                          {
+                                              ...newBlock,
+                                              requirements: [], // Empty array but with proper typing
                                           },
                                       ].sort((a, b) => a.position - b.position);
                             });
-                            
+
                             // Use setTimeout to ensure document store update happens outside of render cycle
                             setTimeout(() => {
                                 addBlock(newBlock);
@@ -246,7 +248,7 @@ export function useDocumentRealtime(documentId: string) {
                                         (b) => b.id !== updatedBlock.id,
                                     ),
                                 );
-                                
+
                                 // Use setTimeout to ensure document store update happens outside of render cycle
                                 setTimeout(() => {
                                     deleteBlock(updatedBlock.id);
@@ -265,10 +267,13 @@ export function useDocumentRealtime(documentId: string) {
                                     )
                                     .sort((a, b) => a.position - b.position),
                             );
-                            
+
                             // Use setTimeout to ensure document store update happens outside of render cycle
                             setTimeout(() => {
-                                updateBlock(updatedBlock.id, updatedBlock.content);
+                                updateBlock(
+                                    updatedBlock.id,
+                                    updatedBlock.content,
+                                );
                             }, 0);
                         },
                     )
@@ -289,7 +294,7 @@ export function useDocumentRealtime(documentId: string) {
                             setLocalBlocks((prev) =>
                                 prev.filter((b) => b.id !== deletedBlockId),
                             );
-                            
+
                             // Use setTimeout to ensure document store update happens outside of render cycle
                             setTimeout(() => {
                                 deleteBlock(deletedBlockId);
@@ -312,11 +317,16 @@ export function useDocumentRealtime(documentId: string) {
                             console.log('Requirement INSERT event:', payload);
                             const rawRequirement = payload.new;
                             // Parse the requirement and preserve properties
-                            const newRequirement = RequirementSchema.parse(rawRequirement);
-                            if (rawRequirement.properties && !newRequirement.properties) {
-                                newRequirement.properties = rawRequirement.properties;
+                            const newRequirement =
+                                RequirementSchema.parse(rawRequirement);
+                            if (
+                                rawRequirement.properties &&
+                                !newRequirement.properties
+                            ) {
+                                newRequirement.properties =
+                                    rawRequirement.properties;
                             }
-                            
+
                             if (newRequirement.is_deleted) {
                                 console.log(
                                     'Skipping deleted requirement:',
@@ -351,9 +361,14 @@ export function useDocumentRealtime(documentId: string) {
                             console.log('Requirement UPDATE event:', payload);
                             const rawRequirement = payload.new;
                             // Parse the requirement and preserve properties
-                            const updatedRequirement = RequirementSchema.parse(rawRequirement);
-                            if (rawRequirement.properties && !updatedRequirement.properties) {
-                                updatedRequirement.properties = rawRequirement.properties;
+                            const updatedRequirement =
+                                RequirementSchema.parse(rawRequirement);
+                            if (
+                                rawRequirement.properties &&
+                                !updatedRequirement.properties
+                            ) {
+                                updatedRequirement.properties =
+                                    rawRequirement.properties;
                             }
 
                             updateBothStates((prev) =>
@@ -432,7 +447,7 @@ export function useDocumentRealtime(documentId: string) {
                         async (payload) => {
                             console.log('Property INSERT event:', payload);
                             const newProperty = payload.new as Property;
-                            
+
                             if (newProperty.is_deleted) {
                                 console.log(
                                     'Skipping deleted property:',
@@ -440,16 +455,18 @@ export function useDocumentRealtime(documentId: string) {
                                 );
                                 return;
                             }
-                            
+
                             // If this property belongs to a block, add it to our propertiesByBlock state
                             if (newProperty.block_id) {
-                                setPropertiesByBlock(prev => {
+                                setPropertiesByBlock((prev) => {
                                     const newState = { ...prev };
                                     if (!newState[newProperty.block_id!]) {
                                         newState[newProperty.block_id!] = [];
                                     }
-                                    newState[newProperty.block_id!] = [...newState[newProperty.block_id!], newProperty]
-                                        .sort((a, b) => a.position - b.position);
+                                    newState[newProperty.block_id!] = [
+                                        ...newState[newProperty.block_id!],
+                                        newProperty,
+                                    ].sort((a, b) => a.position - b.position);
                                     return newState;
                                 });
                             }
@@ -467,55 +484,89 @@ export function useDocumentRealtime(documentId: string) {
                             console.log('Property UPDATE event:', payload);
                             const updatedProperty = payload.new as Property;
                             const oldProperty = payload.old as Property;
-                            
+
                             // Handle deletion
                             if (updatedProperty.is_deleted) {
                                 if (oldProperty.block_id) {
-                                    setPropertiesByBlock(prev => {
+                                    setPropertiesByBlock((prev) => {
                                         const newState = { ...prev };
                                         if (newState[oldProperty.block_id!]) {
-                                            newState[oldProperty.block_id!] = newState[oldProperty.block_id!]
-                                                .filter(p => p.id !== updatedProperty.id);
+                                            newState[oldProperty.block_id!] =
+                                                newState[
+                                                    oldProperty.block_id!
+                                                ].filter(
+                                                    (p) =>
+                                                        p.id !==
+                                                        updatedProperty.id,
+                                                );
                                         }
                                         return newState;
                                     });
                                 }
                                 return;
                             }
-                            
+
                             // Handle property block_id change (moving property between blocks)
-                            if (oldProperty.block_id !== updatedProperty.block_id) {
-                                setPropertiesByBlock(prev => {
+                            if (
+                                oldProperty.block_id !==
+                                updatedProperty.block_id
+                            ) {
+                                setPropertiesByBlock((prev) => {
                                     const newState = { ...prev };
-                                    
+
                                     // Remove from old block if it existed
-                                    if (oldProperty.block_id && newState[oldProperty.block_id]) {
-                                        newState[oldProperty.block_id] = newState[oldProperty.block_id]
-                                            .filter(p => p.id !== updatedProperty.id);
+                                    if (
+                                        oldProperty.block_id &&
+                                        newState[oldProperty.block_id]
+                                    ) {
+                                        newState[oldProperty.block_id] =
+                                            newState[
+                                                oldProperty.block_id
+                                            ].filter(
+                                                (p) =>
+                                                    p.id !== updatedProperty.id,
+                                            );
                                     }
-                                    
+
                                     // Add to new block if it exists
                                     if (updatedProperty.block_id) {
-                                        if (!newState[updatedProperty.block_id]) {
-                                            newState[updatedProperty.block_id] = [];
+                                        if (
+                                            !newState[updatedProperty.block_id]
+                                        ) {
+                                            newState[updatedProperty.block_id] =
+                                                [];
                                         }
-                                        newState[updatedProperty.block_id] = [...newState[updatedProperty.block_id], updatedProperty]
-                                            .sort((a, b) => a.position - b.position);
+                                        newState[updatedProperty.block_id] = [
+                                            ...newState[
+                                                updatedProperty.block_id
+                                            ],
+                                            updatedProperty,
+                                        ].sort(
+                                            (a, b) => a.position - b.position,
+                                        );
                                     }
-                                    
+
                                     return newState;
                                 });
                                 return;
                             }
-                            
+
                             // Regular property update (same block)
                             if (updatedProperty.block_id) {
-                                setPropertiesByBlock(prev => {
+                                setPropertiesByBlock((prev) => {
                                     const newState = { ...prev };
                                     if (newState[updatedProperty.block_id!]) {
-                                        newState[updatedProperty.block_id!] = newState[updatedProperty.block_id!]
-                                            .map(p => p.id === updatedProperty.id ? updatedProperty : p)
-                                            .sort((a, b) => a.position - b.position);
+                                        newState[updatedProperty.block_id!] =
+                                            newState[updatedProperty.block_id!]
+                                                .map((p) =>
+                                                    p.id === updatedProperty.id
+                                                        ? updatedProperty
+                                                        : p,
+                                                )
+                                                .sort(
+                                                    (a, b) =>
+                                                        a.position - b.position,
+                                                );
                                     }
                                     return newState;
                                 });
@@ -533,13 +584,18 @@ export function useDocumentRealtime(documentId: string) {
                         async (payload) => {
                             console.log('Property DELETE event:', payload);
                             const deletedProperty = payload.old as Property;
-                            
+
                             if (deletedProperty.block_id) {
-                                setPropertiesByBlock(prev => {
+                                setPropertiesByBlock((prev) => {
                                     const newState = { ...prev };
                                     if (newState[deletedProperty.block_id!]) {
-                                        newState[deletedProperty.block_id!] = newState[deletedProperty.block_id!]
-                                            .filter(p => p.id !== deletedProperty.id);
+                                        newState[deletedProperty.block_id!] =
+                                            newState[
+                                                deletedProperty.block_id!
+                                            ].filter(
+                                                (p) =>
+                                                    p.id !== deletedProperty.id,
+                                            );
                                     }
                                     return newState;
                                 });
@@ -581,7 +637,7 @@ export function useDocumentRealtime(documentId: string) {
                 console.log('Setting initial data:', initialData);
                 setLocalBlocks(initialData.blocks);
                 setPropertiesByBlock(initialData.propertiesByBlock);
-                
+
                 // Use setTimeout to ensure document store update happens outside of render cycle
                 setTimeout(() => {
                     setBlocks(initialData.blocks);
