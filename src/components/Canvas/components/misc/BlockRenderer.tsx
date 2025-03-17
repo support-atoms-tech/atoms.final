@@ -1,12 +1,11 @@
 // components/canvas/BlockRenderer.tsx
 'use client';
 
-import { useMemo, memo } from 'react';
-import { useCanvasStore } from '@/components/Canvas/lib/store/canvasStore';
 import { Block } from '@/components/Canvas/types';
-import { BlockProvider } from '@/components/Canvas/lib/providers/BlockContext';
 import { TextBlock } from '@/components/Canvas/components/TextBlock/TextBlock';
-import { TableBlock } from '@/components/Canvas/components/TableBlock/TableBlock';
+import { RfTableBlockWrapper } from '../TableBlock/table/refactor/RfTableBlockWrapper';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { BlockMenu } from '@/components/Canvas/components/misc/BlockMenu';
 
 interface BlockRendererProps {
@@ -15,41 +14,59 @@ interface BlockRendererProps {
   isDragging: boolean;
 }
 
-// Memoize the BlockRenderer component to prevent unnecessary re-renders
-export const BlockRenderer = memo(function BlockRenderer({ block, isSelected, isDragging }: BlockRendererProps) {
-  const { selectBlock } = useCanvasStore();
-  
-  // Render the appropriate block component based on type
-  const BlockComponent = useMemo(() => {
+/**
+ * Component that renders different types of blocks based on their type
+ * Handles drag and drop functionality for block reordering
+ */
+export function BlockRenderer({ block, isSelected, isDragging }: BlockRendererProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: block.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const blockClasses = `
+    block-wrapper relative
+    ${isSelected ? 'ring-2 ring-blue-500' : ''}
+    ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
+  `;
+
+  const renderBlock = () => {
     switch (block.type) {
       case 'text':
-        return TextBlock;
+        return <TextBlock block={block} />;
       case 'table':
-        return TableBlock;
+        return <RfTableBlockWrapper block={block} />;
       default:
-        return () => <div>Unknown block type: {block.type}</div>;
+        return (
+          <div className="p-4 text-center text-gray-500">
+            Unsupported block type: {block.type}
+          </div>
+        );
     }
-  }, [block.type]);
-  
-  // Handle block selection
-  const handleBlockClick = () => {
-    selectBlock(block.id);
   };
-  
+
   return (
-    <div 
-      className={`block-wrapper ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} relative`}
-      onClick={handleBlockClick}
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={blockClasses}
+      {...attributes}
+      {...listeners}
     >
-      <BlockProvider block={block as Block}>
-        <div className="block-content relative">
-          <BlockComponent block={block} />
-          
-          {isSelected && (
-            <BlockMenu blockId={block.id} blockType={block.type} />
-          )}
-        </div>
-      </BlockProvider>
+      {renderBlock()}
+      
+      {isSelected && (
+        <BlockMenu blockId={block.id} blockType={block.type} />
+      )}
     </div>
   );
-});
+}

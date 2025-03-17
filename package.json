@@ -51,6 +51,7 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "framer-motion": "^11.18.2",
+        "loadash": "^1.0.0",
         "lucide-react": "^0.471.2",
         "next": "^15.2.2",
         "next-client-cookies": "^2.0.1",
