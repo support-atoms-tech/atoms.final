@@ -28,6 +28,10 @@ export type DocumentPropertySchema = {
     updated_at: string | null;
     updated_by: string | null;
     version: number;
+    name: string;
+    data_type: string;
+    is_base?: boolean;
+    org_id?: string;
 };
 
 export type Block = {

@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useCreateDocumentWithDefaultSchemas } from '@/hooks/mutations/useDocumentMutations';
 import { useAuth } from '@/hooks/useAuth';
-
+import { v4 as uuidv4 } from 'uuid';
 // Document form schema based on the Document type and validation
 const documentFormSchema = z.object({
     name: z.string().min(1, 'Document name is required'),
@@ -70,7 +70,7 @@ export default function DocumentForm({
             await createDocumentWithSchemas({
                 name: data.name,
                 description: data.description || null,
-                project_id: projectId,
+                project_id: projectId as string,
                 slug: data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
                 tags: data.tags || null,
                 created_by: userProfile.id,

@@ -26,13 +26,13 @@ export function useBreadcrumbData(segments: string[]) {
 
     // Handle different URL patterns
     if (segments[0] === 'org') {
-        if (segments[1] === 'project' && segments.length >= 3) {
-            // New structure: /org/project/[projectId]/...
-            orgId = preferredOrgId || '';
-            projectId = segments[2];
+        if (segments[2] === 'project' && segments.length >= 3) {
+            // New structure: /org/[orgId]/project/[projectId]/...
+            orgId = segments[1];
+            projectId = segments[3];
 
-            if (segments[3] === 'documents' && segments.length >= 5) {
-                documentId = segments[4];
+            if (segments[4] === 'documents' && segments.length >= 5) {
+                documentId = segments[5];
             }
         } else if (segments.length >= 2) {
             // Old structure: /org/[orgId]/...
@@ -49,7 +49,7 @@ export function useBreadcrumbData(segments: string[]) {
                     }
                 }
             }
-        }
+        }   
     }
 
     // Use existing queries with appropriate safeguards

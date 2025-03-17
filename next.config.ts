@@ -2,7 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
     experimental: {
-        reactCompiler: true,
+        // Disable React compiler in development as it may interfere with DevTools
+        reactCompiler: false,
     },
 };
 

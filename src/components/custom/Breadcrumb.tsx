@@ -28,7 +28,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ className }) => {
             pathSegments[1] === 'project' &&
             pathSegments.length >= 3
         ) {
-            // New structure: /org/project/[projectId]/...
+            // New structure: /org/[orgId]/project/[projectId]/...
             const section = pathSegments[3];
 
             if (pathSegments.length >= 4) {

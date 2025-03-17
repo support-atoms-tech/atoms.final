@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import { useEffect } from 'react';
 
-import OrgDashboard from '@/app/(protected)/org/components/OrgDashboard.client';
+import OrgDashboard from '@/app/(protected)/org/[orgId]/OrgDashboard.client';
 import { OrgDashboardSkeleton } from '@/components/custom/skeletons/OrgDashboardSkeleton';
 import { useExternalDocumentsByOrg } from '@/hooks/queries/useExternalDocuments';
 import { useOrganization } from '@/hooks/queries/useOrganization';
@@ -44,11 +44,11 @@ export default function OrgPage() {
     );
 
     const { data: documents, isLoading: documentsLoading } =
-        useExternalDocumentsByOrg(params?.orgId || '');
+        useExternalDocumentsByOrg(orgId);
 
     const handleProjectClick = (project: Project) => {
         setCurrentProjectId(project.id);
-        router.push(`/org/project/${project.id}`);
+        router.push(`/org/${orgId}/project/${project.id}`);
     };
 
     const handleExternalDocsClick = () => {

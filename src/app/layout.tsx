@@ -7,6 +7,8 @@ import { ThemeProvider } from '@/lib/providers/theme.provider';
 import '@/styles/globals.css';
 
 import GlobalErrorBoundary from './global-error';
+import { Toaster } from 'react-hot-toast';
+import { WDYRSetup } from './WDYRSetup.client';
 
 const geistSans = Geist({
     variable: '--font-geist-sans',
@@ -32,11 +34,12 @@ export default function RootLayout({
         <GlobalErrorBoundary>
             <html lang="en" suppressHydrationWarning>
                 <head>
-                    {/* <script src="https://unpkg.com/react-scan/dist/auto.global.js" /> */}
+                    <script src="https://unpkg.com/react-scan/dist/auto.global.js" />
                 </head>
                 <body
                     className={`${geistSans.variable} ${geistMono.variable} antialiased`}
                 >
+                    <WDYRSetup />
                     <CookiesProvider>
                         <ThemeProvider
                             attribute="class"
@@ -44,7 +47,9 @@ export default function RootLayout({
                             enableSystem
                             disableTransitionOnChange
                         >
-                            <QueryProvider>{children}</QueryProvider>
+                            <QueryProvider>{children}
+                                <Toaster position="bottom-right" />
+                            </QueryProvider>
                         </ThemeProvider>
                     </CookiesProvider>
                 </body>
