@@ -1,38 +1,31 @@
-// app/dashboard/[orgId]/[projectId]/[documentId]/layout.tsx
-import { ReactNode } from 'react';
-import { notFound } from 'next/navigation';
-import { getDocument, getBlocks } from '@/components/Canvas/lib/supabase/server-queries';
-import { DocumentProvider } from '@/components/Canvas/lib/providers/DocumentContext';
-import { CanvasToolbar } from '@/components/Canvas/components/misc/CanvasToolbar';
-import { DocumentLayout as DocumentLayoutClient } from '@/app/(protected)/org/[orgId]/project/[projectId]/documents/[documentId]/DocumentLayout.client';
+'use client';
 
-export default async function DocumentLayout({ 
-  children, 
-  params 
-}: { 
-  children: ReactNode;
-  params: Promise<{ orgId: string; projectId: string; documentId: string }>;
+import { useDocument } from '@/hooks/queries/useDocument';
+import { useParams } from 'next/navigation';
+import { useEffect } from 'react';
+import { useDocumentStore } from '@/lib/store/document.store';
+
+export default function DocumentLayout({
+  children,
+}: {
+  children: React.ReactNode;
 }) {
-  // Fetch document data
-  try {
-    // Destructure params to avoid the Next.js warning
-    const { documentId } = await params;
-    
-    const document = await getDocument(documentId);
-    
-    return (
-      <div className="flex flex-col h-full">
-        <DocumentProvider document={document}>
-          <CanvasToolbar />
-          <div className="flex-1 overflow-auto">
-            <DocumentLayoutClient>
-              {children}
-            </DocumentLayoutClient>
-          </div>
-        </DocumentProvider>
-      </div>
-    );
-  } catch (error) {
-    return notFound();
-  }
+  const params = useParams();
+  const documentId = params.documentId as string;
+  
+  const { setCurrentDocument } = useDocumentStore();
+  const { data: document } = useDocument(documentId);
+  
+  // Set the current document in the store when it loads
+  useEffect(() => {
+    if (document) {
+      setCurrentDocument(document);
+    }
+  }, [document, setCurrentDocument]);
+  
+  return (
+    <div className="flex flex-col h-full">
+      {children}
+    </div>
+  );
 }

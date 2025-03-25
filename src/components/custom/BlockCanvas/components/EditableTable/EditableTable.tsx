@@ -90,6 +90,40 @@ export function EditableTable<
         }
     }, [isEditMode, localIsEditMode, data]);
 
+    // Effect to save all changes when exiting edit mode
+    useEffect(() => {
+        const saveChanges = async () => {
+            if (!onSave || !editingData) return;
+
+            // Get all modified items
+            const modifiedItems = Object.entries(editingData).filter(([id, item]) => {
+                // Skip new items as they're handled separately
+                if (id === 'new') return false;
+                
+                // Find original item
+                const originalItem = data.find(d => d.id === id);
+                if (!originalItem) return false;
+
+                // Check if any values have changed
+                return Object.keys(item).some(key => item[key] !== originalItem[key]);
+            });
+
+            // Save all modified items
+            for (const [_id, item] of modifiedItems) {
+                try {
+                    await onSave(item, false);
+                } catch (error) {
+                    console.error('Failed to save:', error);
+                }
+            }
+        };
+
+        // If we're exiting edit mode and there are changes, save them
+        if (!isEditMode && localIsEditMode) {
+            saveChanges();
+        }
+    }, [isEditMode, localIsEditMode, editingData, onSave, data]);
+
     // Clean up timeouts on unmount
     useEffect(() => {
         return () => {
@@ -104,40 +138,8 @@ export function EditableTable<
                 type: 'SET_CELL_VALUE',
                 payload: { itemId, accessor, value },
             });
-
-            // Don't auto-save if this is a new row
-            if (itemId === 'new' || !onSave) return;
-
-            // Clear existing timeout for this item if it exists
-            if (state.editingTimeouts[itemId]) {
-                clearTimeout(state.editingTimeouts[itemId]);
-                dispatch({ type: 'CLEAR_TIMEOUT', payload: itemId });
-            }
-
-            // Set new timeout for debounced save
-            const timeoutId = setTimeout(async () => {
-                try {
-                    const editedItem = {
-                        ...state.editingData[itemId],
-                        [accessor]: value,
-                    };
-
-                    await onSave(editedItem, false);
-
-                    // Clear the timeout from state after successful save
-                    dispatch({ type: 'CLEAR_TIMEOUT', payload: itemId });
-                } catch (error) {
-                    console.error('Failed to save:', error);
-                }
-            }, 500); // 500ms debounce
-
-            // Store the new timeout
-            dispatch({
-                type: 'SET_TIMEOUT',
-                payload: { itemId, timeoutId },
-            });
         },
-        [state.editingData, state.editingTimeouts, onSave],
+        [],
     );
 
     const handleAddNewRow = useCallback(() => {
@@ -145,11 +147,9 @@ export function EditableTable<
         const newItem = columns.reduce((acc, col) => {
             switch (col.type) {
                 case 'select':
-                    // Initialize select fields with null instead of empty string
                     acc[col.accessor as keyof T] = null as T[keyof T];
                     break;
                 case 'multi_select':
-                    // Initialize multi-select fields with empty array
                     acc[col.accessor as keyof T] = [] as unknown as T[keyof T];
                     break;
                 case 'text':
@@ -187,9 +187,6 @@ export function EditableTable<
 
             // Clear editing state after successful save
             dispatch({ type: 'CANCEL_ADD_ROW' });
-
-            // Reset local edit mode to match global edit mode
-            dispatch({ type: 'SET_EDIT_MODE', payload: false });
         } catch (error) {
             console.error('Failed to save new row:', error);
         }
@@ -243,7 +240,7 @@ export function EditableTable<
                             !localIsEditMode && setIsHoveringTable(false)
                         }
                     >
-                        {/* Controls */}
+                        {/* Controls
                         <AnimatePresence>
                             <TableControls
                                 showFilter={showFilter}
@@ -257,7 +254,7 @@ export function EditableTable<
                                 }
                                 isVisible={isHoveringTable && !localIsEditMode}
                             />
-                        </AnimatePresence>
+                        </AnimatePresence> */}
 
                         {/* Table */}
                         {sortedData.length > 0 ||

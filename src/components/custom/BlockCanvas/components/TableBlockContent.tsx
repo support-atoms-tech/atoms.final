@@ -6,9 +6,11 @@ import { DynamicRequirement } from '@/components/custom/BlockCanvas/hooks/useReq
 import { PropertyType } from '@/components/custom/BlockCanvas/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Requirement } from '@/types/base/requirements.types';
+import { Button } from '@/components/ui/button';
+import { Columns } from 'lucide-react';
 
-import { AddColumnDialog } from './AddColumnDialog';
-import { EditableColumn } from './EditableTable';
+import { AddColumnDialog } from '@/components/custom/BlockCanvas/components/EditableTable/components/AddColumnDialog';
+import { EditableColumn, EditableColumnType, PropertyConfig } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 
 interface TableBlockContentProps {
     dynamicRequirements: DynamicRequirement[];
@@ -18,9 +20,12 @@ interface TableBlockContentProps {
         isNew: boolean,
     ) => Promise<void>;
     onDeleteRequirement: (dynamicReq: DynamicRequirement) => Promise<void>;
-    onAddColumn: (name: string, dataType: PropertyType) => Promise<void>;
+    onAddColumn: (name: string, type: EditableColumnType, propertyConfig: PropertyConfig, defaultValue: string) => Promise<void>;
     isEditMode: boolean;
     alwaysShowAddRow?: boolean;
+    orgId: string;
+    projectId?: string;
+    documentId?: string;
 }
 
 export const TableBlockContent: React.FC<TableBlockContentProps> = ({
@@ -31,19 +36,36 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = ({
     onAddColumn,
     isEditMode,
     alwaysShowAddRow = false,
+    orgId,
+    projectId,
+    documentId,
 }) => {
     const { userProfile } = useAuth();
     const [selectedRequirement, setSelectedRequirement] =
         useState<Requirement | null>(null);
+    const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
 
     return (
         <div className="space-y-4">
             <div className="flex justify-between mb-2">
                 {isEditMode && (
                     <div className="flex justify-end">
-                        <AddColumnDialog
-                            onAddColumn={onAddColumn}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsAddColumnOpen(true)}
                             disabled={!userProfile?.id}
+                        >
+                            <Columns className="h-4 w-4 mr-2" />
+                            Add Column
+                        </Button>
+                        <AddColumnDialog
+                            isOpen={isAddColumnOpen}
+                            onClose={() => setIsAddColumnOpen(false)}
+                            onSave={onAddColumn}
+                            orgId={orgId}
+                            projectId={projectId}
+                            documentId={documentId}
                         />
                     </div>
                 )}

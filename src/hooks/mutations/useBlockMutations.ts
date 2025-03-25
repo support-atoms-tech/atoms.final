@@ -98,7 +98,7 @@ export function useDeleteBlock() {
                     deleted_by: deletedBy,
                 })
                 .eq('id', id)
-                .select()
+                .select('*')
                 .single();
 
             if (blockError) {

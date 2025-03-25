@@ -27,6 +27,7 @@ import { TableBlockLoadingState } from '@/components/custom/BlockCanvas/componen
 import { useBlockActions } from '@/components/custom/BlockCanvas/hooks/useBlockActions';
 import {
     BlockCanvasProps,
+    BlockType,
     BlockWithRequirements,
     Property,
 } from '@/components/custom/BlockCanvas/types';
@@ -35,6 +36,7 @@ import { useDocumentRealtime } from '@/hooks/queries/useDocumentRealtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/lib/providers/organization.provider';
 import { useDocumentStore } from '@/lib/store/document.store';
+import { Json } from '@/types/base/database.types';
 
 const dropAnimationConfig = {
     ...defaultDropAnimation,
@@ -44,10 +46,16 @@ const dropAnimationConfig = {
 export function BlockCanvas({ documentId }: BlockCanvasProps) {
     const {
         blocks: originalBlocks,
-        propertiesByBlock,
-        isLoading,
-        setLocalBlocks: setOriginalLocalBlocks,
-    } = useDocumentRealtime(documentId);
+        loading,
+        error,
+        setDocument,
+        blocks,
+    } = useDocumentRealtime({
+        documentId,
+        orgId: '',
+        projectId: '',
+        userProfile: null,
+    });
     const { reorderBlocks, isEditMode, setIsEditMode } = useDocumentStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -67,28 +75,12 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     // Adapt the blocks to include order property
     useEffect(() => {
         if (originalBlocks) {
-            const blocksWithOrder = originalBlocks.map((block, index) => {
+            const blocksWithOrder = originalBlocks.map((block: BlockWithRequirements, index: number) => {
                 // Create a new object with all required properties
                 const enhancedBlock = {
                     ...block,
                     order: block.position || index, // Use position as order or fallback to index
-                } as BlockWithRequirements;
-
-                // Only add these optional properties if they exist and have the right type
-                if ('org_id' in block && typeof block.org_id === 'string') {
-                    enhancedBlock.org_id = block.org_id;
-                } else if (orgId) {
-                    enhancedBlock.org_id = orgId;
-                }
-
-                if (
-                    'project_id' in block &&
-                    typeof block.project_id === 'string'
-                ) {
-                    enhancedBlock.project_id = block.project_id;
-                } else if (projectId) {
-                    enhancedBlock.project_id = projectId;
-                }
+                } as BlockWithRequirements
 
                 return enhancedBlock;
             });
@@ -99,29 +91,22 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     // Wrapper for setLocalBlocks that adds order
     const setEnhancedLocalBlocks = useCallback(
         (updater: React.SetStateAction<BlockWithRequirements[]>) => {
-            setOriginalLocalBlocks((prev) => {
-                // First convert prev blocks to enhanced blocks
-                const prevEnhanced = prev.map((block, index) => {
-                    const enhancedBlock = {
-                        ...block,
-                        order: block.position || index,
-                    } as BlockWithRequirements;
+            const processBlocks = (blocks: BlockWithRequirements[]): BlockWithRequirements[] => {
+                return blocks.map((block: BlockWithRequirements, index: number) => ({
+                    ...block,
+                    order: index,
+                } as BlockWithRequirements));
+            };
 
-                    return enhancedBlock;
-                });
-
-                // Apply the updater function to get next state
-                const nextState =
-                    typeof updater === 'function'
-                        ? updater(prevEnhanced)
-                        : updater;
-
-                // Convert back to format expected by original setter
-                // Just pass through as the base properties are still there
-                return nextState;
-            });
+            if (typeof updater === 'function') {
+                const prevBlocks = blocks || [];
+                const newBlocks = updater(prevBlocks);
+                setDocument(processBlocks(newBlocks));
+            } else {
+                setDocument(processBlocks(updater));
+            }
         },
-        [setOriginalLocalBlocks],
+        [setDocument, blocks]
     );
 
     const {
@@ -153,8 +138,6 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     const renderBlock = useCallback(
         (block: BlockWithRequirements) => {
             const isSelected = block.id === selectedBlockId;
-            // Get properties for this block
-            const blockProperties = propertiesByBlock[block.id] || [];
 
             return (
                 <SortableBlock
@@ -169,7 +152,6 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                         setSelectedBlockId(block.id);
                         setIsEditMode(true);
                     }}
-                    properties={blockProperties}
                 />
             );
         },
@@ -179,7 +161,6 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
             handleUpdateBlock,
             handleDeleteBlock,
             setIsEditMode,
-            propertiesByBlock,
         ],
     );
 
@@ -204,7 +185,7 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
 
         if (oldIndex !== -1 && newIndex !== -1) {
             const newBlocks = arrayMove(enhancedBlocks, oldIndex, newIndex).map(
-                (block, index) => ({
+                (block: BlockWithRequirements, index: number) => ({
                     ...block,
                     position: index,
                     order: index, // Ensure order is set
@@ -223,7 +204,7 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     };
 
     // Don't render blocks until they're loaded
-    if (isLoading) {
+    if (loading) {
         return (
             <div className="relative min-h-[500px] space-y-4">
                 <TableBlockLoadingState
@@ -235,11 +216,20 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
         );
     }
 
+    if (error) {
+        return (
+            <div className="relative min-h-[500px] space-y-4">
+                <TableBlockLoadingState
+                    isLoading={false}
+                    isError={true}
+                    error={error}
+                />
+            </div>
+        );
+    }
+
     // Get active block with order property
-    const activeBlock = enhancedBlocks?.find((block) => block.id === activeId);
-    const activeBlockProperties = activeBlock
-        ? propertiesByBlock[activeBlock.id] || []
-        : [];
+    const activeBlock = enhancedBlocks?.find((block: BlockWithRequirements) => block.id === activeId);
 
     return (
         <div className="relative min-h-[500px] space-y-4">
@@ -250,11 +240,11 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext
-                    items={enhancedBlocks?.map((block) => block.id) || []}
+                    items={enhancedBlocks?.map((block: BlockWithRequirements) => block.id) || []}
                     strategy={verticalListSortingStrategy}
                 >
                     <div className="space-y-4">
-                        {enhancedBlocks?.map((block) => renderBlock(block))}
+                        {enhancedBlocks?.map((block: BlockWithRequirements) => renderBlock(block))}
                     </div>
                 </SortableContext>
 
@@ -268,7 +258,6 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                                 onSelect={() => {}}
                                 onUpdate={() => {}}
                                 onDelete={() => {}}
-                                properties={activeBlockProperties}
                             />
                         </div>
                     ) : null}
@@ -278,29 +267,23 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
             {!isEditMode && (
                 <div className="flex gap-2 mt-4 z-10 relative">
                     <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                            handleAddBlock('text', {
-                                format: 'markdown',
-                                text: '',
-                            })
-                        }
-                        className="gap-2 cursor-pointer"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleAddBlock(BlockType.text, {
+                            format: 'markdown',
+                            text: '',
+                        })}
                     >
                         <Type className="h-4 w-4" />
-                        Add Text
                     </Button>
                     <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                            handleAddBlock('table', { requirements: [] })
-                        }
-                        className="gap-2 cursor-pointer"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleAddBlock(BlockType.table, {
+                            requirements: []
+                        })}
                     >
                         <Table className="h-4 w-4" />
-                        Add Requirements Table
                     </Button>
                 </div>
             )}

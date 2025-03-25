@@ -166,7 +166,7 @@ export function useCreateBaseOrgProperties() {
             // If no base properties exist, create them
             const defaultProperties: PropertyCreateData[] = [
                 { 
-                    name: 'ReqID', 
+                    name: 'External_ID', 
                     property_type: 'text', 
                     org_id: orgId,
                     is_base: true,

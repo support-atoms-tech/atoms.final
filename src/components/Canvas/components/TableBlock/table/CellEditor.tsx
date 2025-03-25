@@ -4,8 +4,7 @@
 import { forwardRef, useEffect, useRef, useCallback, memo } from 'react';
 import { Property } from '@/components/Canvas/types';
 import { useOnClickOutside } from '@/components/Canvas/lib/hooks/utils/useOnClickOutside';
-import { useDebounce } from '@/components/Canvas/lib/hooks/utils/useDebounce';
-import { debounce } from '@/lib/utils';
+import debounce from 'lodash/debounce';
 
 interface CellEditorProps {
   value: any;
@@ -24,9 +23,12 @@ export const CellEditor = memo(forwardRef<HTMLInputElement | HTMLSelectElement, 
     
     // Create a debounced onChange handler to reduce update frequency
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const debouncedOnChange = useDebounce((newValue: any) => {
-      onChange(newValue);
-    }, 100);
+    const debouncedOnChange = useCallback(
+      debounce((newValue: any) => {
+        onChange(newValue);
+      }, 100), // 100ms debounce
+      [onChange]
+    );
     
     // Cleanup debounce on unmount
     useEffect(() => {

@@ -14,6 +14,20 @@ export enum DefaultPropertyKeys {
     ID = 'id',
 }
 
+// Property type enum
+export enum PropertyType {
+    text = 'text',
+    number = 'number',
+    boolean = 'boolean',
+    date = 'date',
+    select = 'select',
+    multi_select = 'multi_select',
+    user = 'user',
+    url = 'url',
+    email = 'email',
+    rich_text = 'rich_text',
+}
+
 export interface BlockContent {
     position?: number;
     text?: string;
@@ -29,9 +43,9 @@ export interface BlockCanvasProps {
 export interface BlockWithRequirements extends Block {
     requirements: Requirement[];
     order: number;
-    org_id?: string;
     project_id?: string;
     height?: number;
+    columns?: Column[];
 }
 
 export enum BlockType {
@@ -47,7 +61,6 @@ export interface BlockProps {
     isEditMode?: boolean;
     onDelete?: () => void;
     onDoubleClick?: () => void;
-    properties?: Property[];
 }
 
 export interface BlockActionsProps {
@@ -67,41 +80,53 @@ export interface UseBlockActionsProps {
     projectId: string;
 }
 
-// New Property interface based on the provided table schema
+// Property interface aligned with CollaborativeTable
 export interface Property {
     id: string;
-    org_id: string;
-    project_id: string;
-    document_id: string;
-    block_id?: string;
     name: string;
-    key: string;
-    type: PropertyType;
-    description?: string;
-    options?: Json;
-    default_value?: Json;
-    position: number;
-    is_required: boolean;
-    is_hidden: boolean;
-    created_at?: string;
-    updated_at?: string;
-    created_by: string;
-    updated_by: string;
-    is_deleted: boolean;
-    deleted_by?: string;
-    deleted_at?: string;
-    is_schema: boolean;
+    property_type: PropertyType;
+    org_id: string;
+    project_id: string | null;
+    document_id: string | null;
+    is_base: boolean | null;
+    options: PropertyOptions | null;
+    scope: string;
+    created_at: string | null;
+    updated_at: string | null;
 }
 
-// Enum for property types
-export type PropertyType =
-    | 'text'
-    | 'number'
-    | 'boolean'
-    | 'date'
-    | 'select'
-    | 'multi_select'
-    | 'user'
-    | 'url'
-    | 'email'
-    | 'rich_text';
+// Property options interface aligned with CollaborativeTable
+export interface PropertyOptions {
+    values?: string[];
+    default?: any;
+    format?: string;
+    required?: boolean;
+    min?: number;
+    max?: number;
+    pattern?: string;
+}
+
+// Column interface aligned with CollaborativeTable
+export interface Column {
+    id: string;
+    block_id: string | null;
+    property_id: string;
+    position: number;
+    width: number | null;
+    is_hidden: boolean | null;
+    is_pinned: boolean | null;
+    created_at: string | null;
+    updated_at: string | null;
+    default_value: string | null;
+    property?: Property;
+}
+
+// Column creation data interface
+export interface ColumnCreateData {
+    block_id: string;
+    property_id: string;
+    position: number;
+    width?: number | null;
+    is_hidden?: boolean | null;
+    is_pinned?: boolean | null;
+}

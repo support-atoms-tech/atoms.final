@@ -14,6 +14,11 @@ import { prefetchUserDashboard } from '@/lib/db/utils/prefetchData';
 import { OrganizationProvider } from '@/lib/providers/organization.provider';
 import { UserProvider } from '@/lib/providers/user.provider';
 import { Organization } from '@/types/base/organizations.types';
+import { LayoutProvider } from '@/lib/providers/layout.provider';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import AppSidebar from '@/components/base/AppSidebar';
+import VerticalToolbar from '@/components/custom/VerticalToolbar';
+import LayoutManager from '@/components/base/LayoutManager';
 
 function RootLayoutSkeleton() {
     return (
@@ -55,13 +60,15 @@ export default async function ProtectedLayout({
 
         return (
             <HydrationBoundary state={dehydrate(queryClient)}>
-                <OrganizationProvider initialOrganizations={organizations}>
-                    <UserProvider initialUser={user} initialProfile={profile}>
-                        <Suspense fallback={<RootLayoutSkeleton />}>
-                            {children}
-                        </Suspense>
-                    </UserProvider>
-                </OrganizationProvider>
+                <UserProvider initialUser={user} initialProfile={profile}>
+                    <OrganizationProvider initialOrganizations={organizations}>
+                        <LayoutManager>
+                            <Suspense fallback={<RootLayoutSkeleton />}>
+                                {children}
+                            </Suspense>
+                        </LayoutManager>
+                    </OrganizationProvider>
+                </UserProvider>
             </HydrationBoundary>
         );
     } catch (error) {

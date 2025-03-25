@@ -1,3 +1,14 @@
+export type PropertyScope = 'org' | 'project' | 'document';
+
+export interface PropertyConfig {
+    scope: PropertyScope[];
+    is_base: boolean;
+    options?: string[]; // For select/multi-select types
+    org_id: string;
+    project_id?: string;
+    document_id?: string;
+}
+
 export type EditableColumnType =
     | 'text'
     | 'select'
@@ -35,6 +46,8 @@ export interface EditableColumn<T> {
     required?: boolean;
     validation?: ColumnValidation;
     isSortable?: boolean;
+    propertyConfig?: PropertyConfig;
+    default_value?: CellValue;
     // Add type-specific validation functions
     typeValidation?: {
         text?: (value: string) => boolean;

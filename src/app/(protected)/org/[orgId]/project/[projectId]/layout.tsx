@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { getCookie } from '@/app/(protected)/org/actions';
-import Sidebar from '@/components/base/Sidebar';
+import AppSidebar from '@/components/base/AppSidebar';
 import VerticalToolbar from '@/components/custom/VerticalToolbar';
 import { ProjectPageSkeleton } from '@/components/custom/skeletons/ProjectPageSkeleton';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -49,11 +49,11 @@ export default async function ProjectLayout({
                 initialProject={project as Project}
                 initialDocuments={documents as Document[]}
             >
-                <div className="relative flex-1 p-16">
-                    <Suspense fallback={<ProjectPageSkeleton />}>
-                        {children}
-                    </Suspense>
-                </div>
+                    <div className="relative flex-1">
+                        <Suspense fallback={<ProjectPageSkeleton />}>
+                            {children}
+                        </Suspense>
+                    </div>
             </ProjectProvider>
         );
     } catch (error) {

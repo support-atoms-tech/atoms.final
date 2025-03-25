@@ -1,16 +1,25 @@
-import { Canvas } from '@/components/Canvas/Canvas';
-import { CanvasNavigation } from '@/components/Canvas/components/misc/CanvasNavigation';
+'use client';
 
-export default async function DocumentPage({ 
-    params 
-}: { 
-    params: Promise<{ documentId: string; orgId: string; projectId: string }>
-}) {
-    const { documentId, orgId, projectId } = await params;
-    
-    return (
-        <div className="p-4">
-            <Canvas />
-        </div>
-    );
+import { Button } from '@/components/ui/button';
+import { useDocumentStore } from '@/lib/store/document.store';
+import { useAuth } from '@/hooks/useAuth';
+import { useCreateBlock } from '@/hooks/mutations/useBlockMutations';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useBlockSubscription } from '@/hooks/queries/useBlockSubscription';
+import { Block } from '@/types';
+import { Table } from 'lucide-react';
+import { CollaborativeTable } from '@/components/CollaborativeTable';
+import { BlockCanvas } from '@/components/custom/BlockCanvas';
+import { BlockType } from '@/components/custom/BlockCanvas/types';
+
+export default function DocumentPage() {
+  const params = useParams();
+  const documentId = params.documentId as string;
+  
+  return (
+    <div>
+      <BlockCanvas documentId={documentId} />
+    </div>
+  );
 }

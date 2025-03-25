@@ -16,7 +16,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    SidebarContainer,
+    Sidebar,
     SidebarContent,
     SidebarFooter,
     SidebarGroup,
@@ -45,7 +45,7 @@ const items: MenuItem[] = [
     },
 ];
 
-function Sidebar() {
+function AppSidebar() {
     const router = useRouter();
     const pathname = usePathname();
     const [isLoading, setIsLoading] = useState(false);
@@ -151,18 +151,18 @@ function Sidebar() {
     }, []);
 
     return (
-        <SidebarContainer inert={isSidebarHidden}>
+        <Sidebar inert={isSidebarHidden}>
             <SidebarContent className="px-3 py-2">
                 <SidebarGroup>
-                    <SidebarGroupLabel className="flex items-center gap-2 px-1 mb-6">
+                    <SidebarGroupLabel className="flex items-center gap-2 px-1 mb-4">
                         <Image
                             src="/atoms.png"
                             alt="Atoms logo"
-                            width={24}
-                            height={24}
+                            width={20}
+                            height={20}
                             className="object-contain dark:invert"
                         />
-                        <span className="font-semibold text-lg">Atoms</span>
+                        <span className="font-semibold text-base">Atoms</span>
                     </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
@@ -170,11 +170,11 @@ function Sidebar() {
                                 <Link
                                     key={item.title}
                                     href={item.url}
-                                    className="block mb-1"
+                                    className="block mb-0.5"
                                 >
-                                    <SidebarMenuItem className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-secondary transition-colors">
-                                        <item.icon className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm font-medium">
+                                    <SidebarMenuItem className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary transition-colors">
+                                        <item.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-xs font-medium">
                                             {item.title}
                                         </span>
                                     </SidebarMenuItem>
@@ -195,8 +195,8 @@ function Sidebar() {
                                                 className="w-full justify-start"
                                                 onClick={navigateToPlayground}
                                             >
-                                                <Sparkles className="h-4 w-4 mr-2 text-muted-foreground" />
-                                                <span className="text-sm font-medium">
+                                                <Sparkles className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                <span className="text-xs font-medium">
                                                     Playground
                                                 </span>
                                             </Button>
@@ -215,8 +215,8 @@ function Sidebar() {
                                                 className="w-full justify-start"
                                                 onClick={navigateToEnterprise}
                                             >
-                                                <Building className="h-4 w-4 mr-2 text-muted-foreground" />
-                                                <span className="text-sm font-medium">
+                                                <Building className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                <span className="text-xs font-medium">
                                                     Enterprise
                                                 </span>
                                             </Button>
@@ -230,10 +230,10 @@ function Sidebar() {
                                     <SidebarMenuButton asChild>
                                         <Button
                                             variant="outline"
-                                            className="w-full"
+                                            className="w-full text-xs"
                                             onClick={handleCreateOrganization}
                                         >
-                                            <Building className="h-4 w-4 mr-2" />
+                                            <Building className="h-3.5 w-3.5 mr-2" />
                                             <span>Create Organization</span>
                                         </Button>
                                     </SidebarMenuButton>
@@ -246,10 +246,10 @@ function Sidebar() {
                                     <SidebarMenuButton asChild>
                                         <Button
                                             variant="outline"
-                                            className="w-full relative z-20"
+                                            className="w-full relative z-20 text-xs"
                                             onClick={handleCreateNew}
                                         >
-                                            <Plus className="h-4 w-4 mr-2" />
+                                            <Plus className="h-3.5 w-3.5 mr-2" />
                                             <span>Create New</span>
                                         </Button>
                                     </SidebarMenuButton>
@@ -266,15 +266,15 @@ function Sidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
-            <SidebarFooter className="px-3 py-2">
+            <SidebarFooter className="px-3 py-1.5">
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <SidebarMenuButton className="w-full">
-                                    <div className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-secondary transition-colors">
-                                        <User className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm font-medium">
+                                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary transition-colors">
+                                        <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-xs font-medium">
                                             {profile?.full_name || user?.email}
                                         </span>
                                     </div>
@@ -282,7 +282,7 @@ function Sidebar() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                                 side="top"
-                                className="w-[--radix-popper-anchor-width]"
+                                className="w-[--radix-popper-anchor-width] text-xs"
                             >
                                 <DropdownMenuItem asChild>
                                     <Link href="/account">Account</Link>
@@ -305,8 +305,8 @@ function Sidebar() {
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
-        </SidebarContainer>
+        </Sidebar>
     );
 }
 
-export default Sidebar;
+export default AppSidebar;

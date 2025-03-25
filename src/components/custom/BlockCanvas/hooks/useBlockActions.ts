@@ -93,8 +93,6 @@ export const useBlockActions = ({
             deleted_by: null,
             is_deleted: null,
             version: 1,
-            org_id: orgId,
-            project_id: projectId,
         };
 
         return newBlock;
@@ -118,8 +116,6 @@ export const useBlockActions = ({
             deleted_by: null,
             is_deleted: null,
             version: 1,
-            org_id: orgId,
-            project_id: projectId,
         };
 
         return newBlock;
@@ -128,188 +124,130 @@ export const useBlockActions = ({
     // Create default properties for a block (using the new properties table)
     const createDefaultBlockProperties = async (blockId: string) => {
         if (!userProfile?.id) {
-            console.error(
-                'Cannot create default properties without user profile',
-            );
-            return [];
+            console.error('Cannot create default properties without user profile');
+            throw new Error('User profile not found');
+        }
+
+        if (!orgId) {
+            console.error('No organization ID available');
+            throw new Error('Organization ID not found');
         }
 
         console.log('Creating default properties for block', blockId);
 
         try {
-            // Use URL params for org_id and project_id instead of extracting from blocks
-            if (!orgId || !projectId) {
-                console.error(
-                    'No organization or project ID available in URL params',
-                );
-                return [];
-            }
-
-            // Define default properties: Name, Description, Status, Priority, and ID
-            const defaultProperties: Omit<Property, 'id'>[] = [
-                {
-                    org_id: orgId,
-                    project_id: projectId,
-                    document_id: documentId,
-                    block_id: blockId,
-                    name: 'Name',
-                    key: 'name',
-                    type: 'text' as PropertyType,
-                    description: 'Requirement name',
-                    position: 10,
-                    is_required: true,
-                    is_hidden: false,
-                    created_by: userProfile.id,
-                    updated_by: userProfile.id,
-                    is_deleted: false,
-                    is_schema: true,
-                },
-                {
-                    org_id: orgId,
-                    project_id: projectId,
-                    document_id: documentId,
-                    block_id: blockId,
-                    name: 'Description',
-                    key: 'description',
-                    type: 'text' as PropertyType,
-                    description: 'Requirement description',
-                    position: 20,
-                    is_required: false,
-                    is_hidden: false,
-                    created_by: userProfile.id,
-                    updated_by: userProfile.id,
-                    is_deleted: false,
-                    is_schema: true,
-                },
-                {
-                    org_id: orgId,
-                    project_id: projectId,
-                    document_id: documentId,
-                    block_id: blockId,
-                    name: 'ID',
-                    key: 'req_id',
-                    type: 'text' as PropertyType,
-                    description: 'Requirement ID',
-                    position: 30,
-                    is_required: false,
-                    is_hidden: false,
-                    created_by: userProfile.id,
-                    updated_by: userProfile.id,
-                    is_deleted: false,
-                    is_schema: true,
-                },
-                {
-                    org_id: orgId,
-                    project_id: projectId,
-                    document_id: documentId,
-                    block_id: blockId,
-                    name: 'Status',
-                    key: 'status',
-                    type: 'select' as PropertyType,
-                    description: 'Requirement status',
-                    options: { values: Object.values(RequirementStatus) },
-                    default_value: RequirementStatus.draft,
-                    position: 40,
-                    is_required: true,
-                    is_hidden: false,
-                    created_by: userProfile.id,
-                    updated_by: userProfile.id,
-                    is_deleted: false,
-                    is_schema: true,
-                },
-                {
-                    org_id: orgId,
-                    project_id: projectId,
-                    document_id: documentId,
-                    block_id: blockId,
-                    name: 'Priority',
-                    key: 'priority',
-                    type: 'select' as PropertyType,
-                    description: 'Requirement priority',
-                    options: { values: Object.values(RequirementPriority) },
-                    default_value: RequirementPriority.medium,
-                    position: 50,
-                    is_required: true,
-                    is_hidden: false,
-                    created_by: userProfile.id,
-                    updated_by: userProfile.id,
-                    is_deleted: false,
-                    is_schema: true,
-                },
-            ];
-
-            // Insert all properties in a single batch
-            const { data, error } = await supabase
+            // Fetch base properties for the organization
+            const { data: baseProperties, error: basePropertiesError } = await supabase
                 .from('properties')
-                .insert(defaultProperties)
-                .select();
+                .select('*')
+                .eq('org_id', orgId)
+                .eq('is_base', true)
+                .order('name');
 
-            if (error) {
-                console.error('Error creating default properties:', error);
-                throw error;
+            if (basePropertiesError) {
+                console.error('Error fetching base properties:', basePropertiesError);
+                throw basePropertiesError;
             }
 
-            console.log('Created default properties:', data);
+            // Create columns for each base property
+            const columnPromises = baseProperties.map(async (baseProp) => {
+                const { data: column, error: columnError } = await supabase
+                    .from('columns')
+                    .insert({
+                        block_id: blockId,
+                        property_id: baseProp.id,
+                        position: 0,
+                        width: 200, // Default width
+                        is_hidden: false,
+                        is_pinned: false,
+                    })
+                    .select()
+                    .single();
 
-            // Invalidate queries to ensure fresh data
-            queryClient.invalidateQueries({
-                queryKey: queryKeys.properties.byBlock(blockId),
+                if (columnError) {
+                    console.error('Error creating column:', columnError);
+                    throw columnError;
+                }
+
+                return column;
             });
 
-            return data as Property[];
+            try {
+                const columns = await Promise.all(columnPromises);
+                console.log('Created columns:', columns);
+                return columns;
+            } catch (error) {
+                console.error('Error creating columns:', error);
+                // Delete the block since column creation failed
+                const { error: deleteError } = await supabase
+                    .from('blocks')
+                    .delete()
+                    .eq('id', blockId);
+
+                if (deleteError) {
+                    console.error('Error deleting block after column creation failure:', deleteError);
+                }
+                throw error;
+            }
         } catch (error) {
-            console.error('Failed to create default properties:', error);
-            return [];
+            console.error('Error in createDefaultBlockProperties:', error);
+            throw error;
         }
     };
 
-    const handleAddBlock = async (type: 'text' | 'table', content: Json) => {
-        console.log('🏗️ handleAddBlock called', { type, content });
-
+    const handleAddBlock = async (type: BlockType, content: Json) => {
         if (!userProfile?.id) {
-            console.log('⚠️ Cannot add block - missing user profile');
-            return;
+            console.error('❌ Cannot create block: User profile not found');
+            throw new Error('User profile not found');
+        }
+        
+        if (!orgId) {
+            console.error('❌ Cannot create block: Organization ID not found');
+            throw new Error('Organization ID not found');
         }
 
-        const newBlock = {
-            type,
-            content,
-            position: blocks?.length || 0,
-            document_id: documentId,
-            created_by: userProfile.id,
-            updated_by: userProfile.id,
-        };
-
         try {
-            console.log('🚀 Creating new block', newBlock);
-            const createdBlock =
-                await createBlockMutation.mutateAsync(newBlock);
+            console.log('🚀 Creating new block', { type, content });
+            const createdBlock = await createBlockMutation.mutateAsync({
+                type,
+                content,
+                position: blocks?.length || 0,
+                document_id: documentId,
+                created_by: userProfile.id,
+                updated_by: userProfile.id,
+            });
             console.log('✅ Block created successfully', createdBlock);
 
             // Update both document store and local state immediately
             addBlock(createdBlock);
-            setLocalBlocks((prev) => {
+            setLocalBlocks((prevBlocks) => {
                 const newBlock: BlockWithRequirements = {
                     ...createdBlock,
                     requirements: [],
-                    order: prev.length, // Add the order field explicitly
-                    org_id: orgId,
-                    project_id: projectId,
+                    order: (prevBlocks || []).length,
                 };
-                return [...prev, newBlock].sort(
-                    (a, b) => a.position - b.position,
+                return [...(prevBlocks || []), newBlock].map(
+                    (block, index) => ({
+                        ...block,
+                        order: index,
+                    }),
                 );
             });
             console.log('🔄 Local state updated with new block');
 
-            // If it's a table block, create properties
-            if (type === 'table') {
-                console.log('📊 Creating properties for table block', {
+            // If it's a table block, create columns based on base properties
+            if (type === BlockType.table) {
+                console.log('📊 Creating columns for table block', {
                     blockId: createdBlock.id,
                 });
 
-                // Create default properties using the new properties table
-                await createDefaultBlockProperties(createdBlock.id);
+                try {
+                    await createDefaultBlockProperties(createdBlock.id);
+                    console.log('✅ Successfully created columns for table block');
+                } catch (error) {
+                    console.error('❌ Failed to create columns for table block:', error);
+                    throw error;
+                }
             }
 
             return createdBlock;

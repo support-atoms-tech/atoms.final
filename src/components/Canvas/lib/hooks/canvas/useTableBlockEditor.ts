@@ -8,9 +8,14 @@ import { useUIStore } from '@/components/Canvas/lib/store/uiStore';
 import { Column, Property, Requirement, RequirementCreateData } from '@/components/Canvas/types';
 import { DragEndEvent } from '@dnd-kit/core';
 import { useTableCollaboration } from '@/components/Canvas/components/TableBlock/TableBlock';
+import { useCollaboration } from '@/components/Canvas/lib/hooks/canvas/useCollaboration';
 
 // Hook for table block editing
-export function useTableBlockEditor(blockId: string) {
+// Now accepts an optional collaboration parameter to avoid using useTableCollaboration directly
+export function useTableBlockEditor(
+  blockId: string, 
+  externalCollaboration?: ReturnType<typeof useCollaboration>
+) {
   // Call all hooks at the top level in the same order every render
   
   // Get document context first
@@ -28,8 +33,11 @@ export function useTableBlockEditor(blockId: string) {
   // Get UI store
   const { activeOrgId } = useUIStore();
   
-  // Use shared table collaboration hook
-  const { acquireEntityLock, releaseEntityLock } = useTableCollaboration();
+  // Use either provided collaboration or the default hook
+  const collaboration = externalCollaboration || useTableCollaboration();
+  
+  // Destructure the collaboration for clarity
+  const { acquireEntityLock, releaseEntityLock } = collaboration;
   
   // Get properties that can be used as columns
   const { allProperties } = usePropertiesQuery({
