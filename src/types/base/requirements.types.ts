@@ -11,7 +11,10 @@ export type RequirementPropertyKV = {
     value: string;
 };
 
-export type RequirementProperties = Record<string, any>;
+export type RequirementProperties = Record<
+    string,
+    string | number | boolean | null | string[]
+>;
 
 export type Requirement = {
     id: string;
@@ -38,5 +41,5 @@ export type Requirement = {
     version: number;
     // Support both properties and data for backward compatibility
     properties?: RequirementProperties | null;
-    data?: Record<string, any> | null;
+    data?: Record<string, string | number | boolean | null | string[]> | null;
 };

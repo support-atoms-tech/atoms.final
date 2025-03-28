@@ -4,6 +4,7 @@ import { File } from 'lucide-react';
 import { Building, FileBox, FolderArchive, ListTodo } from 'lucide-react';
 import { useState } from 'react';
 
+import OrgMembers from '@/app/(protected)/org/[orgId]/OrgMembers.client';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -15,8 +16,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Organization, Project } from '@/types';
-
-import OrgMembers from '@/app/(protected)/org/[orgId]/OrgMembers.client';
 
 interface OrgDashboardProps {
     organization: Organization | undefined;

@@ -5,7 +5,7 @@ import { useCookies } from 'next-client-cookies';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { setCookie } from '@/app/(protected)/org/actions';
+import { setCookie as _setCookie } from '@/app/(protected)/org/actions';
 import DashboardView, { Column } from '@/components/base/DashboardView';
 import { CreatePanel } from '@/components/base/panels/CreatePanel';
 import { Badge } from '@/components/ui/badge';
@@ -17,20 +17,17 @@ import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Document } from '@/types/base/documents.types';
 import { Requirement } from '@/types/base/requirements.types';
 import { RequirementSchema } from '@/types/validation';
-import { useUIStore } from '@/components/Canvas/lib/store/uiStore';
 
 export default function ProjectPage() {
     const router = useRouter();
-    const cookies = useCookies();
+    const _cookies = useCookies();
     const params = useParams<{ orgId: string; projectId: string }>();
     const { project } = useProject();
-    const { currentOrganization } = useOrganization();
+    const { currentOrganization: _currentOrganization } = useOrganization();
     const [showCreateDocumentPanel, setShowCreateDocumentPanel] =
         useState(false);
     const { data: documents, isLoading: documentsLoading } =
         useProjectDocuments(params.projectId);
-    const { setActiveOrg } = useUIStore();
-    
 
     const { data: requirements, isLoading: requirementsLoading } = useQuery({
         queryKey: ['requirements', params.projectId],

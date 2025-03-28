@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { ReactNode, memo } from 'react';
+
 import { useLayout } from '@/lib/providers/layout.provider';
 import { cn } from '@/lib/utils';
 
@@ -25,10 +26,10 @@ const layoutVariants = {
 // Use React.memo to prevent unnecessary re-renders
 const LayoutView = memo(({ children, className }: LayoutViewProps) => {
     const { layoutViewMode, isMobile } = useLayout();
-    
+
     // Always use wide layout on mobile regardless of setting
     const effectiveLayoutMode = isMobile ? 'wide' : layoutViewMode;
-    
+
     return (
         <motion.div
             initial={false} // Prevents animation on initial render
@@ -39,10 +40,10 @@ const LayoutView = memo(({ children, className }: LayoutViewProps) => {
                 ease: 'easeInOut', // More natural feeling easing
             }}
             className={cn(
-                "flex flex-col bg-background text-foreground mx-auto",
+                'flex flex-col bg-background text-foreground mx-auto',
                 // Add responsive padding that scales with viewport
-                "px-4 sm:px-6 md:px-8",
-                className
+                'px-4 sm:px-6 md:px-8',
+                className,
             )}
         >
             {children}

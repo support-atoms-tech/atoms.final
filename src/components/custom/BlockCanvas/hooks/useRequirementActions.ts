@@ -1,25 +1,25 @@
-import { v4 as uuidv4 } from 'uuid';
 import { useCallback } from 'react';
+import { v4 as _uuidv4 } from 'uuid';
 
+import { CellValue } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 import { Property } from '@/components/custom/BlockCanvas/types';
 import {
     useCreateRequirement,
     useUpdateRequirement,
 } from '@/hooks/mutations/useRequirementMutations';
+import { supabase } from '@/lib/supabase/supabaseBrowser';
 import {
-    RequirementFormat,
-    RequirementLevel,
     RequirementPriority,
     RequirementStatus,
+    RequirementFormat as _RequirementFormat,
+    RequirementLevel as _RequirementLevel,
 } from '@/types/base/enums.types';
 import { Requirement } from '@/types/base/requirements.types';
-import { supabase } from '@/lib/supabase/supabaseBrowser';
 
 // Type for the requirement data that will be displayed in the table
 export type DynamicRequirement = {
     id: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any;
+    [key: string]: CellValue;
 };
 
 interface UseRequirementActionsProps {
@@ -37,8 +37,8 @@ export const useRequirementActions = ({
     setLocalRequirements,
     properties,
 }: UseRequirementActionsProps) => {
-    const createRequirementMutation = useCreateRequirement();
-    const updateRequirementMutation = useUpdateRequirement();
+    const _createRequirementMutation = useCreateRequirement();
+    const _updateRequirementMutation = useUpdateRequirement();
 
     // Function to refresh requirements from the database
     const refreshRequirements = useCallback(async () => {
@@ -73,29 +73,40 @@ export const useRequirementActions = ({
             .eq('block_id', blockId)
             .order('position');
 
-        const propertiesObj: Record<string, any> = {};
+        const propertiesObj: Record<string, unknown> = {};
         const naturalFields: Record<string, string> = {};
 
         // Process each property
         properties.forEach((prop) => {
             const value = dynamicReq[prop.name];
-            const column = blockColumns?.find(col => col.property_id === prop.id);
+            const column = blockColumns?.find(
+                (col) => col.property_id === prop.id,
+            );
             const lowerCaseName = prop.name.toLowerCase();
-            
+
             // Check if this property maps to a natural field
-            if (['name', 'description', 'external_id', 'status', 'priority'].includes(lowerCaseName)) {
-                naturalFields[lowerCaseName] = value || '';
+            if (
+                [
+                    'name',
+                    'description',
+                    'external_id',
+                    'status',
+                    'priority',
+                ].includes(lowerCaseName)
+            ) {
+                naturalFields[lowerCaseName] =
+                    typeof value === 'string' ? value : '';
             }
-            
+
             if (column) {
                 propertiesObj[prop.name] = {
                     key: prop.name,
                     type: prop.property_type,
-                    value: value || '',
+                    value: value ?? '',
                     options: prop.options,
                     position: column.position,
                     column_id: column.id,
-                    property_id: prop.id
+                    property_id: prop.id,
                 };
             }
         });
@@ -117,8 +128,35 @@ export const useRequirementActions = ({
             // Extract values from properties object
             if (req.properties) {
                 Object.entries(req.properties).forEach(([key, prop]) => {
-                    if (typeof prop === 'object' && prop !== null) {
-                        dynamicReq[key] = prop.value;
+                    if (
+                        typeof prop === 'object' &&
+                        prop !== null &&
+                        'value' in prop
+                    ) {
+                        // Ensure we only assign CellValue compatible values
+                        const value = prop.value;
+                        if (
+                            typeof value === 'string' ||
+                            typeof value === 'number' ||
+                            value instanceof Date ||
+                            Array.isArray(value) ||
+                            value === null
+                        ) {
+                            dynamicReq[key] = value as CellValue;
+                        } else {
+                            dynamicReq[key] = String(value);
+                        }
+                    } else if (
+                        typeof prop === 'string' ||
+                        typeof prop === 'number' ||
+                        prop === null ||
+                        (Array.isArray(prop) &&
+                            prop.every((item) => typeof item === 'string'))
+                    ) {
+                        dynamicReq[key] = prop as CellValue;
+                    } else {
+                        // Convert other types to string
+                        dynamicReq[key] = String(prop);
                     }
                 });
             }
@@ -128,7 +166,7 @@ export const useRequirementActions = ({
     };
 
     // Helper function to format enum values for display
-    const formatEnumValueForDisplay = (value: unknown): string => {
+    const _formatEnumValueForDisplay = (value: unknown): string => {
         if (!value || typeof value !== 'string') return '';
 
         // Handle snake_case values (e.g., "in_progress" -> "In Progress")
@@ -144,7 +182,7 @@ export const useRequirementActions = ({
     };
 
     // Helper function to convert display values back to enum values
-    const parseDisplayValueToEnum = (displayValue: string): string => {
+    const _parseDisplayValueToEnum = (displayValue: string): string => {
         if (!displayValue) return '';
 
         // Convert "In Progress" -> "in_progress"
@@ -159,9 +197,8 @@ export const useRequirementActions = ({
     ) => {
         try {
             // Create properties object and extract natural fields
-            const { propertiesObj, naturalFields } = await createPropertiesObjectFromDynamicReq(
-                dynamicReq,
-            );
+            const { propertiesObj, naturalFields } =
+                await createPropertiesObjectFromDynamicReq(dynamicReq);
 
             const requirementData = {
                 block_id: blockId,
@@ -170,10 +207,18 @@ export const useRequirementActions = ({
                 updated_by: userId,
                 // Use natural fields from properties if they exist
                 ...(naturalFields?.name && { name: naturalFields.name }),
-                ...(naturalFields?.description && { description: naturalFields.description }),
-                ...(naturalFields?.external_id && { external_id: naturalFields.external_id }),
-                ...(naturalFields?.status && { status: naturalFields.status as RequirementStatus }),
-                ...(naturalFields?.priority && { priority: naturalFields.priority as RequirementPriority }),
+                ...(naturalFields?.description && {
+                    description: naturalFields.description,
+                }),
+                ...(naturalFields?.external_id && {
+                    external_id: naturalFields.external_id,
+                }),
+                ...(naturalFields?.status && {
+                    status: naturalFields.status as RequirementStatus,
+                }),
+                ...(naturalFields?.priority && {
+                    priority: naturalFields.priority as RequirementPriority,
+                }),
             };
 
             let savedRequirement: Requirement;
@@ -195,7 +240,7 @@ export const useRequirementActions = ({
                 savedRequirement = data;
 
                 // Update local state with the new requirement
-                setLocalRequirements(prev => [...prev, savedRequirement]);
+                setLocalRequirements((prev) => [...prev, savedRequirement]);
             } else {
                 // For updates, only include fields that have values to avoid nullifying existing data
                 const updateData = {
@@ -215,10 +260,10 @@ export const useRequirementActions = ({
                 savedRequirement = data;
 
                 // Update local state with the updated requirement
-                setLocalRequirements(prev =>
-                    prev.map(req =>
-                        req.id === savedRequirement.id ? savedRequirement : req
-                    )
+                setLocalRequirements((prev) =>
+                    prev.map((req) =>
+                        req.id === savedRequirement.id ? savedRequirement : req,
+                    ),
                 );
             }
 
@@ -232,7 +277,7 @@ export const useRequirementActions = ({
     // Delete a requirement
     const deleteRequirement = async (
         dynamicReq: DynamicRequirement,
-        userId: string,
+        _userId: string,
     ) => {
         try {
             const { error } = await supabase
@@ -243,8 +288,8 @@ export const useRequirementActions = ({
             if (error) throw error;
 
             // Update local state by removing the deleted requirement
-            setLocalRequirements(prev =>
-                prev.filter(req => req.id !== dynamicReq.id)
+            setLocalRequirements((prev) =>
+                prev.filter((req) => req.id !== dynamicReq.id),
             );
         } catch (error) {
             console.error('Error deleting requirement:', error);

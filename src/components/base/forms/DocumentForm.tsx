@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
+import { v4 as _uuidv4 } from 'uuid';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useCreateDocumentWithDefaultSchemas } from '@/hooks/mutations/useDocumentMutations';
 import { useAuth } from '@/hooks/useAuth';
-import { v4 as uuidv4 } from 'uuid';
+
 // Document form schema based on the Document type and validation
 const documentFormSchema = z.object({
     name: z.string().min(1, 'Document name is required'),

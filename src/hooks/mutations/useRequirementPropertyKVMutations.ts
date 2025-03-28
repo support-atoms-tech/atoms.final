@@ -1,11 +1,37 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 
-import { PropertyKeyValue } from '@/components/custom/BlockCanvas/types';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
 
 import { useSyncRequirementData } from './useRequirementMutations';
+
+// Define PropertyKeyValue type directly instead of importing
+interface PropertyKeyValue {
+    id: string;
+    requirement_id: string;
+    block_id: string;
+    property_name: string;
+    property_value: string;
+    position: number;
+    created_at: string | null;
+    created_by: string | null;
+    updated_at: string | null;
+    updated_by: string | null;
+    deleted_at: string | null;
+    deleted_by: string | null;
+    is_deleted: boolean;
+    version: number;
+}
+
+// Create a function to safely get the requirementPropertyKVs queryKey
+function getRequirementPropertyKVsQueryKey(requirementId: string) {
+    if (queryKeys.requirementPropertyKVs?.byRequirement) {
+        return queryKeys.requirementPropertyKVs.byRequirement(requirementId);
+    }
+    // Fallback query key
+    return ['requirement_property_kvs', requirementId];
+}
 
 // Create a single property KV
 export function useCreatePropertyKV() {
@@ -46,7 +72,7 @@ export function useCreatePropertyKV() {
         },
         onSuccess: (data) => {
             queryClient.invalidateQueries({
-                queryKey: queryKeys.requirementPropertyKVs.byRequirement(
+                queryKey: getRequirementPropertyKVsQueryKey(
                     data.requirement_id,
                 ),
             });
@@ -83,7 +109,7 @@ export function useUpdatePropertyKV() {
         },
         onSuccess: (data) => {
             queryClient.invalidateQueries({
-                queryKey: queryKeys.requirementPropertyKVs.byRequirement(
+                queryKey: getRequirementPropertyKVsQueryKey(
                     data.requirement_id,
                 ),
             });
@@ -125,7 +151,7 @@ export function useDeletePropertyKV() {
         },
         onSuccess: (data) => {
             queryClient.invalidateQueries({
-                queryKey: queryKeys.requirementPropertyKVs.byRequirement(
+                queryKey: getRequirementPropertyKVsQueryKey(
                     data.requirement_id,
                 ),
             });
@@ -234,10 +260,7 @@ export function useSyncRequirementDataWithKVs() {
 
                 // Invalidate queries to ensure UI is updated
                 queryClient.invalidateQueries({
-                    queryKey:
-                        queryKeys.requirementPropertyKVs.byRequirement(
-                            requirementId,
-                        ),
+                    queryKey: getRequirementPropertyKVsQueryKey(requirementId),
                 });
 
                 return results;

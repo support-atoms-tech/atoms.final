@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 
+import {
+    BlockWithRequirements,
+    Column,
+} from '@/components/custom/BlockCanvas/types';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
-import { useDocumentStore } from '@/lib/store/document.store';
 import { Block } from '@/types/base/documents.types';
 import { Profile } from '@/types/base/profiles.types';
 import { Requirement } from '@/types/base/requirements.types';
-import { BlockWithRequirements, Column, Property } from '@/components/custom/BlockCanvas/types';
 
+// This interface is currently unused but kept for future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface UseDocumentRealtimeProps {
     documentId: string;
     orgId: string;
@@ -24,10 +27,16 @@ interface DocumentState {
 
 export const useDocumentRealtime = ({
     documentId,
-    orgId,
-    projectId,
-    userProfile,
-}: UseDocumentRealtimeProps): DocumentState => {
+    // These parameters are currently unused but kept for future use
+    _orgId,
+    _projectId,
+    _userProfile,
+}: {
+    documentId: string;
+    _orgId: string;
+    _projectId: string;
+    _userProfile: Profile | null;
+}): DocumentState => {
     const [blocks, setBlocks] = useState<BlockWithRequirements[]>();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -42,6 +51,7 @@ export const useDocumentRealtime = ({
                 .from('blocks')
                 .select('*')
                 .eq('document_id', documentId)
+                .is('is_deleted', false)
                 .order('position');
 
             if (blocksError) throw blocksError;
@@ -51,7 +61,9 @@ export const useDocumentRealtime = ({
                 await supabase
                     .from('requirements')
                     .select('*')
-                    .eq('document_id', documentId);
+                    .is('is_deleted', false)
+                    .eq('document_id', documentId)
+                    .order('position');
 
             if (requirementsError) throw requirementsError;
 
@@ -94,14 +106,13 @@ export const useDocumentRealtime = ({
             );
 
             // Combine blocks with their requirements and columns
-            const blocksWithRequirements: BlockWithRequirements[] = blocksData.map(
-                (block: Block) => ({
+            const blocksWithRequirements: BlockWithRequirements[] =
+                blocksData.map((block: Block) => ({
                     ...block,
                     order: block.position || 0,
                     requirements: requirementsByBlock[block.id] || [],
                     columns: columnsByBlock[block.id] || [],
-                }),
-            );
+                }));
 
             setBlocks(blocksWithRequirements);
             setError(null);
@@ -110,7 +121,7 @@ export const useDocumentRealtime = ({
         } finally {
             setLoading(false);
         }
-    }, [documentId, supabase]);
+    }, [documentId]);
 
     // Subscribe to changes
     useEffect(() => {
@@ -174,7 +185,7 @@ export const useDocumentRealtime = ({
             requirementsSubscription.unsubscribe();
             columnsSubscription.unsubscribe();
         };
-    }, [documentId, supabase, fetchBlocks]);
+    }, [documentId, fetchBlocks]);
 
     return {
         blocks,

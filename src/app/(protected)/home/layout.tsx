@@ -1,18 +1,15 @@
 'use server';
 
 import { QueryClient } from '@tanstack/react-query';
-import { Suspense } from 'react';
 
-import AppSidebar from '@/components/base/AppSidebar';
-import VerticalToolbar from '@/components/custom/VerticalToolbar';
-import { SidebarProvider } from '@/components/ui/sidebar';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { getAuthUserServer, getUserOrganizationsServer } from '@/lib/db/server';
 
 export default async function HomeLayout({
     children,
 }: {
-    children: React.ReactNode;}) {
+    children: React.ReactNode;
+}) {
     const queryClient = new QueryClient();
     const user = await getAuthUserServer();
 
@@ -32,8 +29,5 @@ export default async function HomeLayout({
         queryClient as QueryClient & { organizations: typeof organizations }
     ).organizations = organizations;
 
-    return (
-
-            <div className="relative flex-1 p-16">{children}</div>
-    );
+    return <div className="relative flex-1 p-16">{children}</div>;
 }

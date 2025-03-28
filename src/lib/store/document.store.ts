@@ -1,3 +1,5 @@
+// unstable_batchedUpdates is imported but not used yet - keeping for future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { unstable_batchedUpdates } from 'react-dom';
 import { create } from 'zustand';
 

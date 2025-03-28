@@ -1,23 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+
+import {
+    EditableColumnType,
+    PropertyConfig,
+    PropertyScope,
+} from '@/components/custom/BlockCanvas/components/EditableTable/types';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { EditableColumnType, PropertyConfig, PropertyScope } from '../types';
 
 interface AddColumnDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (columnName: string, type: EditableColumnType, propertyConfig: PropertyConfig, defaultValue: string) => void;
+    onSave: (
+        columnName: string,
+        type: EditableColumnType,
+        propertyConfig: PropertyConfig,
+        defaultValue: string,
+    ) => void;
     orgId: string;
     projectId?: string;
     documentId?: string;
@@ -43,11 +53,14 @@ export function AddColumnDialog({
             scope,
             is_base: isBase,
             org_id: orgId,
-            ...(projectId && scope.includes('project') && { project_id: projectId }),
-            ...(documentId && scope.includes('document') && { document_id: documentId }),
-            ...((['select', 'multi_select'].includes(columnType) && options) && {
-                options: options.split(',').map(opt => opt.trim())
-            })
+            ...(projectId &&
+                scope.includes('project') && { project_id: projectId }),
+            ...(documentId &&
+                scope.includes('document') && { document_id: documentId }),
+            ...(['select', 'multi_select'].includes(columnType) &&
+                options && {
+                    options: options.split(',').map((opt) => opt.trim()),
+                }),
         };
 
         onSave(columnName, columnType, propertyConfig, defaultValue);
@@ -79,7 +92,11 @@ export function AddColumnDialog({
                         <select
                             id="type"
                             value={columnType}
-                            onChange={(e) => setColumnType(e.target.value as EditableColumnType)}
+                            onChange={(e) =>
+                                setColumnType(
+                                    e.target.value as EditableColumnType,
+                                )
+                            }
                             className="col-span-3"
                         >
                             <option value="text">Text</option>
@@ -97,10 +114,12 @@ export function AddColumnDialog({
                                     id="org"
                                     checked={scope.includes('org')}
                                     onChange={(event) => {
-                                        setScope(prev => 
-                                            event.target.checked 
+                                        setScope((prev) =>
+                                            event.target.checked
                                                 ? [...prev, 'org']
-                                                : prev.filter(s => s !== 'org')
+                                                : prev.filter(
+                                                      (s) => s !== 'org',
+                                                  ),
                                         );
                                     }}
                                 />
@@ -111,10 +130,12 @@ export function AddColumnDialog({
                                     id="project"
                                     checked={scope.includes('project')}
                                     onChange={(event) => {
-                                        setScope(prev => 
-                                            event.target.checked 
+                                        setScope((prev) =>
+                                            event.target.checked
                                                 ? [...prev, 'project']
-                                                : prev.filter(s => s !== 'project')
+                                                : prev.filter(
+                                                      (s) => s !== 'project',
+                                                  ),
                                         );
                                     }}
                                 />
@@ -125,10 +146,12 @@ export function AddColumnDialog({
                                     id="document"
                                     checked={scope.includes('document')}
                                     onChange={(event) => {
-                                        setScope(prev => 
-                                            event.target.checked 
+                                        setScope((prev) =>
+                                            event.target.checked
                                                 ? [...prev, 'document']
-                                                : prev.filter(s => s !== 'document')
+                                                : prev.filter(
+                                                      (s) => s !== 'document',
+                                                  ),
                                         );
                                     }}
                                 />
@@ -142,7 +165,9 @@ export function AddColumnDialog({
                             <Checkbox
                                 id="base"
                                 checked={isBase}
-                                onChange={(event) => setIsBase(event.target.checked)}
+                                onChange={(event) =>
+                                    setIsBase(event.target.checked)
+                                }
                             />
                         </div>
                     </div>
@@ -157,7 +182,7 @@ export function AddColumnDialog({
                             className="col-span-3"
                         />
                     </div>
-                    {(['select', 'multi_select'].includes(columnType)) && (
+                    {['select', 'multi_select'].includes(columnType) && (
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="options" className="text-right">
                                 Options

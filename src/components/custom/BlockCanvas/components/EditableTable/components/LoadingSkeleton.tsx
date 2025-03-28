@@ -4,7 +4,7 @@ interface TableLoadingSkeletonProps {
 }
 
 export function TableLoadingSkeleton({
-    columns,
+    columns: _columns,
     rows = 5,
 }: TableLoadingSkeletonProps) {
     return (

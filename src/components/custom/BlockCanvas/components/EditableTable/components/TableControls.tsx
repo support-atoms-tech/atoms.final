@@ -1,7 +1,12 @@
 import { motion } from 'framer-motion';
-import { Filter, Plus, Columns } from 'lucide-react';
+import { Columns, Filter, Plus } from 'lucide-react';
 import { useState } from 'react';
 
+import {
+    EditableColumn,
+    EditableColumnType,
+    PropertyConfig,
+} from '@/components/custom/BlockCanvas/components/EditableTable/types';
 import { Button } from '@/components/ui/button';
 import {
     Tooltip,
@@ -9,22 +14,31 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { AddColumnDialog } from './AddColumnDialog';
-import { EditableColumnType, PropertyConfig } from '../types';
 
-interface TableControlsProps {
+import { AddColumnDialog } from './AddColumnDialog';
+
+export interface TableControlsProps<T = unknown> {
     showFilter: boolean;
     filterComponent?: React.ReactNode;
     onNewRow: () => void;
-    onAddColumn?: (columnName: string, type: EditableColumnType, propertyConfig: PropertyConfig, defaultValue: string) => void;
+    onAddColumn?: (
+        columnName: string,
+        type: EditableColumnType,
+        propertyConfig: PropertyConfig,
+        defaultValue: string,
+    ) => void;
     onEnterEditMode: () => void;
     isVisible: boolean;
     orgId: string;
     projectId?: string;
     documentId?: string;
+    sortKey: string | null;
+    sortOrder: 'asc' | 'desc';
+    onSort: (key: keyof T) => void;
+    columns: EditableColumn<T>[];
 }
 
-export function TableControls({
+export function TableControls<T extends Record<string, unknown>>({
     showFilter,
     filterComponent,
     onNewRow,
@@ -34,7 +48,15 @@ export function TableControls({
     orgId,
     projectId,
     documentId,
-}: TableControlsProps) {
+}: Omit<
+    TableControlsProps<T>,
+    'sortKey' | 'sortOrder' | 'onSort' | 'columns'
+> & {
+    sortKey?: string | null;
+    sortOrder?: 'asc' | 'desc';
+    onSort?: (key: keyof T) => void;
+    columns?: EditableColumn<T>[];
+}) {
     const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
 
     if (!isVisible) return null;

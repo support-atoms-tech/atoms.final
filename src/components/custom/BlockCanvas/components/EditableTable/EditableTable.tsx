@@ -1,17 +1,14 @@
 'use client';
 
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import * as React from 'react';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 
 import { Table, TableBody } from '@/components/ui/table';
-import { transitionConfig } from '@/lib/utils/animations';
 
 import {
     AddRowPlaceholder,
     DataTableRow,
     DeleteConfirmDialog,
-    EmptyState,
     NewRowForm,
     TableControls,
     TableHeader,
@@ -19,7 +16,7 @@ import {
 } from './components';
 import { useTableSort } from './hooks/useTableSort';
 import { TableState, tableReducer } from './reducers/tableReducer';
-import { CellValue, EditableColumn, EditableTableProps } from './types';
+import { CellValue, EditableTableProps } from './types';
 
 export function EditableTable<
     T extends Record<string, CellValue> & { id: string },
@@ -29,11 +26,15 @@ export function EditableTable<
     onSave,
     onDelete,
     isLoading = false,
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     emptyMessage = 'No items found.',
+    /* eslint-enable @typescript-eslint/no-unused-vars */
     showFilter = true,
     filterComponent,
     isEditMode = false,
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     alwaysShowAddRow = false,
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 }: EditableTableProps<T>) {
     // Initialize the state with useReducer
     const initialState: TableState<T> = {
@@ -46,6 +47,7 @@ export function EditableTable<
         itemToDelete: null,
         deleteConfirmOpen: false,
         editingTimeouts: {},
+        selectedCell: null,
     };
 
     const [state, dispatch] = useReducer(tableReducer, initialState);
@@ -55,12 +57,15 @@ export function EditableTable<
         isAddingNew,
         sortKey,
         sortOrder,
-        hoveredCell,
+        hoveredCell: _hoveredCell,
         itemToDelete,
         deleteConfirmOpen,
+        selectedCell,
     } = state;
 
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     const [isHoveringTable, setIsHoveringTable] = useState(false);
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 
     // Use the extracted custom hooks
     const { sortedData, handleSort } = useTableSort(data, sortKey);
@@ -96,17 +101,21 @@ export function EditableTable<
             if (!onSave || !editingData) return;
 
             // Get all modified items
-            const modifiedItems = Object.entries(editingData).filter(([id, item]) => {
-                // Skip new items as they're handled separately
-                if (id === 'new') return false;
-                
-                // Find original item
-                const originalItem = data.find(d => d.id === id);
-                if (!originalItem) return false;
+            const modifiedItems = Object.entries(editingData).filter(
+                ([id, item]) => {
+                    // Skip new items as they're handled separately
+                    if (id === 'new') return false;
 
-                // Check if any values have changed
-                return Object.keys(item).some(key => item[key] !== originalItem[key]);
-            });
+                    // Find original item
+                    const originalItem = data.find((d) => d.id === id);
+                    if (!originalItem) return false;
+
+                    // Check if any values have changed
+                    return Object.keys(item).some(
+                        (key) => item[key] !== originalItem[key],
+                    );
+                },
+            );
 
             // Save all modified items
             for (const [_id, item] of modifiedItems) {
@@ -130,6 +139,80 @@ export function EditableTable<
             dispatch({ type: 'RESET_EDIT_STATE' });
         };
     }, []);
+
+    // Handle keyboard navigation
+    const handleKeyDown = useCallback(
+        (e: KeyboardEvent) => {
+            if (!selectedCell || !sortedData.length || !localIsEditMode) return;
+
+            const maxRow = sortedData.length - 1;
+            const maxCol = columns.length - 1;
+            let newRow = selectedCell.row;
+            let newCol = selectedCell.col;
+
+            switch (e.key) {
+                case 'ArrowUp':
+                    newRow = Math.max(0, selectedCell.row - 1);
+                    break;
+                case 'ArrowDown':
+                    newRow = Math.min(maxRow, selectedCell.row + 1);
+                    break;
+                case 'ArrowLeft':
+                    newCol = Math.max(0, selectedCell.col - 1);
+                    break;
+                case 'ArrowRight':
+                    newCol = Math.min(maxCol, selectedCell.col + 1);
+                    break;
+                default:
+                    return;
+            }
+
+            e.preventDefault();
+            dispatch({
+                type: 'SET_SELECTED_CELL',
+                payload: { row: newRow, col: newCol },
+            });
+        },
+        [selectedCell, sortedData.length, columns.length, localIsEditMode],
+    );
+
+    // Reset selected cell when exiting edit mode
+    useEffect(() => {
+        if (!localIsEditMode) {
+            dispatch({
+                type: 'SET_SELECTED_CELL',
+                payload: null,
+            });
+        }
+    }, [localIsEditMode]);
+
+    // Add keyboard event listener
+    useEffect(() => {
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]);
+
+    // Handle clicking outside the table
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (!selectedCell) return;
+
+            // Check if the click is inside the table
+            const tableElement = document.querySelector(
+                '[data-table-container]',
+            );
+            if (tableElement && !tableElement.contains(e.target as Node)) {
+                dispatch({
+                    type: 'SET_SELECTED_CELL',
+                    payload: null,
+                });
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () =>
+            document.removeEventListener('mousedown', handleClickOutside);
+    }, [selectedCell]);
 
     // Action handlers
     const handleCellChange = useCallback(
@@ -224,99 +307,88 @@ export function EditableTable<
     }
 
     return (
-        <LayoutGroup>
-            <motion.div
-                className="relative"
-                layout
-                transition={transitionConfig}
+        <div className="w-full">
+            {showFilter && (
+                <TableControls
+                    filterComponent={filterComponent}
+                    sortKey={sortKey}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    columns={columns}
+                    showFilter={showFilter}
+                    onNewRow={handleAddNewRow}
+                    onEnterEditMode={() =>
+                        dispatch({ type: 'SET_EDIT_MODE', payload: true })
+                    }
+                    isVisible={true}
+                    orgId=""
+                />
+            )}
+            <div
+                className="relative w-full overflow-x-auto brutalist-scrollbar"
+                style={{ maxWidth: '100%' }}
             >
-                <div className="relative">
-                    <div
-                        className="relative overflow-visible font-mono group"
-                        onMouseEnter={() =>
-                            !localIsEditMode && setIsHoveringTable(true)
-                        }
-                        onMouseLeave={() =>
-                            !localIsEditMode && setIsHoveringTable(false)
-                        }
-                    >
-                        {/* Controls
-                        <AnimatePresence>
-                            <TableControls
-                                showFilter={showFilter}
-                                filterComponent={filterComponent}
-                                onNewRow={handleAddNewRow}
-                                onEnterEditMode={() =>
-                                    dispatch({
-                                        type: 'SET_EDIT_MODE',
-                                        payload: true,
-                                    })
-                                }
-                                isVisible={isHoveringTable && !localIsEditMode}
-                            />
-                        </AnimatePresence> */}
+                <div
+                    style={{
+                        minWidth: '100%',
+                        maxWidth: '1000px',
+                        width: 'max-content',
+                    }}
+                >
+                    <Table className="[&_tr:last-child_td]:border-b-2 [&_tr]:border-b [&_td]:py-1 [&_th]:py-1 [&_td]:border-r [&_td:last-child]:border-r-0 [&_th]:border-r [&_th:last-child]:border-r-0">
+                        <TableHeader
+                            columns={columns}
+                            sortKey={sortKey}
+                            sortOrder={sortOrder}
+                            onSort={handleSort}
+                            isEditMode={localIsEditMode}
+                        />
+                        <TableBody>
+                            {/* Existing rows */}
+                            {sortedData.map((item, rowIndex) => (
+                                <DataTableRow
+                                    key={item.id}
+                                    item={item}
+                                    columns={columns}
+                                    isEditing={localIsEditMode && !isAddingNew}
+                                    editingData={editingData}
+                                    onCellChange={handleCellChange}
+                                    onDelete={handleDeleteClick}
+                                    onHoverCell={handleHoverCell}
+                                    rowIndex={rowIndex}
+                                    selectedCell={selectedCell}
+                                    onCellSelect={(row, col) =>
+                                        dispatch({
+                                            type: 'SET_SELECTED_CELL',
+                                            payload: { row, col },
+                                        })
+                                    }
+                                />
+                            ))}
 
-                        {/* Table */}
-                        {sortedData.length > 0 ||
-                        isAddingNew ||
-                        alwaysShowAddRow ? (
-                            <div className="relative">
-                                <Table className="[&_tr:last-child_td]:border-b-2 [&_tr]:border-b [&_td]:py-1 [&_th]:py-1 [&_td]:border-r [&_td:last-child]:border-r-0 [&_th]:border-r [&_th:last-child]:border-r-0">
-                                    <TableHeader
-                                        columns={columns}
-                                        sortKey={sortKey}
-                                        sortOrder={sortOrder}
-                                        onSort={handleSort}
-                                        isEditMode={localIsEditMode}
-                                    />
-                                    <TableBody>
-                                        {/* Existing rows */}
-                                        {sortedData.map((item, rowIndex) => (
-                                            <DataTableRow
-                                                key={item.id}
-                                                item={item}
-                                                columns={columns}
-                                                isEditing={
-                                                    localIsEditMode &&
-                                                    !isAddingNew
-                                                }
-                                                editingData={editingData}
-                                                onCellChange={handleCellChange}
-                                                onDelete={handleDeleteClick}
-                                                onHoverCell={handleHoverCell}
-                                                rowIndex={rowIndex}
-                                            />
-                                        ))}
+                            {/* New row being added */}
+                            {isAddingNew && (
+                                <NewRowForm
+                                    columns={columns}
+                                    editingData={editingData}
+                                    onCellChange={handleCellChange}
+                                    onSave={handleSaveNewRow}
+                                    onCancel={handleCancelNewRow}
+                                />
+                            )}
 
-                                        {/* New row being added */}
-                                        {isAddingNew && (
-                                            <NewRowForm
-                                                columns={columns}
-                                                editingData={editingData}
-                                                onCellChange={handleCellChange}
-                                                onSave={handleSaveNewRow}
-                                                onCancel={handleCancelNewRow}
-                                            />
-                                        )}
-
-                                        {/* Add new row placeholder */}
-                                        {!isAddingNew && (
-                                            <AddRowPlaceholder
-                                                columns={columns}
-                                                onClick={handleAddNewRow}
-                                                isEditMode={localIsEditMode}
-                                            />
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        ) : (
-                            <EmptyState message={emptyMessage} />
-                        )}
-                    </div>
+                            {/* Add new row placeholder */}
+                            {!isAddingNew && (
+                                <AddRowPlaceholder
+                                    columns={columns}
+                                    onClick={handleAddNewRow}
+                                    isEditMode={localIsEditMode}
+                                />
+                            )}
+                        </TableBody>
+                    </Table>
                 </div>
-            </motion.div>
-
+            </div>
             {/* Delete confirmation */}
             <DeleteConfirmDialog
                 open={deleteConfirmOpen}
@@ -325,6 +397,6 @@ export function EditableTable<
                 }
                 onConfirm={handleDeleteConfirm}
             />
-        </LayoutGroup>
+        </div>
     );
 }

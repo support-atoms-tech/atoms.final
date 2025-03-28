@@ -1,20 +1,24 @@
-import { CellValue } from '../types';
+import { CellValue } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 
 export interface TableState<T> {
     localIsEditMode: boolean;
     editingData: Record<string, T>;
     isAddingNew: boolean;
-    sortKey: keyof T | null;
+    sortKey: string | null;
     sortOrder: 'asc' | 'desc';
     hoveredCell: { row: number; col: number } | null;
     itemToDelete: T | null;
     deleteConfirmOpen: boolean;
     editingTimeouts: Record<string, NodeJS.Timeout>;
+    selectedCell: { row: number; col: number } | null;
 }
 
 export type TableAction<T> =
     | { type: 'SET_EDIT_MODE'; payload: boolean }
-    | { type: 'SET_SORT'; payload: { key: keyof T; order: 'asc' | 'desc' } }
+    | {
+          type: 'SET_SORT';
+          payload: { key: string | null; order: 'asc' | 'desc' };
+      }
     | { type: 'START_ADD_ROW' }
     | { type: 'CANCEL_ADD_ROW' }
     | {
@@ -32,6 +36,10 @@ export type TableAction<T> =
     | { type: 'RESET_EDIT_STATE' }
     | {
           type: 'SET_HOVERED_CELL';
+          payload: { row: number; col: number } | null;
+      }
+    | {
+          type: 'SET_SELECTED_CELL';
           payload: { row: number; col: number } | null;
       };
 
@@ -116,6 +124,12 @@ export function tableReducer<T>(
                 hoveredCell: action.payload,
             };
 
+        case 'SET_SELECTED_CELL':
+            return {
+                ...state,
+                selectedCell: action.payload,
+            };
+
         case 'RESET_EDIT_STATE':
             // Clear all timeouts first
             Object.values(state.editingTimeouts).forEach(clearTimeout);
@@ -125,6 +139,7 @@ export function tableReducer<T>(
                 isAddingNew: false,
                 editingTimeouts: {},
                 localIsEditMode: false,
+                selectedCell: null,
             };
 
         default:

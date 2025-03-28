@@ -13,10 +13,12 @@ export function ProfilerWrapper({ children, id }: ProfilerWrapperProps) {
     const onRenderCallback: ProfilerOnRenderCallback = (
         id,
         phase,
-        actualDuration
+        actualDuration,
     ) => {
         if (process.env.NODE_ENV === 'development') {
-            console.log(`[Profiler] ${id} - ${phase}: ${actualDuration.toFixed(1)}ms`);
+            console.log(
+                `[Profiler] ${id} - ${phase}: ${actualDuration.toFixed(1)}ms`,
+            );
         }
     };
 
@@ -25,4 +27,4 @@ export function ProfilerWrapper({ children, id }: ProfilerWrapperProps) {
             {children}
         </Profiler>
     );
-} 
+}

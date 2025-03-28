@@ -54,6 +54,10 @@ export const DocumentPropertyZodSchema = z.object({
     updated_at: z.string().nullable(),
     updated_by: z.string().nullable(),
     version: z.number(),
+    name: z.string(),
+    data_type: z.string(),
+    is_base: z.boolean().optional(),
+    org_id: z.string().optional(),
 }) satisfies z.ZodType<DocumentPropertySchema>;
 
 export const BlockSchema = z.object({

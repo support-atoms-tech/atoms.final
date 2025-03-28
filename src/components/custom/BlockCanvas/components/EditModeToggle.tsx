@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Check, Edit2, Lock, Unlock } from 'lucide-react';
 import React, { memo } from 'react';
+
 import BaseToggle from '@/components/custom/toggles/BaseToggle';
 import { useLayout } from '@/lib/providers/layout.provider';
 
@@ -11,11 +12,11 @@ import { useLayout } from '@/lib/providers/layout.provider';
 // Floating action button version
 export const EditModeFloatingToggle = memo(() => {
     const { isEditMode, setIsEditMode } = useLayout();
-    
+
     const toggleEditMode = () => {
         setIsEditMode(!isEditMode);
     };
-    
+
     return (
         <motion.div
             className="fixed bottom-8 right-8 z-50"
@@ -40,11 +41,11 @@ export const EditModeFloatingToggle = memo(() => {
 // Toolbar version
 export const EditModeToggle = memo(() => {
     const { isEditMode, setIsEditMode } = useLayout();
-    
+
     const toggleEditMode = () => {
         setIsEditMode(!isEditMode);
     };
-    
+
     return (
         <BaseToggle
             icon={<Lock className="h-5 w-5" />}
@@ -52,9 +53,11 @@ export const EditModeToggle = memo(() => {
             tooltip={isEditMode ? 'Exit Edit Mode' : 'Enter Edit Mode'}
             isActive={isEditMode}
             onClick={toggleEditMode}
-            className={isEditMode 
-                ? 'text-destructive-foreground bg-destructive/80 hover:bg-destructive/90' 
-                : ''}
+            className={
+                isEditMode
+                    ? 'text-destructive-foreground bg-destructive/80 hover:bg-destructive/90'
+                    : ''
+            }
         />
     );
 });

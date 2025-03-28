@@ -29,6 +29,8 @@ import {
     BlockCanvasProps,
     BlockType,
     BlockWithRequirements,
+    // Unused but might be needed in the future
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     Property,
 } from '@/components/custom/BlockCanvas/types';
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,8 @@ import { useDocumentRealtime } from '@/hooks/queries/useDocumentRealtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useOrganization } from '@/lib/providers/organization.provider';
 import { useDocumentStore } from '@/lib/store/document.store';
+// Unused but might be needed in the future
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { Json } from '@/types/base/database.types';
 
 const dropAnimationConfig = {
@@ -52,9 +56,9 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
         blocks,
     } = useDocumentRealtime({
         documentId,
-        orgId: '',
-        projectId: '',
-        userProfile: null,
+        _orgId: '',
+        _projectId: '',
+        _userProfile: null,
     });
     const { reorderBlocks, isEditMode, setIsEditMode } = useDocumentStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -75,15 +79,17 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     // Adapt the blocks to include order property
     useEffect(() => {
         if (originalBlocks) {
-            const blocksWithOrder = originalBlocks.map((block: BlockWithRequirements, index: number) => {
-                // Create a new object with all required properties
-                const enhancedBlock = {
-                    ...block,
-                    order: block.position || index, // Use position as order or fallback to index
-                } as BlockWithRequirements
+            const blocksWithOrder = originalBlocks.map(
+                (block: BlockWithRequirements, index: number) => {
+                    // Create a new object with all required properties
+                    const enhancedBlock = {
+                        ...block,
+                        order: block.position || index, // Use position as order or fallback to index
+                    } as BlockWithRequirements;
 
-                return enhancedBlock;
-            });
+                    return enhancedBlock;
+                },
+            );
             setEnhancedBlocks(blocksWithOrder);
         }
     }, [originalBlocks, orgId, projectId]);
@@ -91,11 +97,16 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     // Wrapper for setLocalBlocks that adds order
     const setEnhancedLocalBlocks = useCallback(
         (updater: React.SetStateAction<BlockWithRequirements[]>) => {
-            const processBlocks = (blocks: BlockWithRequirements[]): BlockWithRequirements[] => {
-                return blocks.map((block: BlockWithRequirements, index: number) => ({
-                    ...block,
-                    order: index,
-                } as BlockWithRequirements));
+            const processBlocks = (
+                blocks: BlockWithRequirements[],
+            ): BlockWithRequirements[] => {
+                return blocks.map(
+                    (block: BlockWithRequirements, index: number) =>
+                        ({
+                            ...block,
+                            order: index,
+                        }) as BlockWithRequirements,
+                );
             };
 
             if (typeof updater === 'function') {
@@ -106,7 +117,7 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                 setDocument(processBlocks(updater));
             }
         },
-        [setDocument, blocks]
+        [setDocument, blocks],
     );
 
     const {
@@ -114,7 +125,7 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
         handleUpdateBlock,
         handleDeleteBlock,
         handleReorder,
-        createDefaultBlockProperties,
+        _createDefaultBlockProperties,
     } = useBlockActions({
         documentId,
         userProfile,
@@ -229,7 +240,9 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
     }
 
     // Get active block with order property
-    const activeBlock = enhancedBlocks?.find((block: BlockWithRequirements) => block.id === activeId);
+    const activeBlock = enhancedBlocks?.find(
+        (block: BlockWithRequirements) => block.id === activeId,
+    );
 
     return (
         <div className="relative min-h-[500px] space-y-4">
@@ -240,11 +253,17 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext
-                    items={enhancedBlocks?.map((block: BlockWithRequirements) => block.id) || []}
+                    items={
+                        enhancedBlocks?.map(
+                            (block: BlockWithRequirements) => block.id,
+                        ) || []
+                    }
                     strategy={verticalListSortingStrategy}
                 >
                     <div className="space-y-4">
-                        {enhancedBlocks?.map((block: BlockWithRequirements) => renderBlock(block))}
+                        {enhancedBlocks?.map((block: BlockWithRequirements) =>
+                            renderBlock(block),
+                        )}
                     </div>
                 </SortableContext>
 
@@ -269,19 +288,23 @@ export function BlockCanvas({ documentId }: BlockCanvasProps) {
                     <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleAddBlock(BlockType.text, {
-                            format: 'markdown',
-                            text: '',
-                        })}
+                        onClick={() =>
+                            handleAddBlock(BlockType.text, {
+                                format: 'markdown',
+                                text: '',
+                            })
+                        }
                     >
                         <Type className="h-4 w-4" />
                     </Button>
                     <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleAddBlock(BlockType.table, {
-                            requirements: []
-                        })}
+                        onClick={() =>
+                            handleAddBlock(BlockType.table, {
+                                requirements: [],
+                            })
+                        }
                     >
                         <Table className="h-4 w-4" />
                     </Button>

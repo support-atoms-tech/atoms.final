@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
 import { CookiesProvider } from 'next-client-cookies/server';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { Toaster } from 'react-hot-toast';
 
 import { QueryProvider } from '@/lib/providers/query.provider';
 import { ThemeProvider } from '@/lib/providers/theme.provider';
 import '@/styles/globals.css';
 
 import GlobalErrorBoundary from './global-error';
-import { Toaster } from 'react-hot-toast';
-import { WDYRSetup } from './WDYRSetup.client';
 
 const geistSans = Geist({
     variable: '--font-geist-sans',
@@ -33,13 +32,15 @@ export default function RootLayout({
     return (
         <GlobalErrorBoundary>
             <html lang="en" suppressHydrationWarning>
-                <head>
-                    <script src="https://unpkg.com/react-scan/dist/auto.global.js" />
-                </head>
+                {/* <head>
+                    <script 
+                        src="https://unpkg.com/react-scan/dist/auto.global.js"
+                        async
+                    />
+                </head> */}
                 <body
                     className={`${geistSans.variable} ${geistMono.variable} antialiased`}
                 >
-                    <WDYRSetup />
                     <CookiesProvider>
                         <ThemeProvider
                             attribute="class"
@@ -47,7 +48,8 @@ export default function RootLayout({
                             enableSystem
                             disableTransitionOnChange
                         >
-                            <QueryProvider>{children}
+                            <QueryProvider>
+                                {children}
                                 <Toaster position="bottom-right" />
                             </QueryProvider>
                         </ThemeProvider>

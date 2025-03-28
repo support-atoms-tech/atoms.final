@@ -1,12 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 
-import { DocumentPropertySchema } from '@/types/base/documents.types';
+import { Property } from '@/components/custom/BlockCanvas/types';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
-import { Document } from '@/types/base/documents.types';
-import { Property, PropertyCreateData } from '@/components/Canvas/types';
-import { RequirementStatus } from '@/types';
+import { Document, DocumentPropertySchema } from '@/types/base/documents.types';
+
+// Define PropertyCreateData based on how it's used
+interface PropertyCreateData {
+    name: string;
+    property_type: string;
+    org_id: string;
+    is_base?: boolean;
+    options?: {
+        values: string[];
+    };
+}
 
 export type CreateDocumentInput = Omit<
     Document,
@@ -142,83 +151,94 @@ export function useCreateBaseOrgProperties() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ 
-            orgId, 
-            userId 
-        }: { 
-            orgId: string; 
+        mutationFn: async ({
+            orgId,
+            userId,
+        }: {
+            orgId: string;
             userId: string;
         }) => {
             // First check if base properties exist for the organization
-            const { data: existingProperties, error: fetchError } = await supabase
-                .from('properties')
-                .select('*')
-                .eq('org_id', orgId)
-                .eq('is_base', true)
-            
+            const { data: existingProperties, error: fetchError } =
+                await supabase
+                    .from('properties')
+                    .select('*')
+                    .eq('org_id', orgId)
+                    .eq('is_base', true);
+
             if (fetchError) throw fetchError;
-            
+
             // If base properties already exist, return them
             if (existingProperties && existingProperties.length > 0) {
                 return existingProperties as Property[];
             }
-            
+
             // If no base properties exist, create them
             const defaultProperties: PropertyCreateData[] = [
-                { 
-                    name: 'External_ID', 
-                    property_type: 'text', 
+                {
+                    name: 'External_ID',
+                    property_type: 'text',
                     org_id: orgId,
                     is_base: true,
                 },
-                { 
-                    name: 'Name', 
-                    property_type: 'text', 
-                    org_id: orgId,
-                    is_base: true, 
-                },
-                { 
-                    name: 'Description', 
+                {
+                    name: 'Name',
                     property_type: 'text',
                     org_id: orgId,
-                    is_base: true, 
+                    is_base: true,
                 },
-                { 
-                    name: 'Status', 
-                    property_type: 'select', 
+                {
+                    name: 'Description',
+                    property_type: 'text',
+                    org_id: orgId,
+                    is_base: true,
+                },
+                {
+                    name: 'Status',
+                    property_type: 'select',
                     org_id: orgId,
                     is_base: true,
                     options: {
-                        values: ['active', 'archived', 'draft', 'deleted', 'in_review', 'in_progress', 'approved', 'rejected'],
+                        values: [
+                            'active',
+                            'archived',
+                            'draft',
+                            'deleted',
+                            'in_review',
+                            'in_progress',
+                            'approved',
+                            'rejected',
+                        ],
                     },
                 },
-                { 
-                    name: 'Priority', 
-                    property_type: 'select', 
+                {
+                    name: 'Priority',
+                    property_type: 'select',
                     org_id: orgId,
-                    is_base: true, 
+                    is_base: true,
                     options: {
                         values: ['low', 'medium', 'high', 'critical'],
                     },
                 },
             ];
-            
+
             const timestamp = new Date().toISOString();
-            const baseProperties = defaultProperties.map(prop => ({
+            const baseProperties = defaultProperties.map((prop) => ({
                 ...prop,
                 created_at: timestamp,
                 updated_at: timestamp,
                 created_by: userId,
                 updated_by: userId,
             }));
-            
-            const { data: createdProperties, error: insertError } = await supabase
-                .from('properties')
-                .insert(baseProperties)
-                .select();
-                
+
+            const { data: createdProperties, error: insertError } =
+                await supabase
+                    .from('properties')
+                    .insert(baseProperties)
+                    .select();
+
             if (insertError) throw insertError;
-            
+
             return createdProperties as Property[];
         },
         onSuccess: (data) => {
@@ -235,14 +255,14 @@ export function useCreateDocumentProperties() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ 
-            documentId, 
+        mutationFn: async ({
+            documentId,
             orgId,
-            propertyIds,
-        }: { 
-            documentId: string; 
+            _propertyIds,
+        }: {
+            documentId: string;
             orgId: string;
-            propertyIds?: string[];
+            _propertyIds?: string[];
         }) => {
             // Find the base properties for this org
             const { data: baseProperties, error: fetchError } = await supabase
@@ -252,16 +272,18 @@ export function useCreateDocumentProperties() {
                 .eq('is_base', true)
                 .eq('document_id', null)
                 .eq('project_id', null);
-            
+
             if (fetchError) throw fetchError;
-            
+
             if (!baseProperties || baseProperties.length === 0) {
-                throw new Error("No base properties found for this organization");
+                throw new Error(
+                    'No base properties found for this organization',
+                );
             }
-            
+
             // Create document-specific properties based on base properties
             const timestamp = new Date().toISOString();
-            const documentProperties = baseProperties.map(baseProp => ({
+            const documentProperties = baseProperties.map((baseProp) => ({
                 name: baseProp.name,
                 property_type: baseProp.property_type,
                 org_id: orgId,
@@ -270,20 +292,23 @@ export function useCreateDocumentProperties() {
                 created_at: timestamp,
                 updated_at: timestamp,
             }));
-            
-            const { data: createdProperties, error: insertError } = await supabase
-                .from('properties')
-                .insert(documentProperties)
-                .select();
-                
+
+            const { data: createdProperties, error: insertError } =
+                await supabase
+                    .from('properties')
+                    .insert(documentProperties)
+                    .select();
+
             if (insertError) throw insertError;
-            
+
             return createdProperties as Property[];
         },
         onSuccess: (data) => {
             if (data.length > 0 && data[0].document_id) {
                 queryClient.invalidateQueries({
-                    queryKey: queryKeys.properties.byDocument(data[0].document_id),
+                    queryKey: queryKeys.properties.byDocument(
+                        data[0].document_id,
+                    ),
                 });
             }
         },
@@ -298,9 +323,9 @@ export function useCreateDocumentWithDefaultSchemas() {
         mutationFn: async (document: Partial<Document>) => {
             // Ensure project_id is available
             if (!document.project_id) {
-                throw new Error("Project ID is required to create a document");
+                throw new Error('Project ID is required to create a document');
             }
-            
+
             // Get the org_id for the project
             const { data: project, error: projectError } = await supabase
                 .from('projects')
@@ -311,22 +336,22 @@ export function useCreateDocumentWithDefaultSchemas() {
             console.log('project', project);
 
             if (projectError) throw projectError;
-            
+
             const orgId = project.organization_id;
-            
+
             // Check/create base property schemas for the organization
-            const baseProperties = await createBaseOrgPropertiesMutation.mutateAsync({
-                orgId,
-                userId: document.created_by as string,
-            });
+            const baseProperties =
+                await createBaseOrgPropertiesMutation.mutateAsync({
+                    orgId,
+                    userId: document.created_by as string,
+                });
 
             console.log('baseProperties', baseProperties);
 
-
-            
             // Create the document
-            const createdDocument = await createDocumentMutation.mutateAsync(document);
-            
+            const createdDocument =
+                await createDocumentMutation.mutateAsync(document);
+
             return createdDocument;
         },
     });

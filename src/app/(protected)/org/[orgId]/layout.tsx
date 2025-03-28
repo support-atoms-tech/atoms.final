@@ -29,11 +29,11 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
         );
 
         return (
-                <div className="relative flex-1">
-                    <Suspense fallback={<OrgDashboardSkeleton />}>
-                        {children}
-                    </Suspense>
-                </div>
+            <div className="relative flex-1">
+                <Suspense fallback={<OrgDashboardSkeleton />}>
+                    {children}
+                </Suspense>
+            </div>
         );
     } catch (error: unknown) {
         console.error('Error in organization layout:', error);

@@ -46,6 +46,7 @@ export interface BlockWithRequirements extends Block {
     project_id?: string;
     height?: number;
     columns?: Column[];
+    name?: string;
 }
 
 export enum BlockType {
@@ -55,18 +56,19 @@ export enum BlockType {
 
 export interface BlockProps {
     block: BlockWithRequirements;
-    onUpdate: (content: Json) => void;
     isSelected?: boolean;
-    onSelect?: () => void;
-    isEditMode?: boolean;
+    onSelect?: (blockId: string) => void;
+    onUpdate: (content: Json) => void;
     onDelete?: () => void;
+    isEditMode?: boolean;
     onDoubleClick?: () => void;
+    properties?: Property[];
+    dragActivators?: SyntheticListenerMap;
 }
 
 export interface BlockActionsProps {
     onDelete: () => void;
     isEditMode: boolean;
-    dragActivators?: SyntheticListenerMap;
 }
 
 export interface UseBlockActionsProps {
@@ -98,7 +100,7 @@ export interface Property {
 // Property options interface aligned with CollaborativeTable
 export interface PropertyOptions {
     values?: string[];
-    default?: any;
+    default?: string | number | boolean | null;
     format?: string;
     required?: boolean;
     min?: number;

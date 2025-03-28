@@ -3,7 +3,6 @@
 import * as React from 'react';
 import { memo, useMemo } from 'react';
 
-import { Input } from '@/components/ui/input';
 import { MultiSelect } from '@/components/ui/multi-select';
 import {
     Select,
@@ -34,13 +33,15 @@ const TextCell = memo(
         value: string;
         onChange: (value: string) => void;
     }) => (
-        <Input
+        <input
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            className="w-full h-full bg-transparent focus:outline-none py-0.5 px-1"
             data-editing="true"
         />
     ),
 );
+TextCell.displayName = 'TextCell';
 
 const NumberCell = memo(
     ({
@@ -50,7 +51,7 @@ const NumberCell = memo(
         value: string;
         onChange: (value: number | null) => void;
     }) => (
-        <Input
+        <input
             type="number"
             value={value}
             onChange={(e) =>
@@ -58,10 +59,12 @@ const NumberCell = memo(
                     e.target.value === '' ? null : parseFloat(e.target.value),
                 )
             }
+            className="w-full h-full bg-transparent focus:outline-none py-0.5 px-1"
             data-editing="true"
         />
     ),
 );
+NumberCell.displayName = 'NumberCell';
 
 const DateCell = memo(
     ({
@@ -71,7 +74,7 @@ const DateCell = memo(
         value: string;
         onChange: (value: Date | null) => void;
     }) => (
-        <Input
+        <input
             type="date"
             value={value}
             onChange={(e) =>
@@ -79,10 +82,12 @@ const DateCell = memo(
                     e.target.value === '' ? null : new Date(e.target.value),
                 )
             }
+            className="w-full h-full bg-transparent focus:outline-none py-0.5 px-1"
             data-editing="true"
         />
     ),
 );
+DateCell.displayName = 'DateCell';
 
 const SelectCell = memo(
     ({
@@ -123,6 +128,7 @@ const SelectCell = memo(
         );
     },
 );
+SelectCell.displayName = 'SelectCell';
 
 const MultiSelectCell = memo(
     ({
@@ -144,46 +150,33 @@ const MultiSelectCell = memo(
         />
     ),
 );
+MultiSelectCell.displayName = 'MultiSelectCell';
 
 // Display cells
 const DisplayCell = memo(({ value }: { value: CellValue }) => {
-    if (
-        value === null ||
-        value === undefined ||
-        value === '' ||
-        value === '__EMPTY__'
-    ) {
+    if (value === null || value === undefined) {
+        return <div className="py-0.5 px-1" />;
+    }
+
+    if (Array.isArray(value)) {
         return (
-            <div className="py-0.5 px-1 rounded transition-colors text-muted-foreground">
-                -
+            <div className="py-0.5 px-1">
+                {value.map((v) => String(v)).join(', ')}
             </div>
         );
     }
 
     if (value instanceof Date) {
         return (
-            <div className="py-0.5 px-1 rounded transition-colors">
-                {value.toLocaleDateString()}
+            <div className="py-0.5 px-1">
+                {value.toISOString().split('T')[0]}
             </div>
         );
     }
 
-    // For multi-select values, display as comma-separated list
-    if (Array.isArray(value)) {
-        return (
-            <div className="py-0.5 px-1 rounded transition-colors">
-                {value.join(', ')}
-            </div>
-        );
-    }
-
-    // For all other types, convert to string
-    return (
-        <div className="py-0.5 px-1 rounded transition-colors">
-            {String(value)}
-        </div>
-    );
+    return <div className="py-0.5 px-1">{String(value)}</div>;
 });
+DisplayCell.displayName = 'DisplayCell';
 
 // Main cell renderer with memoization
 function CellRendererComponent<

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { CellValue } from '../types';
+import { CellValue } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 
 export function useTableSort<
     T extends Record<string, CellValue> & { id: string },

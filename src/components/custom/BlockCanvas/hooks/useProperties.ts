@@ -5,6 +5,23 @@ import { Property, PropertyType } from '@/components/custom/BlockCanvas/types';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
 
+// Extended Property type for internal use, including extra fields used in the component
+interface ExtendedProperty extends Property {
+    key?: string;
+    position?: number;
+    type?: PropertyType;
+    block_id?: string;
+    is_required?: boolean;
+    is_hidden?: boolean;
+    is_deleted?: boolean;
+    is_schema?: boolean;
+    description?: string;
+    created_by?: string;
+    updated_by?: string;
+    deleted_by?: string | null;
+    deleted_at?: string | null;
+}
+
 export interface UsePropertiesProps {
     documentId: string;
     blockId?: string;
@@ -12,7 +29,7 @@ export interface UsePropertiesProps {
 
 export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
     const [isLoading, setIsLoading] = useState(true);
-    const [properties, setProperties] = useState<Property[]>([]);
+    const [properties, setProperties] = useState<ExtendedProperty[]>([]);
     const queryClient = useQueryClient();
 
     // Fetch properties for a document or specific block
@@ -23,8 +40,7 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                 .from('properties')
                 .select('*')
                 .eq('document_id', documentId)
-                .eq('is_deleted', false)
-                .order('position');
+                .eq('is_deleted', false);
 
             // If blockId is provided, filter by block
             if (blockId) {
@@ -39,7 +55,7 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
             }
 
             // Update local state with the fetched properties
-            const fetchedProperties = data as Property[];
+            const fetchedProperties = data as ExtendedProperty[];
             setProperties(fetchedProperties);
 
             // Invalidate related queries to ensure other components get the updated data
@@ -64,17 +80,22 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
 
     // Create a new property
     const createProperty = useCallback(
-        async (propertyData: Omit<Property, 'id'>) => {
+        async (propertyData: Omit<ExtendedProperty, 'id'>) => {
             try {
+                // To fix block_id error, we need to separate it from the Property fields
+                const { block_id, ...standardPropertyData } = propertyData;
+
+                // Using a mapping in the database query instead
                 const { data, error } = await supabase
                     .from('properties')
                     .insert({
-                        ...propertyData,
-                        key:
+                        ...standardPropertyData,
+                        name:
                             propertyData.key ||
                             propertyData.name
                                 .toLowerCase()
                                 .replace(/\s+/g, '_'),
+                        ...(block_id ? { block_id } : {}),
                     })
                     .select();
 
@@ -84,12 +105,8 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                 }
 
                 // Update local state and invalidate queries
-                const newProperty = data[0] as Property;
-                setProperties((prev) =>
-                    [...prev, newProperty].sort(
-                        (a, b) => a.position - b.position,
-                    ),
-                );
+                const newProperty = data[0] as ExtendedProperty;
+                setProperties((prev) => [...prev, newProperty]);
 
                 // Invalidate related queries
                 queryClient.invalidateQueries({
@@ -113,7 +130,7 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
 
     // Update a property
     const updateProperty = useCallback(
-        async (propertyId: string, updates: Partial<Property>) => {
+        async (propertyId: string, updates: Partial<ExtendedProperty>) => {
             try {
                 const { data, error } = await supabase
                     .from('properties')
@@ -127,11 +144,11 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                 }
 
                 // Update local state and invalidate queries
-                const updatedProperty = data[0] as Property;
+                const updatedProperty = data[0] as ExtendedProperty;
                 setProperties((prev) =>
-                    prev
-                        .map((p) => (p.id === propertyId ? updatedProperty : p))
-                        .sort((a, b) => a.position - b.position),
+                    prev.map((p) =>
+                        p.id === propertyId ? updatedProperty : p,
+                    ),
                 );
 
                 // Invalidate related queries
@@ -207,15 +224,20 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
         ) => {
             try {
                 // Define default properties (name, description, req_id)
-                const defaultProperties: Omit<Property, 'id'>[] = [
+                const defaultProperties: Omit<ExtendedProperty, 'id'>[] = [
                     {
                         org_id: orgId,
                         project_id: projectId,
                         document_id: documentId,
-                        block_id: blockId,
                         name: 'Name',
                         key: 'name',
-                        type: 'text' as PropertyType,
+                        type: PropertyType.text,
+                        property_type: PropertyType.text,
+                        is_base: true,
+                        options: null,
+                        scope: 'document',
+                        created_at: null,
+                        updated_at: null,
                         description: 'Requirement name',
                         position: 10,
                         is_required: true,
@@ -229,10 +251,15 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                         org_id: orgId,
                         project_id: projectId,
                         document_id: documentId,
-                        block_id: blockId,
                         name: 'Description',
                         key: 'description',
-                        type: 'text' as PropertyType,
+                        type: PropertyType.text,
+                        property_type: PropertyType.text,
+                        is_base: true,
+                        options: null,
+                        scope: 'document',
+                        created_at: null,
+                        updated_at: null,
                         description: 'Requirement description',
                         position: 20,
                         is_required: false,
@@ -246,10 +273,15 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                         org_id: orgId,
                         project_id: projectId,
                         document_id: documentId,
-                        block_id: blockId,
                         name: 'ID',
-                        key: 'req_id',
-                        type: 'text' as PropertyType,
+                        key: 'id',
+                        type: PropertyType.text,
+                        property_type: PropertyType.text,
+                        is_base: true,
+                        options: null,
+                        scope: 'document',
+                        created_at: null,
+                        updated_at: null,
                         description: 'Requirement ID',
                         position: 30,
                         is_required: false,
@@ -264,7 +296,12 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                 // Insert all properties in a single batch
                 const { data, error } = await supabase
                     .from('properties')
-                    .insert(defaultProperties)
+                    .insert(
+                        defaultProperties.map((prop) => ({
+                            ...prop,
+                            block_id: blockId,
+                        })),
+                    )
                     .select();
 
                 if (error) {
@@ -273,11 +310,13 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
                 }
 
                 // Update local state and invalidate queries
-                const newProperties = data as Property[];
+                const newProperties = data as ExtendedProperty[];
                 setProperties((prev) =>
-                    [...prev, ...newProperties].sort(
-                        (a, b) => a.position - b.position,
-                    ),
+                    [...prev, ...newProperties].sort((a, b) => {
+                        const posA = a.position ?? 0;
+                        const posB = b.position ?? 0;
+                        return posA - posB;
+                    }),
                 );
 
                 // Invalidate related queries
@@ -300,7 +339,7 @@ export const useProperties = ({ documentId, blockId }: UsePropertiesProps) => {
 
     // Reorder properties
     const reorderProperties = useCallback(
-        async (reorderedProperties: Property[], userId: string) => {
+        async (reorderedProperties: ExtendedProperty[], userId: string) => {
             try {
                 // Update all positions in parallel for better performance
                 await Promise.all(

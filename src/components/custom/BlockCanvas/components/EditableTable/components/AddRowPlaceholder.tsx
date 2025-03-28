@@ -1,9 +1,8 @@
 import { Plus } from 'lucide-react';
 
+import { EditableColumn } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-
-import { EditableColumn } from '../types';
 
 interface AddRowPlaceholderProps<T> {
     columns: EditableColumn<T>[];

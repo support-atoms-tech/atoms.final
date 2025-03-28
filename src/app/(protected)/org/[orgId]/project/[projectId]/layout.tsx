@@ -2,17 +2,12 @@
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
-import { getCookie } from '@/app/(protected)/org/actions';
-import AppSidebar from '@/components/base/AppSidebar';
-import VerticalToolbar from '@/components/custom/VerticalToolbar';
 import { ProjectPageSkeleton } from '@/components/custom/skeletons/ProjectPageSkeleton';
-import { SidebarProvider } from '@/components/ui/sidebar';
 import { getQueryClient } from '@/lib/constants/queryClient';
 import { fetchProjectData } from '@/lib/db/utils/prefetchData';
 import { ProjectProvider } from '@/lib/providers/project.provider';
 import { Project } from '@/types';
 import { Document } from '@/types/base/documents.types';
-import { useParams } from 'next/navigation';
 
 interface ProjectLayoutProps {
     children: React.ReactNode;
@@ -49,11 +44,11 @@ export default async function ProjectLayout({
                 initialProject={project as Project}
                 initialDocuments={documents as Document[]}
             >
-                    <div className="relative flex-1">
-                        <Suspense fallback={<ProjectPageSkeleton />}>
-                            {children}
-                        </Suspense>
-                    </div>
+                <div className="relative flex-1">
+                    <Suspense fallback={<ProjectPageSkeleton />}>
+                        {children}
+                    </Suspense>
+                </div>
             </ProjectProvider>
         );
     } catch (error) {

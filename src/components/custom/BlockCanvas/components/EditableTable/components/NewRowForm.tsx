@@ -1,10 +1,12 @@
 import { Check, X } from 'lucide-react';
 
+import { CellRenderer } from '@/components/custom/BlockCanvas/components/EditableTable/CellRenderer';
+import {
+    CellValue,
+    EditableColumn,
+} from '@/components/custom/BlockCanvas/components/EditableTable/types';
 import { Button } from '@/components/ui/button';
 import { TableCell, TableRow } from '@/components/ui/table';
-
-import { CellRenderer } from '../CellRenderer';
-import { CellValue, EditableColumn } from '../types';
 
 interface NewRowFormProps<T> {
     columns: EditableColumn<T>[];
@@ -29,7 +31,7 @@ export function NewRowForm<
 
     return (
         <TableRow className="font-mono">
-            {columns.map((column, colIndex) => (
+            {columns.map((column, _colIndex) => (
                 <TableCell key={`new-${String(column.accessor)}`}>
                     <CellRenderer
                         item={newItem}

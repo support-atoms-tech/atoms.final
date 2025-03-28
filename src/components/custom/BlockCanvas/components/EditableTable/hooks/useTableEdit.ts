@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { CellValue, EditableColumn } from '../types';
+import {
+    CellValue,
+    EditableColumn,
+} from '@/components/custom/BlockCanvas/components/EditableTable/types';
 
 export function useTableEdit<
     T extends Record<string, CellValue> & { id: string },
