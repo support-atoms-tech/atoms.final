@@ -284,7 +284,7 @@ export default function OrgDashboard(props: OrgDashboardProps) {
                 description: 'Project updated successfully',
             });
 
-            // Manually trigger a refetch of projects
+            // TODO: Make it refetch projects rather than reloading page
             window.location.reload();
         } catch (error) {
             console.error('Error updating project:', error);
