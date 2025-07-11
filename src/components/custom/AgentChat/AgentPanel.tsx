@@ -125,7 +125,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             'webkitSpeechRecognition' in window ||
             'SpeechRecognition' in window
         ) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const SpeechRecognition =
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (window as any).SpeechRecognition ||
@@ -441,7 +440,7 @@ ${'='.repeat(50)}
                             variant="ghost"
                             size="icon"
                             onClick={onClose}
-                            className="h-9 w-9 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                            className="h-9 w-9 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors [&_svg]:pointer-events-auto"
                         >
                             <X className="h-4 w-4 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400" />
                         </Button>

@@ -22,12 +22,13 @@ export const AgentInterface: React.FC<AgentInterfaceProps> = ({
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-    // Auto-initialize the agent interface if autoInit is true
+    // Auto-initialize the agent interface if autoInit is true (only once on mount)
     useEffect(() => {
         if (autoInit && !isOpen) {
             setIsOpen(true);
         }
-    }, [autoInit, isOpen, setIsOpen]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoInit]); // Intentionally exclude isOpen and setIsOpen to prevent auto-reopening
 
     const handleToggle = () => {
         togglePanel();
