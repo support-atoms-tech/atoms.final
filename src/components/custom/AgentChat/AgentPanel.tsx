@@ -88,8 +88,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             console.log('AgentPanel - No pinned organization ID available');
             return [];
         }
-        const orgMessages =
-            organizationMessages[currentPinnedOrganizationId] || [];
+        const orgMessages = organizationMessages[currentPinnedOrganizationId] || [];
         console.log(
             `AgentPanel - Loading ${orgMessages.length} messages for organization ${currentPinnedOrganizationId}`,
         );
@@ -193,9 +192,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Force hydration check after component mounts
         const timer = setTimeout(() => {
             if (!_hasHydrated) {
-                console.log(
-                    'AgentPanel - Forcing hydration completion after timeout',
-                );
+                console.log('AgentPanel - Forcing hydration completion after timeout');
                 setHasHydrated(true);
             }
         }, 100);
@@ -225,8 +222,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     useEffect(() => {
         if (scrollAreaRef.current) {
-            scrollAreaRef.current.scrollTop =
-                scrollAreaRef.current.scrollHeight;
+            scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
         }
     }, [messages]);
 
@@ -234,10 +230,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     // Web Speech API initialization
     useEffect(() => {
-        if (
-            'webkitSpeechRecognition' in window ||
-            'SpeechRecognition' in window
-        ) {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition =
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (window as any).SpeechRecognition ||
@@ -317,18 +310,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     );
 
                     // Check each possible field and log what we find
-                    console.log(
-                        'AgentPanel - response.reply:',
-                        `"${response.reply}"`,
-                    );
+                    console.log('AgentPanel - response.reply:', `"${response.reply}"`);
                     console.log(
                         'AgentPanel - response.message:',
                         `"${response.message}"`,
                     );
-                    console.log(
-                        'AgentPanel - response.output:',
-                        `"${response.output}"`,
-                    );
+                    console.log('AgentPanel - response.output:', `"${response.output}"`);
 
                     reply =
                         (response.reply && response.reply.trim()) ||
@@ -399,10 +386,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 assistantMessage.content.substring(0, 100) + '...',
             );
             addMessage(assistantMessage);
-            console.log(
-                'AgentPanel - Total messages after adding:',
-                messages.length + 1,
-            );
+            console.log('AgentPanel - Total messages after adding:', messages.length + 1);
         } catch {
             const errorMessage: Message = {
                 id: (Date.now() + 1).toString(),
@@ -510,18 +494,18 @@ ${'='.repeat(50)}
             <div
                 ref={panelRef}
                 className={cn(
-                    'fixed right-0 top-0 h-full bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-xl z-50 transition-all duration-300 ease-out flex flex-col',
+                    'fixed right-0 top-0 h-full bg-white dark:bg-zinc-900 shadow-xl z-50 transition-all duration-300 ease-out flex flex-col',
                     isOpen ? 'translate-x-0' : 'translate-x-full',
                 )}
                 style={{ width: `${panelWidth}px` }}
             >
                 {/* Resize Handle */}
                 <div
-                    className="absolute left-0 top-0 w-1 h-full cursor-col-resize hover:w-2 transition-all z-10 group bg-zinc-300 dark:bg-zinc-600 hover:bg-blue-500 dark:hover:bg-blue-400"
+                    className="absolute left-0 top-0 w-[3px] h-full cursor-col-resize hover:w-1.5 transition-all z-10 group bg-border hover:bg-accent"
                     onMouseDown={handleResizeStart}
                 >
                     {/* Visual indicator for resize */}
-                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-8 bg-zinc-400 dark:bg-zinc-500 rounded-full group-hover:bg-blue-600 dark:group-hover:bg-blue-300 transition-colors" />
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-border/60 rounded-full group-hover:bg-accent/80 transition-colors" />
                 </div>
 
                 {/* Header */}
@@ -590,9 +574,8 @@ ${'='.repeat(50)}
                                 <div className="flex justify-center">
                                     <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 p-3">
                                         <p className="text-sm text-amber-800 dark:text-amber-200">
-                                            Please pin an organization in your
-                                            profile settings before using the
-                                            agent.
+                                            Please pin an organization in your profile
+                                            settings before using the agent.
                                         </p>
                                     </Card>
                                 </div>
@@ -634,49 +617,37 @@ ${'='.repeat(50)}
                                             className={cn(
                                                 'max-w-[80%] p-3 rounded-lg',
                                                 msg.role === 'user'
-                                                    ? 'bg-blue-500 text-white'
+                                                    ? 'bg-zinc-600 text-white dark:bg-purple-600 dark:text-white'
                                                     : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700',
                                             )}
                                         >
                                             {msg.role === 'user' ? (
-                                                <p className="text-sm">
-                                                    {msg.content}
-                                                </p>
+                                                <p className="text-sm">{msg.content}</p>
                                             ) : (
                                                 <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
                                                     <ReactMarkdown
                                                         components={{
-                                                            p: ({
-                                                                children,
-                                                            }) => (
+                                                            p: ({ children }) => (
                                                                 <p className="mb-2 last:mb-0 text-zinc-700 dark:text-zinc-300">
                                                                     {children}
                                                                 </p>
                                                             ),
-                                                            strong: ({
-                                                                children,
-                                                            }) => (
+                                                            strong: ({ children }) => (
                                                                 <strong className="font-semibold text-zinc-900 dark:text-zinc-100">
                                                                     {children}
                                                                 </strong>
                                                             ),
-                                                            code: ({
-                                                                children,
-                                                            }) => (
+                                                            code: ({ children }) => (
                                                                 <code className="bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 rounded text-xs">
                                                                     {children}
                                                                 </code>
                                                             ),
-                                                            ul: ({
-                                                                children,
-                                                            }) => (
+                                                            ul: ({ children }) => (
                                                                 <ul className="list-disc ml-4 space-y-1">
                                                                     {children}
                                                                 </ul>
                                                             ),
-                                                            ol: ({
-                                                                children,
-                                                            }) => (
+                                                            ol: ({ children }) => (
                                                                 <ol className="list-decimal ml-4 space-y-1">
                                                                     {children}
                                                                 </ol>
@@ -687,7 +658,14 @@ ${'='.repeat(50)}
                                                     </ReactMarkdown>
                                                 </div>
                                             )}
-                                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                                            <p
+                                                className={cn(
+                                                    'text-xs mt-2',
+                                                    msg.role === 'user'
+                                                        ? 'text-zinc-200 dark:text-zinc-200'
+                                                        : 'text-zinc-500 dark:text-zinc-300',
+                                                )}
+                                            >
                                                 {msg.timestamp.toLocaleTimeString()}
                                                 {msg.type === 'voice' && ' 🎤'}
                                             </p>
@@ -699,7 +677,7 @@ ${'='.repeat(50)}
                                 <div className="flex justify-start">
                                     <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3">
                                         <div className="flex items-center gap-2">
-                                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-zinc-300 dark:border-zinc-600 border-t-blue-500"></div>
+                                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-zinc-300 dark:border-white border-t-transparent"></div>
                                             <p className="text-sm text-zinc-600 dark:text-zinc-400">
                                                 Thinking...
                                             </p>
@@ -720,13 +698,11 @@ ${'='.repeat(50)}
                                 {...({ ref: textareaRef } as any)}
                                 value={message}
                                 onChange={(e) =>
-                                    setMessage(
-                                        (e.target as HTMLTextAreaElement).value,
-                                    )
+                                    setMessage((e.target as HTMLTextAreaElement).value)
                                 }
                                 onKeyDown={handleKeyPress}
                                 placeholder="Type your message..."
-                                className="min-h-[40px] max-h-[120px] resize-none border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded-lg"
+                                className="min-h-[40px] max-h-[120px] resize-none border-[0.5px] border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded-lg"
                                 disabled={isLoading}
                             />
                             {speechSupported && (
@@ -754,7 +730,7 @@ ${'='.repeat(50)}
                         <Button
                             onClick={handleSendMessage}
                             disabled={!message.trim() || isLoading}
-                            className="h-10 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
+                            className="h-10 px-4 bg-zinc-600 text-white hover:bg-zinc-700 dark:bg-purple-600 dark:text-white dark:hover:bg-purple-700 rounded-lg"
                         >
                             <Send className="h-4 w-4" />
                         </Button>
