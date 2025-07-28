@@ -88,10 +88,10 @@ function AppSidebar() {
         }
     }, [personalOrg, router, enterpriseOrg]);
 
-    const navigateToAdmin = useCallback(() => {
+    const navigateToAdmin = () => {
         console.log('Navigating to admin page:');
-        router.push(`/admin`);
-    }, [router]);
+        router.push('/admin');
+    };
 
     const navigateToPinnedOrganization = useCallback(async () => {
         try {

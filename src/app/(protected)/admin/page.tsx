@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Users, X } from 'lucide-react';
+import { Check, Filter, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,12 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import LayoutView from '@/components/views/LayoutView';
 import { supabase } from '@/lib/supabase/supabaseBrowser';
@@ -26,6 +32,7 @@ type User = {
 export default function AdminPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [approveFilter, setApproveFilter] = useState<boolean | null>(null);
 
     useEffect(() => {
         (async () => {
@@ -42,8 +49,9 @@ export default function AdminPage() {
 
     const filteredUsers = users.filter((user) => {
         return (
-            user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.email?.toLowerCase().includes(searchQuery.toLowerCase())
+            (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                user.email?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+            (approveFilter !== null ? user.is_approved === approveFilter : true)
         );
     });
 
@@ -123,6 +131,30 @@ export default function AdminPage() {
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full md:w-64"
                             />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="default" className="w-9 h-9">
+                                        <Filter className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        onClick={() => setApproveFilter(null)}
+                                    >
+                                        {'All'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onClick={() => setApproveFilter(true)}
+                                    >
+                                        {'Approved'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onClick={() => setApproveFilter(false)}
+                                    >
+                                        {'Unapproved'}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </CardHeader>
                     <CardContent>
