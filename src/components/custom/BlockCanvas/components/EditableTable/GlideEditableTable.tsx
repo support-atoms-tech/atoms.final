@@ -1,6 +1,7 @@
 'use client';
 
-// We still need to validate role perms so readers canot exit, ect.
+import '@/styles/globals.css';
+// We still need to validate role perms so readers cannot exit, ect.
 import '@/styles/globals.css';
 
 import DataEditor, {
@@ -28,6 +29,7 @@ import {
     BlockTableMetadata,
     useBlockMetadataActions,
 } from '@/components/custom/BlockCanvas/hooks/useBlockMetadataActions';
+//import { useColumnActions } from '@/components/custom/BlockCanvas/hooks/useColumnActions';
 import { useUser } from '@/lib/providers/user.provider';
 
 import { DeleteConfirmDialog, TableControls, TableLoadingSkeleton } from './components';
@@ -73,6 +75,7 @@ export function GlideEditableTable<
     const userName = profile?.full_name || '';
 
     const { updateBlockMetadata } = useBlockMetadataActions();
+    //const [columnToDelete, setColumnToDelete] = useState<{ id: string; blockId: string } | null>(null);
     const [columnToDelete, setColumnToDelete] = useState<string | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -189,8 +192,6 @@ export function GlideEditableTable<
         }));
     }, [columns]);
 
-    //console.debug('[GlideEditableTable] Normalized Columns:', normalizedColumns);
-
     const [localColumns, setLocalColumns] = useState(
         [...normalizedColumns].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
     );
@@ -208,7 +209,7 @@ export function GlideEditableTable<
         () =>
             localColumns.map((col, idx) => ({
                 title: col.title,
-                width: colSizes[col.accessor] || col.width || 120,
+                width: colSizes[col.accessor] || col.width || 120, // prioritize user's resized width
                 hasMenu: true,
                 menuIcon: 'dots',
                 trailingRowOptions:
@@ -260,8 +261,8 @@ export function GlideEditableTable<
         console.debug('[GlideEditableTable] Sorted Data:', sortedData);
     }, [sortedData]);
 
-    // Needs to be validated, I dont think change checks properly catch changed.
-    // So may be called more often then needed. Harmless but wastefull and may cause issues with concurrent editing.
+    // Needs to be validated, I don't think change checks properly catch changed.
+    // So may be called more often then needed. Harmless but wasteful and may cause issues with concurrent editing.
     const saveTableMetadata = useCallback(async () => {
         if (!blockId) return;
 
