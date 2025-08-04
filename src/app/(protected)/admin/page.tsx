@@ -27,6 +27,7 @@ type User = {
     full_name: string | null;
     id: string;
     is_approved: boolean;
+    created_at: string | null;
 };
 
 export default function AdminPage() {
@@ -38,7 +39,8 @@ export default function AdminPage() {
         (async () => {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('email, full_name, id, is_approved');
+                .select('email, full_name, id, is_approved, created_at')
+                .order('created_at', { ascending: false });
             if (error) {
                 console.error('Error retrieving pending members:', error);
                 return;
@@ -69,15 +71,16 @@ export default function AdminPage() {
                 user.id === unapprovedUser.id ? { ...user, is_approved: true } : user,
             ),
         );
-        /* TODO: Send email to user confirming they've been approved
-        await fetch('/api/send-confirmation', {
+        await fetch('/api/email/notify-approval', {
             method: 'POST',
             headers: {
-             'Content-Type': 'application/json'  
+                'Content-Type': 'application/json',
             },
-            body: JSON.stringify({email: user.email}),
+            body: JSON.stringify({
+                email: unapprovedUser.email,
+                name: unapprovedUser.full_name || 'User',
+            }),
         });
-        */
     };
 
     const unapproveUser = async (approvedUser: User) => {
@@ -141,16 +144,37 @@ export default function AdminPage() {
                                     <DropdownMenuItem
                                         onClick={() => setApproveFilter(null)}
                                     >
+                                        <span
+                                            className={`mr-2 inline-block w-4 h-4 rounded-full ${
+                                                approveFilter === null
+                                                    ? 'bg-primary'
+                                                    : 'bg-gray-200'
+                                            }`}
+                                        ></span>
                                         {'All'}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => setApproveFilter(true)}
                                     >
+                                        <span
+                                            className={`mr-2 inline-block w-4 h-4 rounded-full ${
+                                                approveFilter === true
+                                                    ? 'bg-primary'
+                                                    : 'bg-gray-200'
+                                            }`}
+                                        ></span>
                                         {'Approved'}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => setApproveFilter(false)}
                                     >
+                                        <span
+                                            className={`mr-2 inline-block w-4 h-4 rounded-full ${
+                                                approveFilter === false
+                                                    ? 'bg-primary'
+                                                    : 'bg-gray-200'
+                                            }`}
+                                        ></span>
                                         {'Unapproved'}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
