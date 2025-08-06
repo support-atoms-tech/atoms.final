@@ -4,7 +4,7 @@ import Image from 'next/image';
 const demoFeatures = [
     {
         title: 'Spot Conflicts',
-        description: 'one prompt highlights every clashing requirement.',
+        description: 'One prompt highlights every clashing requirement.',
         icon: AlertTriangle,
     },
     {
@@ -23,9 +23,7 @@ export function PolarionDemo() {
     return (
         <section className="border-none py-24 md:py-32 lg:py-40 relative bg-[#0f0f0f]  text-white">
             <div className="container mx-auto px-4">
-                {/* Section Title */}
-                <h2 className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-white tracking-tighter text-white leading-none mb-16 md:mb-24 text-center"></h2>
-                {/* Right Column - Demo Image */}
+                {/* Demo Image */}
                 <div className="relative">
                     {/* Floating Demo Container */}
                     <div className="relative group">
@@ -86,7 +84,7 @@ export function PolarionDemo() {
                             </h3>
 
                             {/* Description */}
-                            <p className="text-base md:text-lg text-gray-700 leading-relaxed">
+                            <p className="text-base md:text-lg text-gray-00 leading-relaxed">
                                 {feature.description}
                             </p>
 
