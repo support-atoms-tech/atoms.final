@@ -1,9 +1,5 @@
 import { ArrowRightLeft, Layers, MessageCircle, Zap } from 'lucide-react';
 
-
-
-
-
 const groundbreakingFeatures = [
     {
         title: 'Ask Anything',
