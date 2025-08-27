@@ -17,10 +17,10 @@ const groundbreakingFeatures = [
         icon: Layers,
     },
     {
-        title: 'Zero Swivel-Chair',
-        description: 'email, tickets, and CI updates pushed from one pane.',
+        title: 'All-in-One View',
+        description: 'Requirements, tests, and code together — traceability intact.',
         icon: ArrowRightLeft,
-    },
+    }
 ];
 export function PolarionWhyGroundbreaking() {
     return (

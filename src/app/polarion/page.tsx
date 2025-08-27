@@ -1,11 +1,18 @@
 import type { Metadata } from 'next';
 
+
+
 import { GridBackground } from '@/components/custom/LandingPage/grid-background';
 import { Navbar } from '@/components/custom/LandingPage/navbar';
 import { PolarionContact } from '@/components/custom/Polarion/contact';
 import { PolarionDemo } from '@/components/custom/Polarion/demo';
 import { PolarionHero } from '@/components/custom/Polarion/hero';
+import { PolarionImpact } from '@/components/custom/Polarion/impact';
 import { PolarionWhyGroundbreaking } from '@/components/custom/Polarion/why-groundbreaking';
+
+
+
+
 
 export const metadata: Metadata = {
     title: 'Polarion Integration - ATOMS',
@@ -26,6 +33,9 @@ export default function PolarionPage() {
                     </div>
                     <div className="section-divider">
                         <PolarionWhyGroundbreaking />
+                    </div>
+                    <div className="section-divider">
+                        <PolarionImpact />
                     </div>
                     <div className="section-divider">
                         <PolarionContact />

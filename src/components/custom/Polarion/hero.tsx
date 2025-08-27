@@ -39,7 +39,7 @@ export function PolarionHero() {
                                         )
                                     }
                                 >
-                                    REQUEST PRIVATE BETA
+                                    REQUEST DEMO
                                 </Button>
                             </div>
                         </div>

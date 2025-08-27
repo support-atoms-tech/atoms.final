@@ -1,41 +1,79 @@
+'use client';
+
 import { AlertTriangle, Code, FileText } from 'lucide-react';
-import Image from 'next/image';
+import { useEffect, useRef } from 'react';
 
 const demoFeatures = [
+    {
+        title: 'EARS/INCOSE',
+        description: 'Clean, unambiguous phrasing.',
+        icon: FileText,
+    },
     {
         title: 'Spot Conflicts',
         description: 'One prompt highlights every clashing requirement.',
         icon: AlertTriangle,
     },
     {
-        title: 'Draft Code',
-        description: 'C++ / Python stubs generated from the specs you just cleaned.',
+        title: 'Code & Tests from Every Requirement',
+        description:
+            'Generates implementation and unit tests, grounded in your full spec—REQ IDs preserved.',
         icon: Code,
-    },
-    {
-        title: 'File Issues',
-        description: 'Jira tickets opened, linked, and assigned in a click.',
-        icon: FileText,
     },
 ];
 
 export function PolarionDemo() {
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+
+    // Autoplay when the video scrolls into view; pause when out of view
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const tryPlay = () => {
+            const p = video.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(() => {});
+            }
+        };
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    tryPlay();
+                } else {
+                    video.pause();
+                }
+            },
+            { threshold: 0.5 },
+        );
+
+        observer.observe(video);
+        return () => observer.disconnect();
+    }, []);
     return (
         <section className="border-none py-24 md:py-32 lg:py-40 relative bg-[#0f0f0f]  text-white">
             <div className="container mx-auto px-4">
                 {/* Demo Image */}
+                {/* Section Title */}
+                <h2 className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center">
+                    SEE IT IN ACTION
+                </h2>
+
                 <div className="relative">
                     {/* Floating Demo Container */}
                     <div className="relative group">
                         {/* Main Image Container */}
                         <div className="relative bg-black/50 backdrop-blur-sm rounded-0.1 border border-black/10 overflow-hidden shadow-2xl mb-10">
-                            <Image
-                                src="/cursor__polarian.jpg"
-                                alt="Polarion AI Integration Demo - Chat interface with system architecture diagram and work items"
-                                width={1024}
-                                height={576}
+                            <video
+                                ref={videoRef}
+                                src="/cursor__polarian-v.mp4"
                                 className="w-full h-auto object-cover"
-                                priority
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                poster="/cursor__polarian.jpg"
                             />
 
                             {/* Overlay with subtle gradient */}
