@@ -7,7 +7,6 @@ import { PolarionDemo } from '@/components/custom/Polarion/demo';
 import { PolarionHero } from '@/components/custom/Polarion/hero';
 import { PolarionImpact } from '@/components/custom/Polarion/impact';
 import { PolarionWhyGroundbreaking } from '@/components/custom/Polarion/why-groundbreaking';
-import { PolarionImpact } from '@/components/custom/Polarion/impact';
 
 export const metadata: Metadata = {
     title: 'Polarion Integration - ATOMS',
@@ -32,9 +31,7 @@ export default function PolarionPage() {
                     <div className="section-divider">
                         <PolarionImpact />
                     </div>
-                    <div className="section-divider">
-                        <PolarionImpact />
-                    </div>
+
                     <div className="section-divider">
                         <PolarionContact />
                     </div>
