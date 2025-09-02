@@ -1,10 +1,22 @@
 'use client';
 
-import { Hammer, Home, LayoutDashboard, LucideIcon, Sparkles, User } from 'lucide-react';
+import {
+    ChevronDown,
+    FlaskConical,
+    GitBranch,
+    Hammer,
+    Home,
+    LayoutDashboard,
+    ListTree,
+    LucideIcon,
+    Sparkles,
+    Table,
+    User,
+} from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 
 import { setCookie } from '@/app/(protected)/org/actions';
 import { Button } from '@/components/ui/button';
@@ -24,6 +36,9 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useSignOut } from '@/hooks/useSignOut';
 import { useOrganization } from '@/lib/providers/organization.provider';
@@ -47,6 +62,14 @@ const _items: MenuItem[] = [
 ];
 
 function AppSidebar() {
+    // State for traceability dropdown
+    const [traceOpen, setTraceOpen] = React.useState(false);
+    // Get traceView from URL
+    let traceView = '';
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        traceView = params.get('view') || '';
+    }
     const router = useRouter();
     const pathname = usePathname();
     const { signOut, isLoading: isSigningOut } = useSignOut();
@@ -279,6 +302,70 @@ function AppSidebar() {
                                 showTabs={createPanelType}
                                 initialTab={createPanelType}
                             /> */}
+                            {/* Traceability Dropdown */}
+                            <SidebarMenuItem className="mb-0.5">
+                                <SidebarMenuButton asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="w-full justify-start"
+                                        onClick={() => setTraceOpen((open) => !open)}
+                                    >
+                                        <GitBranch className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                        <span className="text-xs font-medium">
+                                            Traceability
+                                        </span>
+                                        <ChevronDown
+                                            className={`ml-auto h-3 w-3 transition-transform ${traceOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </Button>
+                                </SidebarMenuButton>
+                                {traceOpen && (
+                                    <SidebarMenuSub>
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton
+                                                asChild
+                                                isActive={
+                                                    pathname === '/traceability' &&
+                                                    (!traceView || traceView === 'matrix')
+                                                }
+                                            >
+                                                <Link href="/traceability?view=matrix">
+                                                    <Table className="h-3.5 w-3.5" />
+                                                    <span>Matrix View</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton
+                                                asChild
+                                                isActive={
+                                                    pathname === '/traceability' &&
+                                                    traceView === 'hierarchy'
+                                                }
+                                            >
+                                                <Link href="/traceability?view=hierarchy">
+                                                    <ListTree className="h-3.5 w-3.5" />
+                                                    <span>Hierarchy View</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton
+                                                asChild
+                                                isActive={
+                                                    pathname === '/traceability' &&
+                                                    traceView === 'test'
+                                                }
+                                            >
+                                                <Link href="/traceability?view=test">
+                                                    <FlaskConical className="h-3.5 w-3.5" />
+                                                    <span>Test Requirement</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                    </SidebarMenuSub>
+                                )}
+                            </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
