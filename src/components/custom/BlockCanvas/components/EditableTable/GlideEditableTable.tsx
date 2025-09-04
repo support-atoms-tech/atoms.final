@@ -122,6 +122,73 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
     );
     const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
 
+    // undo/redo history management
+    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+    const historyRef = useRef<
+        Array<{
+            type:
+                | 'cell_edit'
+                | 'row_add'
+                | 'row_delete'
+                | 'column_move'
+                | 'column_resize'
+                | 'row_move';
+            timestamp: number;
+            data: {
+                // for cell edits
+                rowId?: string;
+                accessor?: keyof T;
+                oldValue?: any;
+                newValue?: any;
+                // for row operations
+                rows?: T[];
+                rowIndices?: number[];
+                // for column operations
+                columns?: typeof localColumns;
+                oldColumnState?: typeof localColumns;
+                newColumnState?: typeof localColumns;
+                // for position changes
+                from?: number;
+                to?: number;
+            };
+        }>
+    >([]);
+
+    // track if we're currently performing an undo/redo to prevent recording it
+    const isUndoingRef = useRef(false);
+
+    // helper to add action to history
+    const addToHistory = useCallback(
+        (action: (typeof historyRef.current)[0]) => {
+            // don't record history during undo/redo operations
+            if (isUndoingRef.current) return;
+
+            // trim history if we're not at the end (user made edits after undoing)
+            if (historyIndex < historyRef.current.length - 1) {
+                historyRef.current = historyRef.current.slice(0, historyIndex + 1);
+            }
+
+            // add new action
+            historyRef.current.push(action);
+
+            // limit history size to prevent memory issues (keep last 100 actions)
+            if (historyRef.current.length > 100) {
+                historyRef.current = historyRef.current.slice(-100);
+            }
+
+            // update index to point to latest action
+            setHistoryIndex(historyRef.current.length - 1);
+
+            console.debug(
+                '[History] Added action:',
+                action.type,
+                'New length:',
+                historyRef.current.length,
+            );
+        },
+        [historyIndex],
+    );
+
     // useEffect(() => {
     //     console.debug('[GlideEditableTable] Received tableMetadata:', tableMetadata);
     // }, [tableMetadata]);
@@ -602,6 +669,8 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
 
     const handleColumnMoved = useCallback(
         (startIndex: number, endIndex: number) => {
+            const oldState = [...localColumns];
+
             setLocalColumns((prevCols) => {
                 const updated = [...prevCols];
                 const [moved] = updated.splice(startIndex, 1);
@@ -612,12 +681,26 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                     position: i,
                 }));
 
+                // record in history (if not undoing)
+                if (!isUndoingRef.current) {
+                    addToHistory({
+                        type: 'column_move',
+                        timestamp: Date.now(),
+                        data: {
+                            oldColumnState: oldState,
+                            newColumnState: reindexed,
+                            from: startIndex,
+                            to: endIndex,
+                        },
+                    });
+                }
+
                 return reindexed;
             });
 
             debouncedSave(); // Trigger debounced save on column metadata change
         },
-        [debouncedSave],
+        [debouncedSave, localColumns, addToHistory],
     );
 
     const getCellContent = useCallback(
@@ -785,7 +868,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
 
             const [colIndex, rowIndex] = cell;
             const column = localColumns[colIndex];
-            const rowData = localData[rowIndex];
+            const rowData = sortedData[rowIndex];
 
             if (!rowData || !column) {
                 console.warn('[onCellEdited] Invalid row/column', { rowIndex, colIndex });
@@ -808,6 +891,20 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                     old: originalValue,
                     new: newValueStr,
                 });
+
+                // record history before making change (if not undoing)
+                if (!isUndoingRef.current) {
+                    addToHistory({
+                        type: 'cell_edit',
+                        timestamp: Date.now(),
+                        data: {
+                            rowId,
+                            accessor,
+                            oldValue: originalValue,
+                            newValue: newValueStr,
+                        },
+                    });
+                }
 
                 // Optimistically update local data
                 setLocalData((prev) =>
@@ -932,7 +1029,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
     const handleRowAppended = useCallback(async () => {
         try {
             // 1) Flush any pending edits so they are persisted before we add a new row
-            saveTableMetadataRef.current?.(); // Do not await, add rows immediatly.
+            saveTableMetadataRef.current?.(); // Do not await, add rows immediately.
             handleSaveAllRef.current?.();
 
             // 2) Create the new row at the end (position = max + 1)
@@ -949,6 +1046,17 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                 position: maxPosition + 1,
             } as T;
 
+            // record in history (if not undoing)
+            if (!isUndoingRef.current) {
+                addToHistory({
+                    type: 'row_add',
+                    timestamp: Date.now(),
+                    data: {
+                        rows: [newRow],
+                    },
+                });
+            }
+
             // 3) Persist the new row then refresh, then sync metadata
             await onSave?.(newRow, true, userId, userName);
             await onPostSave?.();
@@ -961,6 +1069,18 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
     const handleRowMoved = useCallback(
         (from: number, to: number) => {
             if (from === to) return;
+
+            // record in history (if not undoing)
+            if (!isUndoingRef.current) {
+                addToHistory({
+                    type: 'row_move',
+                    timestamp: Date.now(),
+                    data: {
+                        from,
+                        to,
+                    },
+                });
+            }
 
             setLocalData((prev) => {
                 const updated = [...prev];
@@ -977,7 +1097,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                 return reindexed;
             });
         },
-        [debouncedSave],
+        [debouncedSave, addToHistory],
     );
 
     // calculate min row height based on text content and column width
@@ -1068,12 +1188,28 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
     const handleRowDeleteConfirm = useCallback(async () => {
         if (rowsToDelete.length === 0) return;
 
+        // record indices before deletion for undo
+        const rowIndices = rowsToDelete.map((row) =>
+            sortedData.findIndex((r) => r.id === row.id),
+        );
+
+        // record in history (if not undoing)
+        if (!isUndoingRef.current) {
+            addToHistory({
+                type: 'row_delete',
+                timestamp: Date.now(),
+                data: {
+                    rows: [...rowsToDelete], // copy rows before deletion
+                    rowIndices,
+                },
+            });
+        }
+
         // Update local deletion tracker
         const deletedIds = rowsToDelete.map((r) => r.id);
         for (const id of deletedIds) {
             deletedRowIdsRef.current.add(id);
         }
-
         // Update local state.
         setLocalData((prev) => prev.filter((r) => !deletedIds.includes(r.id)));
 
@@ -1090,7 +1226,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
             rows: CompactSelection.empty(),
             columns: CompactSelection.empty(),
         });
-    }, [rowsToDelete, saveTableMetadata, props]);
+    }, [rowsToDelete, saveTableMetadata, props, sortedData, addToHistory]);
 
     // Modify Trailing Row Visuals.
     columns.map((col, idx) => ({
@@ -1113,6 +1249,13 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
         if (wasEditMode && !isEditMode) {
             console.debug(
                 '[GlideEditableTable] Edit mode exited. Checking for unsaved edits...',
+            );
+
+            // clear undo history when exiting edit mode
+            historyRef.current = [];
+            setHistoryIndex(-1);
+            console.debug(
+                '[GlideEditableTable] Cleared undo/redo history on edit mode exit',
             );
 
             const hasPendingEdits = Object.keys(editingDataRef.current).length > 0;
@@ -1185,12 +1328,223 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
         }
     }, [isEditMode]);
 
+    // undo/redo functionality
+    const performUndo = useCallback(() => {
+        if (historyIndex < 0 || historyRef.current.length === 0) {
+            console.debug('[Undo] No actions to undo');
+            return;
+        }
+
+        const action = historyRef.current[historyIndex];
+        isUndoingRef.current = true;
+
+        console.debug('[Undo] Performing undo for action:', action.type);
+
+        switch (action.type) {
+            case 'cell_edit':
+                // revert cell edit
+                if (action.data.rowId && action.data.accessor !== undefined) {
+                    setLocalData((prev) =>
+                        prev.map((r) =>
+                            r.id === action.data.rowId
+                                ? ({
+                                      ...r,
+                                      [action.data.accessor!]: action.data.oldValue,
+                                  } as T)
+                                : r,
+                        ),
+                    );
+
+                    // update editing buffer
+                    setEditingData((prev) => {
+                        const updated = { ...prev };
+                        if (updated[action.data.rowId!]) {
+                            if (
+                                action.data.oldValue === undefined ||
+                                action.data.oldValue === ''
+                            ) {
+                                // remove from buffer if reverting to empty
+                                delete updated[action.data.rowId!][action.data.accessor!];
+                                if (
+                                    Object.keys(updated[action.data.rowId!]).length === 0
+                                ) {
+                                    delete updated[action.data.rowId!];
+                                }
+                            } else {
+                                updated[action.data.rowId!] = {
+                                    ...updated[action.data.rowId!],
+                                    [action.data.accessor!]: action.data.oldValue,
+                                };
+                            }
+                        }
+                        return updated;
+                    });
+                }
+                break;
+
+            case 'row_add':
+                // remove added rows
+                if (action.data.rows) {
+                    const rowIds = action.data.rows.map((r) => r.id);
+                    setLocalData((prev) => prev.filter((r) => !rowIds.includes(r.id)));
+                }
+                break;
+
+            case 'row_delete':
+                // restore deleted rows
+                if (action.data.rows && action.data.rowIndices) {
+                    setLocalData((prev) => {
+                        const updated = [...prev];
+                        // insert rows back at their original positions
+                        action.data.rows!.forEach((row, i) => {
+                            const index = action.data.rowIndices![i];
+                            updated.splice(index, 0, row);
+                        });
+                        return updated;
+                    });
+
+                    // clear from deletion tracker
+                    action.data.rows.forEach((row) => {
+                        deletedRowIdsRef.current.delete(row.id);
+                    });
+                }
+                break;
+
+            case 'column_move':
+                // revert column move
+                if (action.data.oldColumnState) {
+                    setLocalColumns(action.data.oldColumnState);
+                }
+                break;
+
+            case 'row_move':
+                // revert row move
+                if (action.data.from !== undefined && action.data.to !== undefined) {
+                    setLocalData((prev) => {
+                        const updated = [...prev];
+                        // reverse the move
+                        const [moved] = updated.splice(action.data.to!, 1);
+                        updated.splice(action.data.from!, 0, moved);
+                        // reindex positions
+                        return updated.map((row, index) => ({
+                            ...row,
+                            position: index,
+                        }));
+                    });
+                }
+                break;
+        }
+
+        setHistoryIndex((prev) => Math.max(-1, prev - 1));
+
+        // trigger debounced save to persist undo
+        debouncedSave();
+
+        setTimeout(() => {
+            isUndoingRef.current = false;
+        }, 100);
+    }, [historyIndex, debouncedSave, sortedData, addToHistory]);
+
+    const performRedo = useCallback(() => {
+        if (historyIndex >= historyRef.current.length - 1) {
+            console.debug('[Redo] No actions to redo');
+            return;
+        }
+
+        const nextIndex = historyIndex + 1;
+        const action = historyRef.current[nextIndex];
+        isUndoingRef.current = true;
+
+        console.debug('[Redo] Performing redo for action:', action.type);
+
+        switch (action.type) {
+            case 'cell_edit':
+                // reapply cell edit
+                if (action.data.rowId && action.data.accessor !== undefined) {
+                    setLocalData((prev) =>
+                        prev.map((r) =>
+                            r.id === action.data.rowId
+                                ? ({
+                                      ...r,
+                                      [action.data.accessor!]: action.data.newValue,
+                                  } as T)
+                                : r,
+                        ),
+                    );
+
+                    // update editing buffer
+                    setEditingData((prev) => ({
+                        ...prev,
+                        [action.data.rowId!]: {
+                            ...(prev[action.data.rowId!] || {}),
+                            [action.data.accessor!]: action.data.newValue,
+                        },
+                    }));
+                }
+                break;
+
+            case 'row_add':
+                // re-add rows
+                if (action.data.rows) {
+                    setLocalData((prev) => [...prev, ...action.data.rows!]);
+                }
+                break;
+
+            case 'row_delete':
+                // re-delete rows
+                if (action.data.rows) {
+                    const rowIds = action.data.rows.map((r) => r.id);
+                    setLocalData((prev) => prev.filter((r) => !rowIds.includes(r.id)));
+
+                    // add back to deletion tracker
+                    rowIds.forEach((id) => {
+                        deletedRowIdsRef.current.add(id);
+                    });
+                }
+                break;
+
+            case 'column_move':
+                // reapply column move
+                if (action.data.newColumnState) {
+                    setLocalColumns(action.data.newColumnState);
+                }
+                break;
+
+            case 'row_move':
+                // reapply row move
+                if (action.data.from !== undefined && action.data.to !== undefined) {
+                    setLocalData((prev) => {
+                        const updated = [...prev];
+                        const [moved] = updated.splice(action.data.from!, 1);
+                        updated.splice(action.data.to!, 0, moved);
+                        // reindex positions
+                        return updated.map((row, index) => ({
+                            ...row,
+                            position: index,
+                        }));
+                    });
+                }
+                break;
+        }
+
+        setHistoryIndex(nextIndex);
+
+        // trigger debounced save to persist redo
+        debouncedSave();
+
+        setTimeout(() => {
+            isUndoingRef.current = false;
+        }, 100);
+    }, [historyIndex, debouncedSave, addToHistory, sortedData]);
     // Save hotkey, temp fix for dev. 'Ctrl' + 's'
+    // now also handles undo/redo
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
             const isMac =
                 (navigator as any).userAgentData?.platform === 'macOS' ||
                 navigator.userAgent.toLowerCase().includes('mac');
+
+            // save hotkey
             const isSaveKey =
                 (isMac && e.metaKey && e.key === 's') ||
                 (!isMac && e.ctrlKey && e.key === 's');
@@ -1202,9 +1556,37 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                 );
                 void handleSaveAll();
                 void saveTableMetadata();
+                return;
+            }
+
+            // undo hotkey (ctrl+z or cmd+z)
+            const isUndoKey =
+                (isMac && e.metaKey && e.key === 'z' && !e.shiftKey) ||
+                (!isMac && e.ctrlKey && e.key === 'z' && !e.shiftKey);
+
+            if (isUndoKey && isEditMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.debug('[GlideEditableTable] Undo triggered');
+                performUndo();
+                return;
+            }
+
+            // redo hotkey (ctrl+shift+z, ctrl+y, or cmd+shift+z)
+            const isRedoKey =
+                (isMac && e.metaKey && e.key === 'z' && e.shiftKey) ||
+                (!isMac && e.ctrlKey && e.key === 'z' && e.shiftKey) ||
+                (!isMac && e.ctrlKey && e.key === 'y');
+
+            if (isRedoKey && isEditMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.debug('[GlideEditableTable] Redo triggered');
+                performRedo();
+                return;
             }
         },
-        [handleSaveAll, saveTableMetadata],
+        [handleSaveAll, saveTableMetadata, isEditMode, performUndo, performRedo],
     );
 
     useEffect(() => {
