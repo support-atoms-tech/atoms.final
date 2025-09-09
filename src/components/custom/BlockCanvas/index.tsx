@@ -1,12 +1,13 @@
 'use client';
 
 import {
+    CollisionDetection,
     DndContext,
     DragEndEvent,
     DragOverEvent,
     KeyboardSensor,
     PointerSensor,
-    closestCenter,
+    UniqueIdentifier,
     useSensor,
     useSensors,
 } from '@dnd-kit/core';
@@ -352,7 +353,7 @@ export function BlockCanvas({
         <div className="relative min-h-[500px] space-y-4 pl-4">
             <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={betweenTwoMidpoints}
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
             >
@@ -399,3 +400,60 @@ export function BlockCanvas({
         </div>
     );
 }
+
+/*
+On a high level view, this algorithm determines where a currently dragged block should go.
+If the top of the dragged block is above the midpoint of a specific block, it will go above that block.
+Otherwise, if the dragged block is below the midpoint of a specific block, it will go below that block.
+Please exercise caution as minor changes can completely change the dragging behavior. 
+*/
+const betweenTwoMidpoints: CollisionDetection = ({
+    collisionRect,
+    droppableRects,
+    droppableContainers,
+    active,
+}) => {
+    const offsetFromTop = 20;
+    const topOfDrag = collisionRect.top + offsetFromTop;
+
+    const containers = droppableContainers
+        .map((c) => {
+            const rect = droppableRects.get(c.id);
+            if (!rect) return null;
+
+            return { id: c.id, midY: rect.top + rect.height / 2 };
+        })
+        .filter(Boolean) as { id: string; midY: number }[];
+
+    // Sort containers by their midpoints from top to bottom
+    containers.sort((a, b) => a.midY - b.midY);
+
+    if (containers.length === 1) {
+        return [{ id: containers[0].id }];
+    }
+
+    // Check container position relative to container that is holding the dragged block
+    let isBelow = 0;
+    const activeContainerId = active.id;
+    for (let i = 0; i < containers.length; i++) {
+        const container = containers[i];
+
+        isBelow = container.id === activeContainerId ? 1 : isBelow;
+
+        // Edge Cases below require different calculations.
+        if (i === 0) {
+            if (topOfDrag <= containers[i + isBelow].midY) {
+                return [{ id: container.id }];
+            }
+        } else if (i === containers.length - 1 && topOfDrag >= containers[i - 1].midY) {
+            return [{ id: container.id }];
+        } else if (
+            topOfDrag >= containers[i - 1].midY &&
+            topOfDrag <= containers[i + isBelow].midY
+        ) {
+            return [{ id: container.id }];
+        }
+    }
+
+    return [];
+};
