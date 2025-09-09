@@ -53,6 +53,8 @@ import { useUser } from '@/lib/providers/user.provider';
 
 import { DeleteConfirmDialog, TableControls, TableLoadingSkeleton } from './components';
 import { AddColumnDialog } from './components/AddColumnDialog';
+import { useGlideCopy } from './hooks/useGlideCopy';
+import { usePeopleOptions } from './hooks/usePeopleOptions';
 import {
     /*CellValue,*/
     EditableColumn,
@@ -294,11 +296,18 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
     }
 
     // Column actions for creating columns
-    const { createPropertyAndColumn, createColumnFromProperty } = useColumnActions({
-        orgId: String(orgId),
-        projectId: String(projectId),
-        documentId: String(documentId),
-    });
+    const { createPropertyAndColumn, createColumnFromProperty, appendPropertyOptions } =
+        useColumnActions({
+            orgId: String(orgId),
+            projectId: String(projectId),
+            documentId: String(documentId),
+        });
+
+    // Preload people options to inject into people columns
+    const { data: peopleNames = [] } = usePeopleOptions(
+        String(orgId) || undefined,
+        String(projectId) || undefined,
+    );
 
     // Normalize columns to use `title` instead of `header` if needed
     const normalizedColumns = useMemo(() => {
@@ -792,6 +801,30 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                         },
                     } as GridCell;
                 }
+                case 'people': {
+                    // Treat people like multi_select but options sourced from org/project members
+                    const values = Array.isArray(value)
+                        ? (value as string[])
+                        : value
+                          ? [String(value)]
+                          : [];
+
+                    // Reuse multi-select cell for rendering/editing
+                    const options = peopleNames.length > 0 ? peopleNames : columnOptions;
+
+                    return {
+                        kind: GridCellKind.Custom,
+                        allowOverlay: isEditMode,
+                        copyData: values.join(', '),
+                        data: {
+                            kind: 'multi-select-cell',
+                            values,
+                            options,
+                            allowCreation: true,
+                            allowDuplicates: false,
+                        },
+                    } as GridCell;
+                }
                 case 'select': {
                     const stringValue = typeof value === 'string' ? value : '';
                     if (!Array.isArray(column.options)) {
@@ -850,7 +883,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                             : typeof value === 'string' && value
                               ? new Date(value)
                               : null;
-                    const displayDate = dateVal ? dateVal.toISOString() : '';
+                    const displayDate = dateVal ? dateVal.toISOString().slice(0, 10) : '';
                     return {
                         kind: GridCellKind.Custom,
                         allowOverlay: isEditMode,
@@ -876,6 +909,9 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
         },
         [sortedData, localColumns, isEditMode],
     );
+
+    // Copy support: provide cells for the current selection so Ctrl/Cmd+C works
+    const { getCellsForSelection } = useGlideCopy(getCellContent);
 
     const onCellEdited = useCallback(
         async (cell: Item, newValue: GridCell) => {
@@ -999,6 +1035,33 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                         ...prev,
                         [rowId]: { ...(prev[rowId] ?? {}), [accessor]: values },
                     }));
+                    // If column carries a propertyId and allowCreation, persist new options
+                    const colDef = localColumns[colIndex] as any;
+                    const propertyId: string | undefined = colDef?.propertyId;
+                    const allowCreation: boolean = Boolean(data?.allowCreation);
+                    if (propertyId && allowCreation) {
+                        try {
+                            const unique = Array.from(new Set(values));
+                            // optimistic local update of options list
+                            setLocalColumns((prev) =>
+                                prev.map((c) =>
+                                    c.accessor === colDef.accessor
+                                        ? ({
+                                              ...c,
+                                              options: Array.from(
+                                                  new Set([
+                                                      ...(c.options || []),
+                                                      ...unique,
+                                                  ]),
+                                              ),
+                                          } as any)
+                                        : c,
+                                ),
+                            );
+                            // Persist to DB property options
+                            await appendPropertyOptions(propertyId, unique);
+                        } catch {}
+                    }
                 } else if (kind === 'date-picker-cell') {
                     const dateVal: Date | null = data?.date ?? null;
                     const iso = dateVal ? dateVal.toISOString() : '';
@@ -2210,6 +2273,67 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                         let processedValue: any = newValue;
 
                         switch (targetColumn.type) {
+                            case 'multi_select': {
+                                // For multi-select columns, split by comma and validate options
+                                const rawParts = newValue
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .filter((s) => s.length > 0);
+
+                                let validOptions: string[] = [];
+                                if (Array.isArray(targetColumn.options)) {
+                                    validOptions = targetColumn.options.map((opt) => {
+                                        if (typeof opt === 'string') return opt;
+                                        if (
+                                            typeof opt === 'object' &&
+                                            opt !== null &&
+                                            'label' in opt
+                                        ) {
+                                            return (opt as { label: string }).label;
+                                        }
+                                        return String(opt);
+                                    });
+                                }
+
+                                const filtered =
+                                    validOptions.length > 0
+                                        ? rawParts.filter((p) => validOptions.includes(p))
+                                        : rawParts;
+
+                                processedValue = filtered;
+                                console.debug(`Multi-select value parsed`, filtered);
+                                break;
+                            }
+                            case 'people': {
+                                // Split comma separated people names
+                                const rawParts = newValue
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .filter((s) => s.length > 0);
+
+                                let validOptions: string[] = [];
+                                if (Array.isArray(targetColumn.options)) {
+                                    validOptions = targetColumn.options.map((opt) => {
+                                        if (typeof opt === 'string') return opt;
+                                        if (
+                                            typeof opt === 'object' &&
+                                            opt !== null &&
+                                            'label' in opt
+                                        ) {
+                                            return (opt as { label: string }).label;
+                                        }
+                                        return String(opt);
+                                    });
+                                }
+
+                                const filtered =
+                                    validOptions.length > 0
+                                        ? rawParts.filter((p) => validOptions.includes(p))
+                                        : rawParts;
+
+                                processedValue = filtered;
+                                break;
+                            }
                             case 'select':
                                 console.debug(`Processing select column:`, {
                                     columnOptions: targetColumn.options,
@@ -2767,6 +2891,7 @@ export function GlideEditableTable<T extends DynamicRequirement = DynamicRequire
                             ]}
                             width={tableRef.current?.offsetWidth || undefined}
                             getCellContent={getCellContent}
+                            getCellsForSelection={getCellsForSelection}
                             onCellEdited={isEditMode ? onCellEdited : undefined}
                             onCellActivated={handleCellActivated}
                             onKeyDown={handleGridKeyDown}
