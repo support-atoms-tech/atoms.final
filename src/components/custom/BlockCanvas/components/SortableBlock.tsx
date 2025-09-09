@@ -22,14 +22,13 @@ export const SortableBlock: React.FC<BlockProps> = ({
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
         useSortable({
             id: block.id,
-            transition: {
-                duration: 200,
-                easing: 'cubic-bezier(0.2, 0, 0, 1)',
-            },
         });
 
+    // Removes scaling to prevent unequal sized block from stretching to fit
+    const adjustedTransform = transform ? { ...transform, scaleX: 1, scaleY: 1 } : null;
+
     const style = {
-        transform: CSS.Transform.toString(transform),
+        transform: isDragging ? CSS.Transform.toString(adjustedTransform) : undefined,
         transition,
         position: 'relative' as const,
         zIndex: isDragging ? 999 : 'auto',
@@ -46,8 +45,8 @@ export const SortableBlock: React.FC<BlockProps> = ({
                 'relative group bg-background w-full max-w-full min-w-0',
                 'rounded-lg',
                 'border border-transparent',
-                'transition-all duration-200 ease-out',
                 isDragging && [
+                    'opacity-50',
                     'shadow-lg shadow-accent/10',
                     'scale-[1.01]',
                     'cursor-grabbing',
