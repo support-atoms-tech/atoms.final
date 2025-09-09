@@ -3,7 +3,7 @@
 import {
     DndContext,
     DragEndEvent,
-    DragStartEvent,
+    DragOverEvent,
     KeyboardSensor,
     PointerSensor,
     closestCenter,
@@ -67,7 +67,8 @@ export function BlockCanvas({
         _userProfile: null,
     });
     const { reorderBlocks, setUseTanStackTables, setUseGlideTables } = useDocumentStore();
-    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+    const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
+    const [linePosition, setLinePosition] = useState<'top' | 'bottom' | ''>('');
     const { userProfile } = useAuth();
     const { currentOrganization } = useOrganization();
     const params = useParams();
@@ -243,14 +244,12 @@ export function BlockCanvas({
 
     const renderBlock = useCallback(
         (block: BlockWithRequirements) => {
-            const isSelected = block.id === selectedBlockId;
-
             return (
                 <SortableBlock
                     key={block.id}
                     block={block}
-                    _isSelected={isSelected}
-                    onSelect={() => setSelectedBlockId(block.id)}
+                    isOver={block.id === overId}
+                    linePosition={linePosition}
                     onUpdate={(content) =>
                         canPerformAction('editBlock') &&
                         handleUpdateBlock(block.id, content)
@@ -263,7 +262,8 @@ export function BlockCanvas({
             );
         },
         [
-            selectedBlockId,
+            overId,
+            linePosition,
             userProfile,
             canPerformAction,
             handleUpdateBlock,
@@ -276,11 +276,21 @@ export function BlockCanvas({
         return enhancedBlocks?.map(renderBlock) || [];
     }, [enhancedBlocks, renderBlock]);
 
-    const handleDragStart = (event: DragStartEvent) => {
-        setSelectedBlockId(event.active.id as string);
+    const handleDragOver = (event: DragOverEvent) => {
+        const { active, over } = event;
+        if (!over) {
+            return;
+        }
+        setOverId(over.id !== active.id ? over.id : null);
+        const oldIndex = enhancedBlocks.findIndex((block) => block.id === active.id);
+        const newIndex = enhancedBlocks.findIndex((block) => block.id === over.id);
+        setLinePosition(oldIndex > newIndex ? 'top' : 'bottom');
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
+        setOverId(null);
+        setLinePosition('');
+
         const { active, over } = event;
 
         if (!over || active.id === over.id || !enhancedBlocks) {
@@ -343,7 +353,7 @@ export function BlockCanvas({
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
-                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext

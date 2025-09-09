@@ -2,18 +2,20 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Trash2 } from 'lucide-react';
 import React from 'react';
 
 import { BlockProps } from '@/components/custom/BlockCanvas/types';
 import { cn } from '@/lib/utils';
+import { useDocumentStore } from '@/store/document.store';
 
 import { TableBlock } from './TableBlock';
 import { TextBlock } from './TextBlock';
 
 export const SortableBlock: React.FC<BlockProps> = ({
     block,
-    _isSelected,
-    onSelect,
+    isOver,
+    linePosition,
     onUpdate,
     onDelete,
     properties,
@@ -36,13 +38,16 @@ export const SortableBlock: React.FC<BlockProps> = ({
         transformOrigin: 'center',
     };
 
+    const { isEditMode } = useDocumentStore();
+
     return (
         <div
             ref={setNodeRef}
             style={style}
             {...attributes}
             className={cn(
-                'relative group bg-background w-full max-w-full min-w-0',
+                'relative group bg-background w-full max-w-full min-w-0 p-2',
+                'flex space-x-2',
                 'rounded-lg',
                 'border border-transparent',
                 isDragging && [
@@ -56,12 +61,32 @@ export const SortableBlock: React.FC<BlockProps> = ({
                 !isDragging && 'cursor-default',
             )}
         >
+            <div
+                className={`absolute top-0 left-1/2 w-1/2 h-[2px] bg-blue-500 -translate-x-1/2 ${isOver && linePosition === 'top' ? 'visible' : 'invisible'}`}
+            />
+            <div
+                className={`absolute bottom-0 left-1/2 w-1/2 h-[2px] bg-blue-500 -translate-x-1/2 ${isOver && linePosition === 'bottom' ? 'visible' : 'invisible'}`}
+            />
+            {isEditMode && (
+                <div className="flex flex-col gap-2">
+                    <div {...listeners} className="cursor-grab active:cursor-grabbing">
+                        <GripVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                    </div>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete?.();
+                        }}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
             {block.type === 'text' && (
                 <TextBlock
                     block={block}
                     onUpdate={onUpdate}
-                    _isSelected={_isSelected}
-                    onSelect={onSelect}
                     onDelete={onDelete}
                     dragActivators={listeners}
                 />
@@ -70,8 +95,6 @@ export const SortableBlock: React.FC<BlockProps> = ({
                 <TableBlock
                     block={block}
                     onUpdate={onUpdate}
-                    _isSelected={_isSelected}
-                    onSelect={onSelect}
                     onDelete={onDelete}
                     properties={properties}
                     dragActivators={listeners}

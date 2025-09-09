@@ -9,7 +9,6 @@ import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { GripVertical, Trash2 } from 'lucide-react';
 import React from 'react';
 
 import { BlockProps } from '@/components/custom/BlockCanvas/types';
@@ -128,14 +127,7 @@ const customStyles = `
   }
 `;
 
-export const TextBlock: React.FC<BlockProps> = ({
-    block,
-    onUpdate,
-    _isSelected,
-    onSelect,
-    onDelete,
-    dragActivators,
-}) => {
+export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
     const content = block.content as { text?: string; format?: string };
     const [localContent, setLocalContent] = React.useState(content?.text || '<p></p>');
     const [showToolbar, setShowToolbar] = React.useState(false);
@@ -325,70 +317,46 @@ export const TextBlock: React.FC<BlockProps> = ({
     }, [content?.text, editor, isEditMode]);
 
     return (
-        <div className="group flex items-start gap-2">
-            {isEditMode && (
-                <div className="flex flex-col gap-2 -mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div
-                        {...dragActivators}
-                        className="cursor-grab active:cursor-grabbing"
-                    >
-                        <GripVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
-                    </div>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete?.();
-                        }}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
-                </div>
-            )}
-            <div
-                ref={editorRef}
-                className={cn('relative w-full')}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect?.(block.id);
-                    if (isEditMode && editor && editor.state.selection.empty) {
-                        editor.commands.focus();
-                    }
-                }}
-            >
-                {isEditMode && showToolbar && (
-                    <div
-                        className="absolute z-50 format-toolbar"
-                        style={{
-                            top: `${toolbarPosition.top}px`,
-                            left: `${toolbarPosition.left}px`,
-                            pointerEvents: 'none', // Allow clicks to pass through the container
-                        }}
-                    >
-                        <Toolbar
-                            editor={editor}
-                            className="bg-background/95 backdrop-blur-sm rounded-lg shadow-lg border border-border p-1 transform -translate-y-full transition-all duration-200 pointer-events-auto" // Re-enable pointer events just for the toolbar itself
-                        />
-                    </div>
-                )}
-                <style>{customStyles}</style>
-                <div className="relative min-h-[1.5em]">
-                    {/* Show placeholder for empty text blocks regardless of edit mode */}
-                    {(!localContent ||
-                        localContent === '' ||
-                        localContent === '<p></p>') && (
-                        <div className="empty-editor-placeholder">Enter text here...</div>
-                    )}
-                    <EditorContent
+        <div
+            ref={editorRef}
+            className={cn('relative w-full')}
+            onClick={(e) => {
+                e.stopPropagation();
+                if (isEditMode && editor && editor.state.selection.empty) {
+                    editor.commands.focus();
+                }
+            }}
+        >
+            {isEditMode && showToolbar && (
+                <div
+                    className="absolute z-50 format-toolbar"
+                    style={{
+                        top: `${toolbarPosition.top}px`,
+                        left: `${toolbarPosition.left}px`,
+                        pointerEvents: 'none', // Allow clicks to pass through the container
+                    }}
+                >
+                    <Toolbar
                         editor={editor}
-                        className="prose prose-sm dark:prose-invert max-w-none w-full focus:outline-none"
-                        onClick={() => {
-                            if (editor?.state.selection.empty) {
-                                setShowToolbar(false);
-                            }
-                        }}
+                        className="bg-background/95 backdrop-blur-sm rounded-lg shadow-lg border border-border p-1 transform -translate-y-full transition-all duration-200 pointer-events-auto" // Re-enable pointer events just for the toolbar itself
                     />
                 </div>
+            )}
+            <style>{customStyles}</style>
+            <div className="relative min-h-[1.5em]">
+                {/* Show placeholder for empty text blocks regardless of edit mode */}
+                {(!localContent || localContent === '' || localContent === '<p></p>') && (
+                    <div className="empty-editor-placeholder">Enter text here...</div>
+                )}
+                <EditorContent
+                    editor={editor}
+                    className="prose prose-sm dark:prose-invert max-w-none w-full focus:outline-none"
+                    onClick={() => {
+                        if (editor?.state.selection.empty) {
+                            setShowToolbar(false);
+                        }
+                    }}
+                />
             </div>
         </div>
     );

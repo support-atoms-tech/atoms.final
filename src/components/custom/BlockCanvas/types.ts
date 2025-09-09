@@ -58,8 +58,8 @@ export enum BlockType {
 
 export interface BlockProps {
     block: BlockWithRequirements;
-    _isSelected?: boolean;
-    onSelect?: (blockId: string) => void;
+    isOver?: boolean;
+    linePosition?: 'top' | 'bottom' | '';
     onUpdate: (updates: Partial<BlockWithRequirements>) => void;
     onDelete?: () => void;
     properties?: Property[];

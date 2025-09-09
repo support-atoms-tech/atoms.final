@@ -1,6 +1,6 @@
 'use client';
 
-import { GripVertical, MoreVertical, Plus } from 'lucide-react';
+import { MoreVertical, Plus } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 
@@ -75,7 +75,6 @@ const TableHeader: React.FC<{
     onAddColumn,
     onAddColumnFromProperty,
     onDelete,
-    dragActivators,
     orgId,
     projectId,
     documentId,
@@ -111,41 +110,28 @@ const TableHeader: React.FC<{
     return (
         <>
             <div className="flex items-center justify-between px-4 py-2 border-b bg-background">
-                <div className="flex items-center gap-2">
-                    {dragActivators && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 cursor-grab active:cursor-grabbing"
-                            {...dragActivators}
-                        >
-                            <GripVertical className="h-4 w-4" />
-                            <span className="sr-only">Drag to reorder</span>
-                        </Button>
-                    )}
-                    {isEditMode && isEditing ? (
-                        <Input
-                            value={inputValue}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                setInputValue(e.target.value)
-                            }
-                            onBlur={handleBlur}
-                            onKeyDown={handleKeyDown}
-                            className="max-w-[300px] h-9"
-                            autoFocus
-                        />
-                    ) : (
-                        <h3
-                            className={cn(
-                                'text-lg font-semibold',
-                                isEditMode && 'cursor-pointer',
-                            )}
-                            onClick={() => isEditMode && setIsEditing(true)}
-                        >
-                            {name}
-                        </h3>
-                    )}
-                </div>
+                {isEditMode && isEditing ? (
+                    <Input
+                        value={inputValue}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setInputValue(e.target.value)
+                        }
+                        onBlur={handleBlur}
+                        onKeyDown={handleKeyDown}
+                        className="max-w-[300px] h-9"
+                        autoFocus
+                    />
+                ) : (
+                    <h3
+                        className={cn(
+                            'text-lg font-semibold',
+                            isEditMode && 'cursor-pointer',
+                        )}
+                        onClick={() => isEditMode && setIsEditing(true)}
+                    >
+                        {name}
+                    </h3>
+                )}
                 <div className="flex items-center gap-2">
                     {isEditMode && (
                         <>
