@@ -3,6 +3,7 @@ import * as React from 'react';
 import { memo, useEffect, useMemo, useRef } from 'react';
 
 import {
+    BaseRow,
     CellValue,
     EditableColumn,
 } from '@/components/custom/BlockCanvas/components/EditableTable/types';
@@ -310,21 +311,24 @@ const MultiSelectCellWrapper = memo(
 );
 MultiSelectCellWrapper.displayName = 'MultiSelectCellWrapper';
 
-interface TanStackCellRendererProps<
-    T extends Record<string, CellValue> & { id: string },
-> {
+interface TanStackCellRendererProps<T extends BaseRow> {
     cell: Cell<T, unknown>;
     isEditing: boolean;
     onSave: (value: CellValue) => void;
     onBlur?: () => void;
     isSelected?: boolean;
-    value: CellValue;
+    value: CellValue | undefined;
 }
 
 // Main cell renderer component for TanStack Table
-function TanStackCellRendererComponent<
-    T extends Record<string, CellValue> & { id: string },
->({ cell, isEditing, onSave, onBlur, isSelected, value }: TanStackCellRendererProps<T>) {
+function TanStackCellRendererComponent<T extends BaseRow>({
+    cell,
+    isEditing,
+    onSave,
+    onBlur,
+    isSelected,
+    value,
+}: TanStackCellRendererProps<T>) {
     const column = cell.column.columnDef as unknown as EditableColumn<T>;
 
     // Memoize string and array values
@@ -382,7 +386,7 @@ function TanStackCellRendererComponent<
     // Simplified memoized cell content with fewer dependencies
     const cellContent = useMemo(() => {
         if (!shouldShowEditComponent) {
-            return <DisplayCell value={value} />;
+            return <DisplayCell value={(value ?? null) as CellValue} />;
         }
 
         switch (column.type) {

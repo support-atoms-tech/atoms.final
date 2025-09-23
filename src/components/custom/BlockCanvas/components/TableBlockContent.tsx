@@ -5,12 +5,15 @@ import {
     GlideEditableTable,
     TanStackEditableTable,
 } from '@/components/custom/BlockCanvas/components/EditableTable';
+import { RequirementAnalysisSidebar } from '@/components/custom/BlockCanvas/components/EditableTable/components/RequirementAnalysisSidebar';
 import {
     EditableColumn,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     EditableColumnType,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     PropertyConfig,
+    RowDetailPanelRenderer,
+    TableDataAdapter,
 } from '@/components/custom/BlockCanvas/components/EditableTable/types';
 import { DynamicRequirement } from '@/components/custom/BlockCanvas/hooks/useRequirementActions';
 import { BlockTableMetadata } from '@/components/custom/BlockCanvas/types';
@@ -34,6 +37,9 @@ interface TableBlockContentProps {
     useGlideTables?: boolean;
     blockId?: string;
     tableMetadata?: BlockTableMetadata | null;
+    rowDetailPanel?: RowDetailPanelRenderer<DynamicRequirement>;
+    dataAdapter?: TableDataAdapter<DynamicRequirement>;
+    rowMetadataKey?: 'requirements' | 'rows';
 }
 
 export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
@@ -50,6 +56,9 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
         useGlideTables = false,
         blockId,
         tableMetadata,
+        rowDetailPanel,
+        dataAdapter,
+        rowMetadataKey,
     }) => {
         // Get global setting from doc store as fallback
         const {
@@ -98,6 +107,11 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
             await refreshRequirements();
         }, [refreshRequirements]);
 
+        // Default to requirement analysis sidebar if none provided
+        const EffectiveRowDetailPanel =
+            rowDetailPanel ??
+            (RequirementAnalysisSidebar as unknown as RowDetailPanelRenderer<DynamicRequirement>);
+
         // Memoize the table props to prevent unnecessary re-renders
         const tableProps = useMemo(
             () => ({
@@ -113,6 +127,9 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
                 blockId,
                 tableMetadata,
                 onDeleteColumn,
+                rowDetailPanel: EffectiveRowDetailPanel,
+                dataAdapter,
+                rowMetadataKey,
             }),
             [
                 dynamicRequirements,
@@ -125,6 +142,9 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
                 blockId,
                 tableMetadata,
                 onDeleteColumn,
+                EffectiveRowDetailPanel,
+                dataAdapter,
+                rowMetadataKey,
             ],
         );
 
