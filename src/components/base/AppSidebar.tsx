@@ -6,20 +6,25 @@ import {
     GitBranch,
     Hammer,
     Home,
-    LayoutDashboard,
     ListTree,
-    LucideIcon,
+    Pin,
     Sparkles,
     Table,
     User,
+    Users,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import React, { useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useEffect } from 'react';
 
-import { setCookie } from '@/app/(protected)/org/actions';
+import { useAgentStore } from '@/components/custom/AgentChat/hooks/useAgentStore';
 import { Button } from '@/components/ui/button';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -32,135 +37,106 @@ import {
     SidebarFooter,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarGroupLabel,
+    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarMenuSub,
+    SidebarMenuSubAction,
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { useUpdateProfile } from '@/hooks/mutations/useProfileMutation';
+import { useOrganizationsByMembership } from '@/hooks/queries/useOrganization';
+import { useProfile } from '@/hooks/queries/useProfile';
 import { useSignOut } from '@/hooks/useSignOut';
 import { useOrganization } from '@/lib/providers/organization.provider';
 import { useUser } from '@/lib/providers/user.provider';
-import { supabase } from '@/lib/supabase/supabaseBrowser';
-import { OrganizationType } from '@/types';
-
-interface MenuItem {
-    title: string;
-    url: string;
-    icon: LucideIcon;
-}
-
-// Menu items with app router paths
-const _items: MenuItem[] = [
-    {
-        title: 'Home',
-        url: '/home',
-        icon: Home,
-    },
-];
+import { Organization, OrganizationType } from '@/types';
 
 function AppSidebar() {
-    // State for traceability dropdown
-    const [traceOpen, setTraceOpen] = React.useState(false);
-    // Get traceView from URL
-    let traceView = '';
-    if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        traceView = params.get('view') || '';
-    }
     const router = useRouter();
-    const pathname = usePathname();
     const { signOut, isLoading: isSigningOut } = useSignOut();
-    const { user, profile } = useUser();
-    const { organizations, currentOrganization } = useOrganization();
+    const { user } = useUser();
+    const { data: profile } = useProfile(user?.id || '');
+    const { mutate: updateProfile } = useUpdateProfile();
+    const { data: organizationsQuery } = useOrganizationsByMembership(user?.id || '');
+    const organizations: Organization[] = organizationsQuery ?? [];
+    const { setCurrentOrganization } = useOrganization();
+    const { setUserContext } = useAgentStore();
 
-    // Find personal and enterprise organizations from context
-    const personalOrg = organizations.find(
+    const personalOrganization = organizations.find(
         (org) => org.type === OrganizationType.personal,
     );
-    const enterpriseOrg = organizations.find(
-        (org) => org.type === OrganizationType.enterprise,
+
+    const filteredOrganizations = organizations.filter(
+        (org) => org.id !== personalOrganization?.id,
+    );
+    const sortedOrganizations = [
+        ...filteredOrganizations.filter(
+            (org) => org.id === profile?.pinned_organization_id,
+        ),
+        ...filteredOrganizations.filter(
+            (org) => org.id !== profile?.pinned_organization_id,
+        ),
+    ];
+
+    // States for collapsibles
+    const [isTraceOpen, setIsTraceOpen] = React.useState<boolean>(false);
+    const [isOrganizationOpen, setIsOrganizationOpen] = React.useState<boolean>(true);
+
+    const ORGS_PER_CLICK = 5;
+    const [organizationLimit, setOrgLimit] = React.useState<number>(ORGS_PER_CLICK);
+    const [isShowMore, setIsShowMore] = React.useState<boolean>(
+        filteredOrganizations.length < organizationLimit + 1,
     );
 
-    // Define primaryEnterpriseOrg based on enterpriseOrg
-    const primaryEnterpriseOrg = enterpriseOrg;
-
-    const _isOrgPage = pathname?.startsWith('/org') ?? false;
-    const _isPlaygroundPage = currentOrganization?.type === OrganizationType.personal;
-    const _isUserDashboardPage = pathname?.startsWith('/home/user') ?? false;
-
-    // Check if user has only a personal org and no other memberships
-    const _hasOnlyPersonalOrg =
-        personalOrg &&
-        (!organizations ||
-            organizations.length === 0 ||
-            (organizations.length === 1 && organizations[0].id === personalOrg.id));
-
-    const navigateToPlayground = useCallback(() => {
-        if (personalOrg) {
-            console.log('Navigating to playground:', personalOrg.id);
-            // Only set preferred_org_id if there's no enterprise org
-            if (!enterpriseOrg) {
-                setCookie('preferred_org_id', personalOrg.id);
-            }
-            router.push(`/org/${personalOrg.id}`);
-        } else {
-            console.log('No personal organization found');
+    const navigateToPlayground = () => {
+        if (!personalOrganization) {
+            return console.error('No personal organization found');
         }
-    }, [personalOrg, router, enterpriseOrg]);
+        console.log('Navigating to Playground:');
+        router.push(`/org/${personalOrganization.id}`);
+    };
+
+    const navigateToOrganization = (org: Organization) => {
+        console.log('Navigating to Organization:');
+        setCurrentOrganization(org);
+        router.push(`/org/${org.id}`);
+    };
 
     const navigateToAdmin = () => {
         console.log('Navigating to admin page:');
         router.push('/admin');
     };
 
-    const navigateToPinnedOrganization = useCallback(async () => {
+    // Handle pinning an organization
+    const handlePinOrganization = async (orgId: string) => {
         try {
-            // Fetch the user's profile to get pinned_organization_id and personal_organization_id
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('pinned_organization_id, personal_organization_id')
-                .eq('id', user?.id || '')
-                .single();
+            const newPinnedOrganizationId =
+                profile?.pinned_organization_id === orgId ? null : orgId;
 
-            if (error) {
-                console.error('Error fetching user profile:', error);
-                return;
-            }
+            // Update Agent Store context
+            setUserContext({
+                orgId: newPinnedOrganizationId || undefined,
+                pinnedOrganizationId: newPinnedOrganizationId || undefined,
+            });
 
-            if (data) {
-                let targetOrgId = data.pinned_organization_id;
-
-                if (!targetOrgId && data.personal_organization_id) {
-                    // If no pinned organization, set it to personal_organization_id by default
-                    const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({
-                            pinned_organization_id: data.personal_organization_id,
-                        })
-                        .eq('id', user?.id || '');
-
-                    if (!updateError) {
-                        targetOrgId = data.personal_organization_id;
-                    } else {
-                        console.error('Error updating pinned organization:', updateError);
-                        return;
-                    }
-                }
-
-                if (targetOrgId) {
-                    console.log('Navigating to pinned organization:', targetOrgId);
-                    router.push(`/org/${targetOrgId}`);
-                } else {
-                    console.log('No pinned or personal organization found');
-                }
-            }
+            updateProfile({
+                id: user?.id || '',
+                pinned_organization_id: newPinnedOrganizationId || null,
+            });
         } catch (err) {
             console.error('Unexpected error:', err);
         }
-    }, [user?.id, router]);
+    };
+
+    const handleClickShowMore = () => {
+        setIsShowMore(
+            filteredOrganizations.length < organizationLimit + ORGS_PER_CLICK + 1,
+        );
+        setOrgLimit(organizationLimit + ORGS_PER_CLICK);
+    };
 
     useEffect(() => {
         const handleResize = () => {
@@ -180,20 +156,20 @@ function AppSidebar() {
 
     return (
         <SidebarContainer variant="sidebar" collapsible="offcanvas">
+            <SidebarHeader className="flex items-start gap-2 px-1 ml-4 pt-4 pb-0">
+                <Link href="/" className="flex items-center gap-2">
+                    <Image
+                        src="/atom.png"
+                        alt="Atoms logo"
+                        width={32}
+                        height={32}
+                        className="object-contain dark:invert"
+                    />
+                    <span className="font-bold">ATOMS</span>
+                </Link>
+            </SidebarHeader>
             <SidebarContent className="px-3 py-2">
                 <SidebarGroup>
-                    <SidebarGroupLabel className="flex items-center gap-2 px-1 mb-4">
-                        <Link href="/" className="flex items-center gap-2">
-                            <Image
-                                src="/atom.png"
-                                alt="Atoms logo"
-                                width={32}
-                                height={32}
-                                className="object-contain dark:invert"
-                            />
-                            <span className="font-semibold text-base">ATOMS</span>
-                        </Link>
-                    </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem className="mb-0.5">
@@ -213,24 +189,7 @@ function AppSidebar() {
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
 
-                            {primaryEnterpriseOrg && (
-                                <SidebarMenuItem className="mb-0.5">
-                                    <SidebarMenuButton asChild>
-                                        <Button
-                                            variant="ghost"
-                                            className="w-full justify-start"
-                                            onClick={navigateToPinnedOrganization}
-                                        >
-                                            <LayoutDashboard className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                                            <span className="text-xs font-medium">
-                                                Dashboard
-                                            </span>
-                                        </Button>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            )}
-
-                            {personalOrg && (
+                            {personalOrganization && (
                                 <SidebarMenuItem className="mb-0.5">
                                     <SidebarMenuButton asChild>
                                         <Button
@@ -246,6 +205,184 @@ function AppSidebar() {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
+
+                            {/* Organizations Collapsible */}
+                            <Collapsible
+                                open={isOrganizationOpen}
+                                onOpenChange={setIsOrganizationOpen}
+                            >
+                                <SidebarMenuItem className="mb-0.5">
+                                    <CollapsibleTrigger asChild className="mb-0.5">
+                                        <SidebarMenuButton asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className="w-full justify-start"
+                                            >
+                                                <Users className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                <span className="text-xs font-medium">
+                                                    Organizations
+                                                </span>
+                                                <ChevronDown
+                                                    className={`ml-auto h-3 w-3 transition-transform ${isOrganizationOpen ? '-rotate-180' : ''}`}
+                                                />
+                                            </Button>
+                                        </SidebarMenuButton>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            {sortedOrganizations
+                                                .slice(0, organizationLimit)
+                                                .map((org: Organization) => (
+                                                    <SidebarMenuSubItem
+                                                        key={org.id}
+                                                        className="mb-0.5"
+                                                    >
+                                                        <SidebarMenuSubButton
+                                                            asChild
+                                                            className="mr-5"
+                                                        >
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="w-full justify-start"
+                                                                onClick={() =>
+                                                                    navigateToOrganization(
+                                                                        org,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span className="text-xs font-medium truncate">
+                                                                    {org.name}
+                                                                </span>
+                                                            </Button>
+                                                        </SidebarMenuSubButton>
+                                                        <SidebarMenuSubAction
+                                                            onClick={() =>
+                                                                handlePinOrganization(
+                                                                    org.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Pin
+                                                                fill={`${org.id === profile?.pinned_organization_id ? 'hsl(var(--border))' : 'none'}`}
+                                                                stroke={`${org.id === profile?.pinned_organization_id ? 'hsl(var(--border))' : 'hsl(var(--muted-foreground))'}`}
+                                                                strokeWidth={2}
+                                                            />
+                                                        </SidebarMenuSubAction>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            {!isShowMore && (
+                                                <SidebarMenuSubItem className="mb-0.5">
+                                                    <SidebarMenuSubButton
+                                                        asChild
+                                                        className="mr-5"
+                                                    >
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="w-full justify-start"
+                                                            onClick={() =>
+                                                                handleClickShowMore()
+                                                            }
+                                                        >
+                                                            <span className="text-xs font-medium text-muted-foreground">
+                                                                Show More
+                                                            </span>
+                                                        </Button>
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                            )}
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
+
+                            {/* Traceability Collapsible */}
+                            <Collapsible open={isTraceOpen} onOpenChange={setIsTraceOpen}>
+                                <SidebarMenuItem className="mb-0.5">
+                                    <CollapsibleTrigger asChild className="mb-0.5">
+                                        <SidebarMenuButton asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className="w-full justify-start"
+                                            >
+                                                <GitBranch className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                <span className="text-xs font-medium">
+                                                    Traceability
+                                                </span>
+                                                <ChevronDown
+                                                    className={`ml-auto h-3 w-3 transition-transform ${isTraceOpen ? '-rotate-180' : ''}`}
+                                                />
+                                            </Button>
+                                        </SidebarMenuButton>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            <SidebarMenuSubItem className="mb-0.5">
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    className="mr-5"
+                                                >
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="w-full justify-start"
+                                                        onClick={() =>
+                                                            router.push(
+                                                                '/traceability?view=matrix',
+                                                            )
+                                                        }
+                                                    >
+                                                        <Table className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                        <span className="text-xs font-medium">
+                                                            Matrix View
+                                                        </span>
+                                                    </Button>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+                                            <SidebarMenuSubItem className="mb-0.5">
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    className="mr-5"
+                                                >
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="w-full justify-start"
+                                                        onClick={() =>
+                                                            router.push(
+                                                                '/traceability?view=hierarchy',
+                                                            )
+                                                        }
+                                                    >
+                                                        <ListTree className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                        <span className="text-xs font-medium">
+                                                            Hierarchy View
+                                                        </span>
+                                                    </Button>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+                                            <SidebarMenuSubItem className="mb-0.5">
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    className="mr-5"
+                                                >
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="w-full justify-start"
+                                                        onClick={() =>
+                                                            router.push(
+                                                                '/traceability?view=test',
+                                                            )
+                                                        }
+                                                    >
+                                                        <FlaskConical className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                                        <span className="text-xs font-medium">
+                                                            Test Requirement
+                                                        </span>
+                                                    </Button>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
 
                             {profile?.job_title === 'admin' && (
                                 <SidebarMenuItem className="mb-0.5">
@@ -263,109 +400,6 @@ function AppSidebar() {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
-
-                            {/* Create Organization button (only if user has only personal org) */}
-                            {/* {!isLoading && hasOnlyPersonalOrg && (
-                                <SidebarMenuItem className="mb-1">
-                                    <SidebarMenuButton asChild>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full text-xs"
-                                            onClick={handleCreateOrganization}
-                                        >
-                                            <Building className="h-3.5 w-3.5 mr-2" />
-                                            <span>Create Organization</span>
-                                        </Button>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            )} */}
-
-                            {/* Create New button (only on org pages) */}
-                            {/* {isOrgPage && (
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full relative z-20 text-xs"
-                                            onClick={handleCreateNew}
-                                        >
-                                            <Plus className="h-3.5 w-3.5 mr-2" />
-                                            <span>Create New</span>
-                                        </Button>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            )} */}
-
-                            {/* <CreatePanel
-                                isOpen={isCreatePanelOpen}
-                                onClose={() => setIsCreatePanelOpen(false)}
-                                showTabs={createPanelType}
-                                initialTab={createPanelType}
-                            /> */}
-                            {/* Traceability Dropdown */}
-                            <SidebarMenuItem className="mb-0.5">
-                                <SidebarMenuButton asChild>
-                                    <Button
-                                        variant="ghost"
-                                        className="w-full justify-start"
-                                        onClick={() => setTraceOpen((open) => !open)}
-                                    >
-                                        <GitBranch className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                                        <span className="text-xs font-medium">
-                                            Traceability
-                                        </span>
-                                        <ChevronDown
-                                            className={`ml-auto h-3 w-3 transition-transform ${traceOpen ? 'rotate-180' : ''}`}
-                                        />
-                                    </Button>
-                                </SidebarMenuButton>
-                                {traceOpen && (
-                                    <SidebarMenuSub>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={
-                                                    pathname === '/traceability' &&
-                                                    (!traceView || traceView === 'matrix')
-                                                }
-                                            >
-                                                <Link href="/traceability?view=matrix">
-                                                    <Table className="h-3.5 w-3.5" />
-                                                    <span>Matrix View</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={
-                                                    pathname === '/traceability' &&
-                                                    traceView === 'hierarchy'
-                                                }
-                                            >
-                                                <Link href="/traceability?view=hierarchy">
-                                                    <ListTree className="h-3.5 w-3.5" />
-                                                    <span>Hierarchy View</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={
-                                                    pathname === '/traceability' &&
-                                                    traceView === 'test'
-                                                }
-                                            >
-                                                <Link href="/traceability?view=test">
-                                                    <FlaskConical className="h-3.5 w-3.5" />
-                                                    <span>Test Requirement</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                    </SidebarMenuSub>
-                                )}
-                            </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
@@ -375,8 +409,8 @@ function AppSidebar() {
                     <SidebarMenuItem>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <SidebarMenuButton className="w-full">
-                                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary transition-colors">
+                                <SidebarMenuButton>
+                                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md">
                                         <User className="h-3.5 w-3.5 text-muted-foreground" />
                                         <span className="text-xs font-medium">
                                             {profile?.full_name || user?.email}
