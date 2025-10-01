@@ -33,8 +33,7 @@ export async function login(formData: FormData) {
         if (externalAuthId) {
             try {
                 const mcpBase =
-                    process.env.NEXT_PUBLIC_MCP_BASE_URL ||
-                    'https://atomcp.kooshapari.com';
+                    process.env.NEXT_PUBLIC_MCP_BASE_URL || 'https://mcp.atoms.tech';
                 const supaToken = authData.session?.access_token;
                 if (!supaToken) {
                     return { success: false, error: 'No Supabase session token found' };
