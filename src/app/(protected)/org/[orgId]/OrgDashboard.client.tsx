@@ -103,6 +103,10 @@ export default function OrgDashboard(props: OrgDashboardProps) {
     const [isEditingProject, setIsEditingProject] = useState<string | null>(null);
     const [editingProjectName, setEditingProjectName] = useState('');
 
+    // State for organization name editing
+    const [isEditingOrgName, setIsEditingOrgName] = useState(false);
+    const [editingOrgName, setEditingOrgName] = useState('');
+
     const { data: documents } = useQuery({
         queryKey: ['documents', selectedProjectId],
         queryFn: async () => {
@@ -258,6 +262,42 @@ export default function OrgDashboard(props: OrgDashboardProps) {
         setEditingProjectName('');
     };
 
+    // Organization name editing handlers
+    const handleEditOrgName = () => {
+        setIsEditingOrgName(true);
+        setEditingOrgName(props.organization?.name || '');
+    };
+
+    const handleSaveOrgNameEdit = async () => {
+        if (!editingOrgName.trim()) return;
+
+        try {
+            // TODO: Add actual API call to update organization name
+            // For now, just show success message
+            setIsEditingOrgName(false);
+            setEditingOrgName('');
+
+            toast({
+                variant: 'default',
+                title: 'Success',
+                description:
+                    'Organization name updated successfully (UI only - functionality not implemented)',
+            });
+        } catch (error) {
+            console.error('Error updating organization name:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Failed to update organization name. Please try again.',
+            });
+        }
+    };
+
+    const handleCancelOrgNameEdit = () => {
+        setIsEditingOrgName(false);
+        setEditingOrgName('');
+    };
+
     const handleDeleteProject = async (project: Project) => {
         if (!user?.id) return;
 
@@ -371,13 +411,72 @@ export default function OrgDashboard(props: OrgDashboardProps) {
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
-                                            <div className="flex justify-between">
+                                            <div className="flex justify-between items-center">
                                                 <span className="text-muted-foreground">
                                                     Name:
                                                 </span>
-                                                <span className="font-medium">
-                                                    {props.organization?.name}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    {isEditingOrgName ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                value={editingOrgName}
+                                                                onChange={(e) =>
+                                                                    setEditingOrgName(
+                                                                        e.target.value,
+                                                                    )
+                                                                }
+                                                                onKeyDown={(e) => {
+                                                                    if (
+                                                                        e.key === 'Enter'
+                                                                    ) {
+                                                                        handleSaveOrgNameEdit();
+                                                                    } else if (
+                                                                        e.key === 'Escape'
+                                                                    ) {
+                                                                        handleCancelOrgNameEdit();
+                                                                    }
+                                                                }}
+                                                                className="font-medium text-sm w-48"
+                                                                autoFocus
+                                                            />
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={
+                                                                    handleSaveOrgNameEdit
+                                                                }
+                                                                className="text-xs h-7"
+                                                            >
+                                                                Save
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={
+                                                                    handleCancelOrgNameEdit
+                                                                }
+                                                                className="text-xs h-7"
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 group">
+                                                            <span className="font-medium">
+                                                                {props.organization?.name}
+                                                            </span>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={
+                                                                    handleEditOrgName
+                                                                }
+                                                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <Pencil className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">
