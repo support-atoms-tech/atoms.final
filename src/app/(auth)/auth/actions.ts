@@ -29,22 +29,53 @@ export async function login(formData: FormData) {
             };
         }
 
-        // If this login was initiated by AuthKit (Standalone Connect), redirect back to AuthKit
+        // If this login was initiated by AuthKit (Standalone Connect), complete the flow
         if (externalAuthId) {
             try {
-                // AuthKit Standalone Connect: just redirect back to AuthKit with the external_auth_id
-                // AuthKit will handle the rest of the OAuth flow
-                const authkitDomain =
-                    process.env.NEXT_PUBLIC_AUTHKIT_DOMAIN ||
-                    'https://decent-hymn-17-staging.authkit.app';
+                // Call WorkOS API to complete AuthKit OAuth
+                const workosApiKey = process.env.WORKOS_API_KEY;
+                if (!workosApiKey) {
+                    return { success: false, error: 'WORKOS_API_KEY not configured' };
+                }
 
-                // Redirect to AuthKit's complete endpoint
-                // AuthKit expects the browser to be redirected here after successful authentication
-                const redirectUrl = `${authkitDomain}/oauth2/complete?external_auth_id=${externalAuthId}`;
+                const resp = await fetch(
+                    'https://api.workos.com/authkit/oauth2/complete',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${workosApiKey}`,
+                        },
+                        body: JSON.stringify({
+                            external_auth_id: externalAuthId,
+                            user: {
+                                id: authData.user.id,
+                                email: authData.user.email,
+                                first_name: authData.user.user_metadata?.first_name,
+                                last_name: authData.user.user_metadata?.last_name,
+                            },
+                        }),
+                    },
+                );
 
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    return {
+                        success: false,
+                        error: `WorkOS API error (${resp.status}): ${errText}`,
+                    };
+                }
+
+                const { redirect_uri } = await resp.json();
+
+                if (!redirect_uri) {
+                    return { success: false, error: 'No redirect_uri from WorkOS' };
+                }
+
+                // Return the redirect URI for the client to navigate to
                 return {
                     success: true,
-                    authkitRedirect: redirectUrl,
+                    authkitRedirect: redirect_uri,
                 };
             } catch (e: unknown) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
