@@ -47,15 +47,17 @@ function LoginForm() {
             try {
                 const result = await login(formData);
 
+                // Handle AuthKit redirect for Standalone Connect
                 if (
                     result.success &&
-                    'mcpRedirectUri' in result &&
-                    result.mcpRedirectUri
+                    'authkitRedirect' in result &&
+                    result.authkitRedirect
                 ) {
-                    window.location.href = result.mcpRedirectUri as string;
+                    window.location.href = result.authkitRedirect as string;
                     return;
                 }
 
+                // Handle normal login redirect
                 if (result.success && result.redirectTo) {
                     router.push(result.redirectTo);
                 } else {

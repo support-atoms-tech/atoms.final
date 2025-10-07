@@ -29,51 +29,22 @@ export async function login(formData: FormData) {
             };
         }
 
-        // If this login was initiated by AuthKit (Standalone Connect), complete the flow
+        // If this login was initiated by AuthKit (Standalone Connect), redirect back to AuthKit
         if (externalAuthId) {
             try {
-                const mcpBase =
-                    process.env.NEXT_PUBLIC_MCP_BASE_URL || 'https://mcp.atoms.tech';
-                const supaToken = authData.session?.access_token;
-                if (!supaToken) {
-                    return { success: false, error: 'No Supabase session token found' };
-                }
-                const resp = await fetch(`${mcpBase}/auth/complete`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${supaToken}`,
-                    },
-                    body: JSON.stringify({
-                        external_auth_id: externalAuthId,
-                    }),
-                    // We want to capture the redirect URI rather than following it server-side
-                    redirect: 'manual' as RequestRedirect,
-                });
+                // AuthKit Standalone Connect: just redirect back to AuthKit with the external_auth_id
+                // AuthKit will handle the rest of the OAuth flow
+                const authkitDomain =
+                    process.env.NEXT_PUBLIC_AUTHKIT_DOMAIN ||
+                    'https://decent-hymn-17-staging.authkit.app';
 
-                // MCP server returns JSON with redirect_uri
-                if (resp.ok) {
-                    const result = await resp.json();
-                    if (result.success && result.redirect_uri) {
-                        return { success: true, mcpRedirectUri: result.redirect_uri };
-                    }
-                    return {
-                        success: false,
-                        error: result.error || 'No redirect_uri in MCP response',
-                    };
-                }
+                // Redirect to AuthKit's complete endpoint
+                // AuthKit expects the browser to be redirected here after successful authentication
+                const redirectUrl = `${authkitDomain}/oauth2/complete?external_auth_id=${externalAuthId}`;
 
-                // Error response
-                let errText: string | undefined;
-                try {
-                    const errData = await resp.json();
-                    errText = errData.error || JSON.stringify(errData);
-                } catch {
-                    errText = await resp.text().catch(() => '');
-                }
                 return {
-                    success: false,
-                    error: `Failed to complete AuthKit flow (${resp.status}). ${errText || ''}`.trim(),
+                    success: true,
+                    authkitRedirect: redirectUrl,
                 };
             } catch (e: unknown) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
