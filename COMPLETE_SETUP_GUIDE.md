@@ -69,16 +69,36 @@ cp .env.local.template .env.local
 # WORKOS_COOKIE_PASSWORD=YOUR_PASSWORD_HERE
 ```
 
-### Step 2: Test Locally
+### Step 2: Configure WorkOS Dashboard
+
+**Go to**: https://dashboard.workos.com/authentication → Sessions → JWT Template
+
+**Paste this template** (without `iat`, `exp`, or `sub` - WorkOS handles these automatically):
+
+```json
+{
+  "iss": "{{issuer}}",
+  "aud": "authenticated",
+  "role": "authenticated",
+  "email": "{{user.email}}",
+  "email_verified": {{user.email_verified}},
+  "name": "{{user.first_name}} {{user.last_name}}",
+  "given_name": "{{user.first_name}}",
+  "family_name": "{{user.last_name}}",
+  "picture": "{{user.profile_picture_url}}",
+  "user_role": "member"
+}
+```
+
+### Step 3: Test Locally & Deploy
 
 ```bash
 bun dev
-# Visit http://localhost:3000/auth/login
+# Visit http://localhost:3000/login
+
+# When ready, push to main for production deployment
+git push origin main
 ```
-
-### Step 3: Configure Vercel
-
-See **VERCEL_ENV_SETUP.md** for environment variables
 
 ---
 

@@ -50,33 +50,35 @@ Create a JWT Template with these claims to work with Supabase RLS:
 
 ```json
 {
-  "iss": "{{issuer}}",
-  "sub": "{{user.id}}",
+  "aud": "authenticated",
+  "role": "authenticated",
   "email": "{{user.email}}",
   "email_verified": {{user.email_verified}},
   "name": "{{user.first_name}} {{user.last_name}}",
   "given_name": "{{user.first_name}}",
   "family_name": "{{user.last_name}}",
   "picture": "{{user.profile_picture_url}}",
-  "aud": "authenticated",
-  "user_role": "{{user.role}}",
-  "role": "authenticated",
-  "iat": {{iat}},
-  "exp": {{exp}},
-  "sub": "{{user.id}}"
+  "user_role": "member"
 }
 ```
 
+**Note**: WorkOS automatically adds `iss`, `sub`, `iat`, and `exp`. Do not manually include them.
+
 ### Key Claims Explained
 
-| Claim            | Purpose                                     |
-| ---------------- | ------------------------------------------- |
-| `sub`            | User ID (matches Supabase auth.users.id)    |
-| `email`          | User email address                          |
-| `email_verified` | Email verification status                   |
-| `aud`            | Audience (set to "authenticated")           |
-| `role`           | Supabase RLS role (must be "authenticated") |
-| `user_role`      | Your app's role (from WorkOS)               |
+| Claim            | Purpose                                          | Handled By |
+| ---------------- | ------------------------------------------------ | ---------- |
+| `email`          | User email address                               | Include    |
+| `email_verified` | Email verification status                        | Include    |
+| `aud`            | Audience (set to "authenticated")                | Include    |
+| `role`           | Supabase RLS role (must be "authenticated")      | Include    |
+| `user_role`      | Your app's role (from WorkOS)                    | Include    |
+| `sub`            | User ID (matches Supabase auth.users.id)         | WorkOS     |
+| `iss`            | Issuer URL                                       | WorkOS     |
+| `iat`            | Issued at timestamp                              | WorkOS     |
+| `exp`            | Expiration timestamp                             | WorkOS     |
+
+**Note**: Do NOT manually add `sub`, `iss`, `iat`, or `exp` - WorkOS automatically includes these.
 
 ---
 
