@@ -1,16 +1,6 @@
 import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
-import { type NextRequest } from 'next/server';
 
-import { updateSession } from '@/lib/supabase/middleware';
-
-export const middleware = authkitMiddleware(
-    async (request: NextRequest) => {
-        return await updateSession(request);
-    },
-    {
-        redirectUri: process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI,
-    },
-);
+export const middleware = authkitMiddleware();
 
 export const config = {
     matcher: [

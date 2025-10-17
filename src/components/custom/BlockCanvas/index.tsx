@@ -61,7 +61,7 @@ export function BlockCanvas({
         error,
         setDocument,
         blocks,
-        _hydrateBlockRelations,
+        hydrateBlockRelations: _hydrateBlockRelations,
         refetchDocument,
     } = useDocumentRealtime({
         documentId,

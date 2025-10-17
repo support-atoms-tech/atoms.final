@@ -3,9 +3,7 @@
 import { SiGithub } from '@icons-pack/react-simple-icons';
 import { AlertCircle, Loader2, Mail } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import type { FormEvent } from 'react';
-import { Suspense, useEffect, useState, useTransition } from 'react';
+import { Suspense, useState } from 'react';
 
 import { login } from '@/app/(auth)/auth/actions';
 import { Button } from '@/components/ui/button';
@@ -22,52 +20,38 @@ import { Separator } from '@/components/ui/separator';
 
 // Create a separate client component for the login form
 function LoginForm() {
-    const searchParams = useSearchParams();
-    const externalAuthId = searchParams.get('external_auth_id') || undefined;
-    const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
 
-    useEffect(() => {
-        router.prefetch('/home/user');
-        router.prefetch('/org/[orgId]');
-    }, [router]);
-
-    const handleSubmit = async (e: FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const formData = new FormData();
         formData.append('email', email);
         formData.append('password', password);
-        if (externalAuthId) {
-            formData.append('external_auth_id', externalAuthId);
+        setIsPending(true);
+        setError('');
+
+        try {
+            await login(formData);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+            setError(errorMessage);
+            setIsPending(false);
         }
-        startTransition(async () => {
-            try {
-                const result = await login(formData);
+    };
 
-                // Handle AuthKit redirect for Standalone Connect
-                if (
-                    result.success &&
-                    'authkitRedirect' in result &&
-                    result.authkitRedirect
-                ) {
-                    window.location.href = result.authkitRedirect as string;
-                    return;
-                }
-
-                // Handle normal login redirect
-                if (result.success && result.redirectTo) {
-                    router.push(result.redirectTo);
-                } else {
-                    setError(result.error || 'An unexpected error occurred');
-                }
-            } catch (error) {
-                console.error('Error logging in:', error);
-                setError('An unexpected error occurred');
-            }
-        });
+    const handleOAuthSignIn = async () => {
+        try {
+            setIsPending(true);
+            // On the client, we can only redirect to the sign-in URL
+            // The login server action will handle getting the URL
+            await login(new FormData());
+        } catch (err) {
+            console.error('OAuth sign-in error:', err);
+            setIsPending(false);
+        }
     };
 
     return (
@@ -100,7 +84,6 @@ function LoginForm() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    className=""
                                 />
                             </div>
                             <div className="space-y-2">
@@ -141,18 +124,16 @@ function LoginForm() {
                     <div className="grid grid-cols-2 gap-3">
                         <Button
                             variant="outline"
-                            onClick={() => {
-                                window.location.href = '/auth/google';
-                            }}
+                            onClick={handleOAuthSignIn}
+                            disabled={isPending}
                         >
                             <Mail className="mr-2 h-4 w-4" />
                             Google
                         </Button>
                         <Button
                             variant="outline"
-                            onClick={() => {
-                                window.location.href = '/auth/github';
-                            }}
+                            onClick={handleOAuthSignIn}
+                            disabled={isPending}
                         >
                             <SiGithub className="mr-2 h-4 w-4" />
                             GitHub

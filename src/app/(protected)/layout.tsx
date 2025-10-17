@@ -56,7 +56,10 @@ export default async function ProtectedLayout({
 
         return (
             <HydrationBoundary state={dehydrate(queryClient)}>
-                <UserProvider initialUser={user} initialProfile={profile}>
+                <UserProvider
+                    initialUser={{ ...user, email: user.email || '' }}
+                    initialProfile={profile}
+                >
                     <OrganizationProvider initialOrganizations={organizations}>
                         <LiveRegionProvider>
                             <AccessibilityProvider>
