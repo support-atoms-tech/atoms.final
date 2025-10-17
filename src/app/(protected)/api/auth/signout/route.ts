@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * POST /api/auth/signout
@@ -31,9 +31,6 @@ export async function POST(_request: NextRequest) {
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Signout error:', error);
-        return NextResponse.json(
-            { error: 'Failed to sign out' },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: 'Failed to sign out' }, { status: 500 });
     }
 }

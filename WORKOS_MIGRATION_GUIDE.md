@@ -3,15 +3,18 @@
 ## ✅ Completed Components
 
 ### Phase 1: Setup Complete
+
 - ✅ WorkOS SDK installed (`@workos-inc/node@7.71.0`)
 - ✅ WorkOS client and auth modules created
 - ✅ Types and interfaces defined
 
 ### Phase 2: Migration Scripts Ready
+
 - ✅ `scripts/exportSupabaseUsers.ts` - Export users from Supabase
 - ✅ `scripts/importUsersToWorkOS.ts` - Import users to WorkOS
 
 ### Phase 3: Backend Code Updated
+
 - ✅ `/src/lib/workos/workosClient.ts` - WorkOS SDK initialization
 - ✅ `/src/lib/workos/workosAuth.ts` - Auth helper functions
 - ✅ `/src/lib/workos/types.ts` - TypeScript interfaces
@@ -50,18 +53,18 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ### 2. OAuth Provider Setup (WorkOS Dashboard)
 
 1. **GitHub OAuth**:
-   - Go to WorkOS Dashboard → Authentication → GitHub
-   - Add your GitHub OAuth app credentials
-   - Configure redirect URL
+    - Go to WorkOS Dashboard → Authentication → GitHub
+    - Add your GitHub OAuth app credentials
+    - Configure redirect URL
 
 2. **Google OAuth**:
-   - Go to WorkOS Dashboard → Authentication → Google
-   - Add your Google OAuth app credentials
-   - Configure redirect URL
+    - Go to WorkOS Dashboard → Authentication → Google
+    - Add your Google OAuth app credentials
+    - Configure redirect URL
 
 3. **Email Verification** (Optional):
-   - Configure email verification settings in WorkOS Dashboard
-   - Adjust security requirements as needed
+    - Configure email verification settings in WorkOS Dashboard
+    - Adjust security requirements as needed
 
 ---
 
@@ -73,6 +76,7 @@ Update `/src/middleware.ts` to use WorkOS middleware:
 
 ```typescript
 import { type NextRequest } from 'next/server';
+
 import { updateWorkOSSession } from '@/lib/workos/middleware';
 
 export async function middleware(request: NextRequest) {
@@ -121,33 +125,39 @@ CREATE TABLE user_id_mapping (
 The auth actions are already updated to use WorkOS, but ensure your login/signup pages use the new server actions:
 
 **Login Page** (`/src/app/(auth)/login/page.tsx`):
+
 - Ensure form submits to `login` action from `./auth/actions`
 - GitHub button redirects to `/auth/github`
 - Google button redirects to `/auth/google`
 
 **Signup Page** (`/src/app/(auth)/signup/page.tsx`):
+
 - Ensure form submits to `signup` action from `./auth/actions`
 
 ### Step 5: Test Authentication Flows
 
 #### Email/Password Login
+
 1. Navigate to `/login`
 2. Enter email and password
 3. Verify redirect to `/home` or preferred org
 
 #### Email/Password Signup
+
 1. Navigate to `/signup`
 2. Enter name, email, password
 3. Verify account creation
 4. Verify automatic login redirect
 
 #### GitHub OAuth
+
 1. Click "Sign in with GitHub"
 2. Authorize app
 3. Verify user creation/linking in WorkOS
 4. Verify redirect to dashboard
 
 #### Google OAuth
+
 1. Click "Sign in with Google"
 2. Authorize app
 3. Verify user creation/linking in WorkOS
@@ -175,16 +185,19 @@ curl -H "Authorization: Bearer $WORKOS_API_KEY" \
 ## 🔑 Key Architecture Changes
 
 ### Before (Supabase Auth)
+
 ```
 Login Request → Supabase Auth → Session Cookie → Supabase JWT
 ```
 
 ### After (WorkOS Auth)
+
 ```
 Login Request → WorkOS Auth → Session Cookie (workos_session) → WorkOS User ID
 ```
 
 ### Database Integration
+
 - **Still using Supabase** for database queries (profiles, organizations, projects)
 - **WorkOS handles** authentication only
 - User ID mapping maintains referential integrity
@@ -210,22 +223,29 @@ Login Request → WorkOS Auth → Session Cookie (workos_session) → WorkOS Use
 ## 🆘 Troubleshooting
 
 ### Issue: "WORKOS_API_KEY not configured"
+
 **Solution**: Ensure all environment variables are set and Next.js is restarted
 
 ### Issue: OAuth redirect loops
+
 **Solution**:
+
 - Verify WORKOS_REDIRECT_URI matches WorkOS Dashboard
 - Check OAuth provider credentials in WorkOS Dashboard
 - Verify callback route handles both code and state parameters
 
 ### Issue: User data not migrating
+
 **Solution**:
+
 - Check import-report.json for errors
 - Verify Supabase database is accessible
 - Check for duplicate emails (WorkOS requires unique emails)
 
 ### Issue: Session not persisting
+
 **Solution**:
+
 - Verify workos_session cookie is being set
 - Check browser cookie settings
 - Verify middleware is running on all protected routes
@@ -234,22 +254,23 @@ Login Request → WorkOS Auth → Session Cookie (workos_session) → WorkOS Use
 
 ## 📚 Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `src/lib/workos/workosClient.ts` | WorkOS SDK initialization |
-| `src/lib/workos/workosAuth.ts` | Authentication helper functions |
-| `src/lib/workos/middleware.ts` | Server-side session validation |
-| `src/app/(auth)/auth/actions.ts` | Login, signup, signout logic |
-| `src/hooks/useAuth.ts` | Client-side auth state |
-| `src/lib/providers/user.provider.tsx` | User context management |
-| `scripts/exportSupabaseUsers.ts` | Data export for migration |
-| `scripts/importUsersToWorkOS.ts` | Data import from export |
+| File                                  | Purpose                         |
+| ------------------------------------- | ------------------------------- |
+| `src/lib/workos/workosClient.ts`      | WorkOS SDK initialization       |
+| `src/lib/workos/workosAuth.ts`        | Authentication helper functions |
+| `src/lib/workos/middleware.ts`        | Server-side session validation  |
+| `src/app/(auth)/auth/actions.ts`      | Login, signup, signout logic    |
+| `src/hooks/useAuth.ts`                | Client-side auth state          |
+| `src/lib/providers/user.provider.tsx` | User context management         |
+| `scripts/exportSupabaseUsers.ts`      | Data export for migration       |
+| `scripts/importUsersToWorkOS.ts`      | Data import from export         |
 
 ---
 
 ## 🚀 Deployment Strategy
 
 ### Staged Rollout
+
 1. Deploy backend changes to staging
 2. Test all auth flows in staging
 3. Enable WorkOS for 10% of users (feature flag)
@@ -259,6 +280,7 @@ Login Request → WorkOS Auth → Session Cookie (workos_session) → WorkOS Use
 7. Keep Supabase code as fallback for 2 weeks
 
 ### Rollback Plan
+
 - Keep both auth implementations running for 2 weeks
 - Feature flag to switch between implementations
 - Monitor for issues before removing Supabase code
@@ -281,6 +303,7 @@ Login Request → WorkOS Auth → Session Cookie (workos_session) → WorkOS Use
 ## 📞 Support
 
 For issues during migration:
+
 1. Check the WorkOS documentation: https://workos.com/docs
 2. Review error logs in WorkOS Dashboard
 3. Contact WorkOS support: support@workos.com

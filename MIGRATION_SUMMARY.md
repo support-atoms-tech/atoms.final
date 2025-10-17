@@ -9,12 +9,14 @@ Complete backend implementation for migrating from Supabase Authentication to Wo
 ## 📊 Implementation Status
 
 ### ✅ Phase 1: Infrastructure (100% Complete)
+
 - WorkOS SDK installed and configured
 - Client initialization module created
 - Environment variables documented
 - TypeScript interfaces defined
 
 ### ✅ Phase 2: Data Migration (100% Ready)
+
 - Supabase export script created (`exportSupabaseUsers.ts`)
 - WorkOS import script created (`importUsersToWorkOS.ts`)
 - Support for password hash migration (bcrypt)
@@ -23,6 +25,7 @@ Complete backend implementation for migrating from Supabase Authentication to Wo
 ### ✅ Phase 3: Backend Implementation (100% Complete)
 
 #### Authentication Layer
+
 - ✅ Login with email/password (WorkOS API)
 - ✅ Signup with email/password (WorkOS API)
 - ✅ Logout with cookie cleanup
@@ -32,17 +35,20 @@ Complete backend implementation for migrating from Supabase Authentication to Wo
 - ✅ Session validation middleware
 
 #### API Endpoints
+
 - ✅ `GET /api/auth/session` - Session verification
 - ✅ `GET /api/auth/profile/[userId]` - User profile fetch
 - ✅ `POST /api/auth/signout` - Server-side logout
 
 #### Client-Side State Management
+
 - ✅ `useAuth()` hook - Session polling & profile management
 - ✅ `UserProvider` - Context-based user data
 - ✅ Automatic session refresh
 - ✅ Error handling and recovery
 
 #### Server-Side Infrastructure
+
 - ✅ WorkOS middleware for session validation
 - ✅ Authorization checks (admin, org, project)
 - ✅ Cookie-based session management
@@ -164,6 +170,7 @@ Continue to protected resource
 ## 🎯 Implementation Details by Feature
 
 ### Email/Password Auth (/src/app/(auth)/auth/actions.ts)
+
 - ✅ Direct API calls to WorkOS
 - ✅ Password validation
 - ✅ User creation during signup
@@ -172,6 +179,7 @@ Continue to protected resource
 - ✅ AuthKit Connect support (external_auth_id)
 
 ### OAuth (GitHub & Google)
+
 - ✅ Authorization URL generation using WorkOS
 - ✅ Provider-specific OAuth flows
 - ✅ Automatic user creation
@@ -179,6 +187,7 @@ Continue to protected resource
 - ✅ Error handling and redirect
 
 ### Session Management
+
 - ✅ Cookie-based sessions
 - ✅ HttpOnly cookies for security
 - ✅ Secure flag in production
@@ -186,6 +195,7 @@ Continue to protected resource
 - ✅ 7-day session expiry
 
 ### Client-Side Auth (/src/hooks/useAuth.ts)
+
 - ✅ API-based session checking
 - ✅ Profile polling (5 minute intervals)
 - ✅ Error recovery
@@ -214,34 +224,39 @@ NEXT_PUBLIC_APP_URL=...
 ## 📋 Remaining Tasks (Before Going Live)
 
 ### 1. Update Main Middleware File
+
 **File**: `/src/middleware.ts`
 
 Replace Supabase middleware import:
+
 ```typescript
 // OLD:
 import { updateSession } from '@/lib/supabase/middleware';
-
 // NEW:
 import { updateWorkOSSession } from '@/lib/workos/middleware';
 
 export async function middleware(request: NextRequest) {
-    return await updateWorkOSSession(request);  // Use new WorkOS middleware
+    return await updateWorkOSSession(request); // Use new WorkOS middleware
 }
 ```
 
 ### 2. Configure WorkOS Dashboard
+
 1. Set up GitHub OAuth provider
 2. Set up Google OAuth provider
 3. Configure email verification (optional)
 4. Set security policies
 
 ### 3. Set Environment Variables
+
 Add WorkOS credentials to:
+
 - `.env.local` (development)
 - `.env.production` (production)
 - Vercel dashboard (if deployed)
 
 ### 4. Run Data Migration
+
 ```bash
 # 1. Export Supabase users
 bun run scripts/exportSupabaseUsers.ts
@@ -255,16 +270,20 @@ bun run scripts/importUsersToWorkOS.ts
 ```
 
 ### 5. Database Migrations (Optional)
+
 Create Supabase migrations to add:
+
 - `workos_user_id` column to `profiles` table
 - `user_id_mapping` table (for reference)
 
 ### 6. Update UI Components (If Needed)
+
 - Verify login page uses `login` action
 - Verify signup page uses `signup` action
 - Verify GitHub/Google buttons link to `/auth/github` and `/auth/google`
 
 ### 7. Testing Checklist
+
 - [ ] Email/password login works
 - [ ] Email/password signup works
 - [ ] GitHub OAuth works
@@ -282,6 +301,7 @@ Create Supabase migrations to add:
 ## 🧪 Testing Approach
 
 ### Unit Testing
+
 ```bash
 # Test auth actions
 npm test -- auth/actions.test.ts
@@ -294,6 +314,7 @@ npm test -- api/auth/*.test.ts
 ```
 
 ### Integration Testing
+
 ```bash
 # Test full login flow
 npm run dev
@@ -308,26 +329,28 @@ npm run dev
 ```
 
 ### Manual Testing Steps
+
 1. **Fresh Account**:
-   - Sign up with new email
-   - Verify account created in WorkOS
-   - Verify profile created in Supabase
+    - Sign up with new email
+    - Verify account created in WorkOS
+    - Verify profile created in Supabase
 
 2. **Existing Account**:
-   - Export user from Supabase
-   - Import to WorkOS
-   - Try logging in with old password
+    - Export user from Supabase
+    - Import to WorkOS
+    - Try logging in with old password
 
 3. **OAuth**:
-   - Sign in with GitHub
-   - Sign in with Google
-   - Verify users auto-linked by email
+    - Sign in with GitHub
+    - Sign in with Google
+    - Verify users auto-linked by email
 
 ---
 
 ## 📊 Security Considerations
 
 ✅ **Implemented**:
+
 - HttpOnly cookies (prevent XSS)
 - Secure flag (HTTPS only in production)
 - SameSite Lax (CSRF protection)
@@ -336,6 +359,7 @@ npm run dev
 - Authorization checks preserved
 
 ⚠️ **Recommended**:
+
 - Enable email verification in WorkOS Dashboard
 - Configure MFA policies
 - Set up audit logging
@@ -364,40 +388,43 @@ npm run dev
 ## 📞 Quick Reference
 
 ### Critical Files
-| What | Where |
-|------|-------|
-| Auth Actions | `src/app/(auth)/auth/actions.ts` |
-| Session Check | `src/hooks/useAuth.ts` |
-| Middleware | `src/lib/workos/middleware.ts` |
+
+| What           | Where                                   |
+| -------------- | --------------------------------------- |
+| Auth Actions   | `src/app/(auth)/auth/actions.ts`        |
+| Session Check  | `src/hooks/useAuth.ts`                  |
+| Middleware     | `src/lib/workos/middleware.ts`          |
 | OAuth Callback | `src/app/(auth)/auth/callback/route.ts` |
 
 ### API Endpoints
-| Endpoint | Purpose |
-|----------|---------|
-| GET `/api/auth/session` | Check if user logged in |
-| GET `/api/auth/profile/[userId]` | Fetch user profile |
-| POST `/api/auth/signout` | Clear session |
+
+| Endpoint                         | Purpose                 |
+| -------------------------------- | ----------------------- |
+| GET `/api/auth/session`          | Check if user logged in |
+| GET `/api/auth/profile/[userId]` | Fetch user profile      |
+| POST `/api/auth/signout`         | Clear session           |
 
 ### Helper Functions
-| Function | File | Usage |
-|----------|------|-------|
-| `getAuthorizationUrl()` | `workosAuth.ts` | Generate OAuth URLs |
-| `authenticateWithCode()` | `workosAuth.ts` | Exchange code for user |
-| `useAuth()` | `useAuth.ts` | Client-side auth state |
-| `useUser()` | `user.provider.tsx` | Access user from context |
+
+| Function                 | File                | Usage                    |
+| ------------------------ | ------------------- | ------------------------ |
+| `getAuthorizationUrl()`  | `workosAuth.ts`     | Generate OAuth URLs      |
+| `authenticateWithCode()` | `workosAuth.ts`     | Exchange code for user   |
+| `useAuth()`              | `useAuth.ts`        | Client-side auth state   |
+| `useUser()`              | `user.provider.tsx` | Access user from context |
 
 ---
 
 ## ✨ What's Different From Supabase
 
-| Aspect | Supabase | WorkOS |
-|--------|----------|--------|
-| Session Type | JWT in localStorage | HttpOnly cookie |
-| User Management | SDK based | API based |
-| OAuth | Direct to provider | WorkOS handles |
-| Password Reset | SDK method | Email link |
-| MFA | Not built-in | Built-in optional |
-| Enterprise SSO | Not available | Full support |
+| Aspect          | Supabase            | WorkOS            |
+| --------------- | ------------------- | ----------------- |
+| Session Type    | JWT in localStorage | HttpOnly cookie   |
+| User Management | SDK based           | API based         |
+| OAuth           | Direct to provider  | WorkOS handles    |
+| Password Reset  | SDK method          | Email link        |
+| MFA             | Not built-in        | Built-in optional |
+| Enterprise SSO  | Not available       | Full support      |
 
 ---
 
@@ -426,6 +453,7 @@ npm run dev
 **Status**: Ready for integration and testing
 
 **What's Done**:
+
 - ✅ 100% backend implementation
 - ✅ All auth flows redesigned
 - ✅ OAuth fully integrated
@@ -435,6 +463,7 @@ npm run dev
 - ✅ Migration scripts ready
 
 **What's Next**:
+
 - Update main middleware.ts file
 - Configure WorkOS dashboard
 - Set environment variables

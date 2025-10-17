@@ -16,6 +16,7 @@ Client ID: client_01K4CGW2J1FGWZYZJDMVWGQZBD
 **Location**: https://dashboard.workos.com/api-keys
 
 Your credentials are already active:
+
 - ✅ API Key: `sk_test_a2V5YXo...` (test environment)
 - ✅ Client ID: `client_01K4CGW2...`
 
@@ -28,11 +29,13 @@ Your credentials are already active:
 **Click "Redirects"** and add these URIs:
 
 **Development**:
+
 ```
 http://localhost:3000/auth/callback
 ```
 
 **Production (atoms.tech)**:
+
 ```
 https://atoms.tech/auth/callback
 ```
@@ -48,6 +51,7 @@ https://atoms.tech/auth/callback
 **Under "Redirects" section:**
 
 Set **Login Endpoint** to:
+
 ```
 https://atoms.tech/auth/login
 ```
@@ -63,6 +67,7 @@ https://atoms.tech/auth/login
 **Under "Sessions" section:**
 
 Set **Logout Redirect** to:
+
 ```
 https://atoms.tech/login
 ```
@@ -91,11 +96,11 @@ Follow the setup wizard to activate AuthKit.
 
 1. Get GitHub credentials from: https://github.com/settings/developers
 2. Create OAuth App:
-   - Application name: atoms.tech
-   - Authorization callback URL: `https://atoms.tech/auth/callback`
+    - Application name: atoms.tech
+    - Authorization callback URL: `https://atoms.tech/auth/callback`
 3. Copy:
-   - Client ID
-   - Client Secret
+    - Client ID
+    - Client Secret
 4. Paste into WorkOS Dashboard
 
 #### Google OAuth
@@ -106,11 +111,11 @@ Follow the setup wizard to activate AuthKit.
 
 1. Get Google credentials from: https://console.cloud.google.com/
 2. Create OAuth 2.0 Credentials:
-   - Type: Web application
-   - Authorized redirect URIs: `https://atoms.tech/auth/callback`
+    - Type: Web application
+    - Authorized redirect URIs: `https://atoms.tech/auth/callback`
 3. Copy:
-   - Client ID
-   - Client Secret
+    - Client ID
+    - Client Secret
 4. Paste into WorkOS Dashboard
 
 ---
@@ -124,6 +129,7 @@ openssl rand -base64 24
 ```
 
 Example output:
+
 ```
 AbC123dEfG456hIjK789lMnOpQrStUvW
 ```
@@ -137,11 +143,13 @@ cp .env.local.template .env.local
 ```
 
 Edit `.env.local` and replace:
+
 ```
 WORKOS_COOKIE_PASSWORD='AbC123dEfG456hIjK789lMnOpQrStUvW'
 ```
 
 Keep the test credentials as-is:
+
 ```
 WORKOS_API_KEY='sk_test_a2V5XzAxSzRDR1cyMjJXSlFXQlI1RDdDUFczUUM3LGxDdWJmN2tNTDBjaHlRNjhUaEtsalQ0ZTM'
 WORKOS_CLIENT_ID='client_01K4CGW2J1FGWZYZJDMVWGQZBD'
@@ -187,16 +195,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY='...'
 Make sure these are configured:
 
 **Primary Redirect URI**:
+
 ```
 https://atoms.tech/auth/callback
 ```
 
 **Login Endpoint**:
+
 ```
 https://atoms.tech/auth/login
 ```
 
 **Logout Redirect**:
+
 ```
 https://atoms.tech/login
 ```
@@ -210,8 +221,8 @@ After configuration, verify in WorkOS Dashboard:
 - [ ] API Key visible under "API Keys"
 - [ ] Client ID matches: `client_01K4CGW2J1FGWZYZJDMVWGQZBD`
 - [ ] Redirects configured:
-  - [ ] `http://localhost:3000/auth/callback` (development)
-  - [ ] `https://atoms.tech/auth/callback` (production)
+    - [ ] `http://localhost:3000/auth/callback` (development)
+    - [ ] `https://atoms.tech/auth/callback` (production)
 - [ ] Login Endpoint set: `https://atoms.tech/auth/login`
 - [ ] Logout Redirect set: `https://atoms.tech/login`
 - [ ] User Management activated
@@ -224,46 +235,48 @@ After configuration, verify in WorkOS Dashboard:
 ### Local Testing
 
 1. **Start development server**:
-   ```bash
-   bun dev
-   ```
+
+    ```bash
+    bun dev
+    ```
 
 2. **Visit login page**:
-   ```
-   http://localhost:3000/auth/login
-   ```
+
+    ```
+    http://localhost:3000/auth/login
+    ```
 
 3. **You should see**:
-   - WorkOS AuthKit hosted login page
-   - Option to sign up with email
-   - (GitHub/Google buttons if configured)
+    - WorkOS AuthKit hosted login page
+    - Option to sign up with email
+    - (GitHub/Google buttons if configured)
 
 4. **Test signup**:
-   - Enter email and password
-   - Click "Sign up"
-   - Should redirect to dashboard
+    - Enter email and password
+    - Click "Sign up"
+    - Should redirect to dashboard
 
 5. **Verify in WorkOS Dashboard**:
-   - Go to: https://dashboard.workos.com/user-management/users
-   - Your test account should appear
+    - Go to: https://dashboard.workos.com/user-management/users
+    - Your test account should appear
 
 6. **Test login**:
-   - Visit `/auth/logout` to logout
-   - Visit `/auth/login` again
-   - Enter credentials
-   - Should authenticate successfully
+    - Visit `/auth/logout` to logout
+    - Visit `/auth/login` again
+    - Enter credentials
+    - Should authenticate successfully
 
 ---
 
 ## 📊 Configuration Summary
 
-| Component | Development | Production |
-|-----------|-------------|-----------|
-| Redirect URI | `http://localhost:3000/auth/callback` | `https://atoms.tech/auth/callback` |
-| Login Endpoint | `http://localhost:3000/auth/login` | `https://atoms.tech/auth/login` |
-| Logout Redirect | `http://localhost:3000/login` | `https://atoms.tech/login` |
-| API Key | `sk_test_a2V5...` | `sk_live_...` (production) |
-| Client ID | `client_01K4CGW2...` | `client_...` (production) |
+| Component       | Development                           | Production                         |
+| --------------- | ------------------------------------- | ---------------------------------- |
+| Redirect URI    | `http://localhost:3000/auth/callback` | `https://atoms.tech/auth/callback` |
+| Login Endpoint  | `http://localhost:3000/auth/login`    | `https://atoms.tech/auth/login`    |
+| Logout Redirect | `http://localhost:3000/login`         | `https://atoms.tech/login`         |
+| API Key         | `sk_test_a2V5...`                     | `sk_live_...` (production)         |
+| Client ID       | `client_01K4CGW2...`                  | `client_...` (production)          |
 
 ---
 

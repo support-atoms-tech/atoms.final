@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, createContext, useContext, useCallback, useState } from 'react';
+import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
 
 import { Profile } from '@/types';
 
@@ -35,7 +35,7 @@ export function UserProvider({
     initialUser?: WorkOSUser;
     initialProfile?: Profile;
 }) {
-    const [user, setUser] = useState<WorkOSUser | null>(initialUser || null);
+    const [user, _setUser] = useState<WorkOSUser | null>(initialUser || null);
     const [profile, setProfile] = useState<Profile | null>(initialProfile || null);
 
     /**

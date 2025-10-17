@@ -94,16 +94,19 @@ https://atoms.tech/login
 ### Step 5: Configure OAuth Providers (Optional)
 
 **GitHub OAuth**:
+
 - Go to: Authentication → Providers → GitHub
 - Add GitHub credentials
 - WorkOS handles the redirect
 
 **Google OAuth**:
+
 - Go to: Authentication → Providers → Google
 - Add Google credentials
 - WorkOS handles the redirect
 
 **Microsoft OAuth**:
+
 - Go to: Authentication → Providers → Microsoft
 - Add Microsoft credentials
 - WorkOS handles the redirect
@@ -223,6 +226,7 @@ export default async function ProtectedPage() {
 ### For Existing Supabase Users
 
 Users migrated from Supabase will:
+
 1. Be created in WorkOS with their email
 2. Be able to set a new password or use OAuth
 3. See their existing profile data loaded from database
@@ -230,6 +234,7 @@ Users migrated from Supabase will:
 ### For New Users
 
 New users can:
+
 1. Sign up with email/password
 2. Sign in with GitHub
 3. Sign in with Google
@@ -270,15 +275,19 @@ Before going to production:
 ## 🆘 Common Issues
 
 ### "Invalid redirect URI"
+
 **Solution**: Ensure NEXT_PUBLIC_WORKOS_REDIRECT_URI matches dashboard exactly
 
 ### "Cookie password too short"
+
 **Solution**: Generate with `openssl rand -base64 24` (32+ chars)
 
 ### "Unauthorized" errors
+
 **Solution**: Check API key is correct and active in dashboard
 
 ### OAuth not working
+
 **Solution**: Verify OAuth provider credentials in dashboard
 
 ---
@@ -295,17 +304,20 @@ Before going to production:
 ## 🚀 Deployment Steps
 
 ### 1. Development Setup
+
 ```bash
 cp .env.authkit .env.local
 # Fill in your development values
 ```
 
 ### 2. Staging Deployment
+
 - Add staging environment variables to Vercel
 - Test all auth flows
 - Verify email verification works
 
 ### 3. Production Deployment
+
 - Add production environment variables
 - Update WorkOS dashboard with production URIs
 - Test complete user flow
@@ -315,47 +327,47 @@ cp .env.authkit .env.local
 
 ## 📝 Configuration Summary
 
-| Component | Location | Status |
-|-----------|----------|--------|
-| Environment Variables | `.env.local` / Secrets | ✅ Ready |
-| Middleware | `src/middleware.ts` | ✅ Ready |
-| AuthKitProvider | `src/app/layout.tsx` | ✅ Ready |
-| Callback Route | `src/app/auth/callback/route.ts` | ✅ Ready |
-| Login Endpoint | `src/app/auth/login/route.ts` | ✅ Ready |
-| Logout Endpoint | `src/app/auth/logout/route.ts` | ✅ Ready |
-| Protected Routes | Your pages | ✅ Ready |
-| User API | Automatic | ✅ Ready |
+| Component             | Location                         | Status   |
+| --------------------- | -------------------------------- | -------- |
+| Environment Variables | `.env.local` / Secrets           | ✅ Ready |
+| Middleware            | `src/middleware.ts`              | ✅ Ready |
+| AuthKitProvider       | `src/app/layout.tsx`             | ✅ Ready |
+| Callback Route        | `src/app/auth/callback/route.ts` | ✅ Ready |
+| Login Endpoint        | `src/app/auth/login/route.ts`    | ✅ Ready |
+| Logout Endpoint       | `src/app/auth/logout/route.ts`   | ✅ Ready |
+| Protected Routes      | Your pages                       | ✅ Ready |
+| User API              | Automatic                        | ✅ Ready |
 
 ---
 
 ## 🎯 Next Steps
 
 1. **Get WorkOS Credentials**
-   - Visit https://dashboard.workos.com/
-   - Get API Key and Client ID
+    - Visit https://dashboard.workos.com/
+    - Get API Key and Client ID
 
 2. **Generate Cookie Password**
-   - Run: `openssl rand -base64 24`
+    - Run: `openssl rand -base64 24`
 
 3. **Configure Dashboard**
-   - Set redirect URIs (see section above)
-   - Set login endpoint
-   - Set logout redirect
-   - Configure OAuth providers (optional)
+    - Set redirect URIs (see section above)
+    - Set login endpoint
+    - Set logout redirect
+    - Configure OAuth providers (optional)
 
 4. **Add Environment Variables**
-   - Copy credentials to `.env.local`
-   - Copy to production secrets
+    - Copy credentials to `.env.local`
+    - Copy to production secrets
 
 5. **Test Locally**
-   - Run: `bun dev`
-   - Navigate to `http://localhost:3000/auth/login`
-   - Test signup and login
+    - Run: `bun dev`
+    - Navigate to `http://localhost:3000/auth/login`
+    - Test signup and login
 
 6. **Deploy to Production**
-   - Push to main branch
-   - Deploy to Vercel
-   - Monitor error logs
+    - Push to main branch
+    - Deploy to Vercel
+    - Monitor error logs
 
 ---
 

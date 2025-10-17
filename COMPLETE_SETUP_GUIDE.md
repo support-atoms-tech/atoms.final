@@ -3,6 +3,7 @@
 ## Overview
 
 This is the master guide for setting up:
+
 - ✅ WorkOS AuthKit for authentication
 - ✅ Supabase as third-party auth provider
 - ✅ Vercel environment configuration
@@ -13,18 +14,21 @@ This is the master guide for setting up:
 ## 📋 Setup Checklist (In Order)
 
 ### Phase 1: Local Development Setup ✅
+
 - [x] WorkOS SDK installed
 - [x] AuthKit middleware configured
 - [x] Login/callback routes created
 - [x] `.env.local.template` created
 
 ### Phase 2: Environment Configuration ⏳
+
 - [ ] Generate secure password: `openssl rand -base64 24`
 - [ ] Copy `.env.local.template` to `.env.local`
 - [ ] Add generated password to `.env.local`
 - [ ] Test locally: `bun dev` → visit `/auth/login`
 
 ### Phase 3: WorkOS Dashboard Setup ⏳
+
 - [ ] Verify API Key: `sk_test_a2V5YXo...`
 - [ ] Verify Client ID: `client_01K4CGW2...`
 - [ ] Add Redirect URIs
@@ -34,6 +38,7 @@ This is the master guide for setting up:
 - [ ] Create JWT Template for Supabase
 
 ### Phase 4: Supabase Integration ⏳
+
 - [ ] Add WorkOS as third-party auth provider
 - [ ] Configure issuer URL
 - [ ] Set up JWT template with RLS claims
@@ -41,6 +46,7 @@ This is the master guide for setting up:
 - [ ] Create RLS policies
 
 ### Phase 5: Vercel Deployment ⏳
+
 - [ ] Add environment variables in Vercel dashboard
 - [ ] Configure per-environment settings
 - [ ] Trigger deployment
@@ -51,6 +57,7 @@ This is the master guide for setting up:
 ## 🚀 Quick Start (3 Steps)
 
 ### Step 1: Generate Password & Setup Local Env
+
 ```bash
 # Generate password
 openssl rand -base64 24
@@ -63,38 +70,42 @@ cp .env.local.template .env.local
 ```
 
 ### Step 2: Test Locally
+
 ```bash
 bun dev
 # Visit http://localhost:3000/auth/login
 ```
 
 ### Step 3: Configure Vercel
+
 See **VERCEL_ENV_SETUP.md** for environment variables
 
 ---
 
 ## 📁 Your Configuration Files
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `.env.local.template` | Environment template | ✅ Ready |
-| `START_HERE.md` | Quick start guide | ✅ Ready |
-| `VERCEL_ENV_SETUP.md` | Vercel configuration | ✅ Ready |
-| `DASHBOARD_CONFIGURATION.md` | WorkOS dashboard setup | ✅ Ready |
-| `SUPABASE_AUTHKIT_INTEGRATION.md` | Supabase integration | ✅ Ready |
-| `IMPLEMENTATION_CHECKLIST.md` | Full reference | ✅ Ready |
+| File                              | Purpose                | Status   |
+| --------------------------------- | ---------------------- | -------- |
+| `.env.local.template`             | Environment template   | ✅ Ready |
+| `START_HERE.md`                   | Quick start guide      | ✅ Ready |
+| `VERCEL_ENV_SETUP.md`             | Vercel configuration   | ✅ Ready |
+| `DASHBOARD_CONFIGURATION.md`      | WorkOS dashboard setup | ✅ Ready |
+| `SUPABASE_AUTHKIT_INTEGRATION.md` | Supabase integration   | ✅ Ready |
+| `IMPLEMENTATION_CHECKLIST.md`     | Full reference         | ✅ Ready |
 
 ---
 
 ## 🔑 Your Credentials
 
 ### WorkOS Test Environment
+
 ```
 API Key:   sk_test_a2V5XzAxSzRDR1cyMjJXSlFXQlI1RDdDUFczUUM3LGxDdWJmN2tNTDBjaHlRNjhUaEtsalQ0ZTM
 Client ID: client_01K4CGW2J1FGWZYZJDMVWGQZBD
 ```
 
 ### Supabase Issuer URL
+
 ```
 https://api.workos.com/user_management/client_01K4CGW2J1FGWZYZJDMVWGQZBD
 ```
@@ -122,11 +133,13 @@ User's Data (Row-Level Security)
 ## ✅ Authentication Flow
 
 ### 1. User Visits Login
+
 ```
 User → http://localhost:3000/auth/login
 ```
 
 ### 2. AuthKit Hosted UI
+
 ```
 → WorkOS AuthKit Hosted Login
   - Email/Password
@@ -135,6 +148,7 @@ User → http://localhost:3000/auth/login
 ```
 
 ### 3. Authentication Success
+
 ```
 → /auth/callback?code=...
 → Exchange code for access token
@@ -144,6 +158,7 @@ User → http://localhost:3000/auth/login
 ```
 
 ### 4. Access Supabase
+
 ```
 Any Supabase Query
 → Includes access token in Authorization header
@@ -154,6 +169,7 @@ Any Supabase Query
 ```
 
 ### 5. Logout
+
 ```
 User → /auth/logout
 → Clear session
@@ -165,18 +181,21 @@ User → /auth/logout
 ## 🔐 Security Features
 
 ✅ **Authentication**
+
 - Email/password signup and login
 - OAuth providers (GitHub, Google)
 - Session encryption (HttpOnly cookies)
 - Automatic token refresh
 
 ✅ **Authorization**
+
 - Row-Level Security (RLS)
 - Role-based access control
 - User isolation
 - JWT claims validation
 
 ✅ **Protection**
+
 - CSRF protection (SameSite Lax)
 - XSS prevention (HttpOnly cookies)
 - HTTPS in production
@@ -208,6 +227,7 @@ User → /auth/logout
 ## 🧪 Testing Guide
 
 ### Test 1: Local Login
+
 ```
 1. bun dev
 2. Visit http://localhost:3000/auth/login
@@ -217,6 +237,7 @@ User → /auth/logout
 ```
 
 ### Test 2: Supabase Integration
+
 ```
 1. Create test page with Supabase query
 2. Use WorkOS access token
@@ -226,6 +247,7 @@ User → /auth/logout
 ```
 
 ### Test 3: Production Deployment
+
 ```
 1. Add Vercel env variables
 2. Trigger deployment
@@ -249,26 +271,34 @@ User → /auth/logout
 ## 🆘 Troubleshooting
 
 ### Problem: "Invalid Redirect URI"
+
 **Solution**: Verify URIs match EXACTLY
+
 - No typos
 - No trailing slashes
 - Correct protocol (http vs https)
 
 ### Problem: Users not syncing to Supabase
+
 **Solution**: Call sync function in callback
+
 ```typescript
 await syncWorkOSUserToSupabase(user, accessToken);
 ```
 
 ### Problem: RLS not working
+
 **Solution**: Check:
+
 - RLS enabled on table
 - Policies created
 - JWT claims correct
 - `auth.uid()` matches user ID
 
 ### Problem: Environment variables not applied
+
 **Solution**:
+
 - Wait 5 minutes after adding to Vercel
 - Or manually redeploy
 
@@ -277,6 +307,7 @@ await syncWorkOSUserToSupabase(user, accessToken);
 ## 📊 Environment Variables Summary
 
 ### Development (.env.local)
+
 ```
 WORKOS_API_KEY=sk_test_...
 WORKOS_CLIENT_ID=client_...
@@ -286,6 +317,7 @@ WORKOS_LOGOUT_REDIRECT_URI=http://localhost:3000/login
 ```
 
 ### Production (Vercel)
+
 ```
 WORKOS_API_KEY=sk_live_... (or sk_test_)
 WORKOS_CLIENT_ID=client_...
@@ -299,17 +331,20 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 ## 🎯 Next Steps
 
 ### Immediate (Today)
+
 1. Generate password: `openssl rand -base64 24`
 2. Create `.env.local`
 3. Test locally: `bun dev`
 
 ### Short Term (This Week)
+
 1. Configure WorkOS dashboard
 2. Set up Supabase integration
 3. Add Vercel environment variables
 4. Deploy to production
 
 ### Long Term (As Needed)
+
 1. Configure GitHub/Google OAuth
 2. Customize RLS policies
 3. Add additional features
@@ -319,31 +354,34 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 
 ## 📞 Support Resources
 
-| Resource | URL |
-|----------|-----|
-| WorkOS Docs | https://workos.com/docs |
-| AuthKit Guide | https://workos.com/docs/authkit |
-| Supabase Docs | https://supabase.com/docs |
-| Supabase RLS | https://supabase.com/docs/guides/auth/row-level-security |
-| Vercel Docs | https://vercel.com/docs |
+| Resource      | URL                                                      |
+| ------------- | -------------------------------------------------------- |
+| WorkOS Docs   | https://workos.com/docs                                  |
+| AuthKit Guide | https://workos.com/docs/authkit                          |
+| Supabase Docs | https://supabase.com/docs                                |
+| Supabase RLS  | https://supabase.com/docs/guides/auth/row-level-security |
+| Vercel Docs   | https://vercel.com/docs                                  |
 
 ---
 
 ## ✨ What You Have
 
 ✅ **Complete Backend Implementation**
+
 - Middleware
 - Session management
 - Auth routes
 - Supabase integration
 
 ✅ **Complete Documentation**
+
 - Setup guides
 - Configuration steps
 - Code examples
 - Troubleshooting
 
 ✅ **Production Ready**
+
 - Secured with cookies
 - RLS policies
 - Token refresh

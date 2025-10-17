@@ -60,11 +60,13 @@ Go to: **https://dashboard.workos.com/authentication**
 Click "Redirects" and add:
 
 **For Development**:
+
 ```
 http://localhost:3000/auth/callback
 ```
 
 **For Production (atoms.tech)**:
+
 ```
 https://atoms.tech/auth/callback
 ```
@@ -100,16 +102,16 @@ Click "Set up User Management" button and follow wizard.
 
 ## 📁 Files You Have
 
-| File | Purpose |
-|------|---------|
-| `.env.local.template` | Environment variables template |
-| `DASHBOARD_CONFIGURATION.md` | Complete dashboard setup steps |
-| `IMPLEMENTATION_CHECKLIST.md` | Full implementation guide |
-| `src/middleware.ts` | Session management |
-| `src/app/layout.tsx` | AuthKitProvider |
-| `src/app/auth/login/route.ts` | Login endpoint |
-| `src/app/auth/callback/route.ts` | OAuth callback |
-| `src/app/auth/logout/route.ts` | Logout |
+| File                             | Purpose                        |
+| -------------------------------- | ------------------------------ |
+| `.env.local.template`            | Environment variables template |
+| `DASHBOARD_CONFIGURATION.md`     | Complete dashboard setup steps |
+| `IMPLEMENTATION_CHECKLIST.md`    | Full implementation guide      |
+| `src/middleware.ts`              | Session management             |
+| `src/app/layout.tsx`             | AuthKitProvider                |
+| `src/app/auth/login/route.ts`    | Login endpoint                 |
+| `src/app/auth/callback/route.ts` | OAuth callback                 |
+| `src/app/auth/logout/route.ts`   | Logout                         |
 
 ---
 
@@ -121,7 +123,7 @@ Click "Set up User Management" button and follow wizard.
 ✅ Encrypted Sessions  
 ✅ Automatic Token Refresh  
 ✅ CSRF Protection  
-✅ XSS Prevention  
+✅ XSS Prevention
 
 ---
 
@@ -179,12 +181,12 @@ A: Use `withAuth()` in server components or `useAuth()` in client components.
 
 ## 📞 Need Help?
 
-| Issue | Solution |
-|-------|----------|
+| Issue                  | Solution                                               |
+| ---------------------- | ------------------------------------------------------ |
 | "Invalid Redirect URI" | Check URLs match exactly in dashboard and `.env.local` |
-| "Cookie error" | Verify WORKOS_COOKIE_PASSWORD is 32+ characters |
-| "User not appearing" | Wait a few seconds, refresh WorkOS Dashboard |
-| "OAuth not working" | Configure OAuth credentials in WorkOS Dashboard |
+| "Cookie error"         | Verify WORKOS_COOKIE_PASSWORD is 32+ characters        |
+| "User not appearing"   | Wait a few seconds, refresh WorkOS Dashboard           |
+| "OAuth not working"    | Configure OAuth credentials in WorkOS Dashboard        |
 
 ---
 

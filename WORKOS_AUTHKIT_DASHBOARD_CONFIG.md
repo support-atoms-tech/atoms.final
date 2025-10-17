@@ -13,6 +13,7 @@ openssl rand -base64 24
 ```
 
 **Example Output:**
+
 ```
 AbC123dEfG456hIjK789lMnOpQrStUvW
 ```
@@ -63,6 +64,7 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 **Where**: https://dashboard.workos.com/
 
 **Steps**:
+
 1. Sign in to WorkOS Dashboard
 2. Go to: API Keys (in sidebar)
 3. Copy your **API Key** (starts with `sk_`)
@@ -79,21 +81,25 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 **Add these Redirect URIs** (click "Add URI" for each):
 
 #### Production
+
 ```
 https://atoms.tech/auth/callback
 ```
 
 #### Development
+
 ```
 http://localhost:3000/auth/callback
 ```
 
 #### Staging (if applicable)
+
 ```
 https://staging.atoms.tech/auth/callback
 ```
 
 **Screenshot Guide**:
+
 - Click "Redirects" in the Authentication section
 - Click "Add URI"
 - Paste the URI
@@ -107,6 +113,7 @@ https://staging.atoms.tech/auth/callback
 **Where**: WorkOS Dashboard → Authentication → Redirects → Login Endpoint
 
 **Set this value**:
+
 ```
 https://atoms.tech/auth/login
 ```
@@ -120,6 +127,7 @@ This tells WorkOS where to redirect users if they try to access the hosted login
 **Where**: WorkOS Dashboard → Authentication → Sessions → Logout Redirect
 
 **Set this value**:
+
 ```
 https://atoms.tech/login
 ```
@@ -133,6 +141,7 @@ Users will be redirected here after logging out.
 **Where**: WorkOS Dashboard → Overview
 
 **Steps**:
+
 1. Look for "Set up User Management" button
 2. Click it
 3. Follow the setup wizard
@@ -147,12 +156,13 @@ Users will be redirected here after logging out.
 **Where**: WorkOS Dashboard → Authentication → Providers → GitHub
 
 **Steps**:
+
 1. Click "GitHub"
 2. You'll need GitHub OAuth credentials:
-   - Go to: https://github.com/settings/developers
-   - Click "New OAuth App"
-   - Create an OAuth application
-   - Copy: Client ID and Client Secret
+    - Go to: https://github.com/settings/developers
+    - Click "New OAuth App"
+    - Create an OAuth application
+    - Copy: Client ID and Client Secret
 3. Paste into WorkOS
 4. WorkOS handles the rest automatically
 
@@ -161,13 +171,14 @@ Users will be redirected here after logging out.
 **Where**: WorkOS Dashboard → Authentication → Providers → Google
 
 **Steps**:
+
 1. Click "Google"
 2. You'll need Google OAuth credentials:
-   - Go to: https://console.cloud.google.com/
-   - Create a new project
-   - Enable Google+ API
-   - Create OAuth 2.0 credentials
-   - Copy: Client ID and Client Secret
+    - Go to: https://console.cloud.google.com/
+    - Create a new project
+    - Enable Google+ API
+    - Create OAuth 2.0 credentials
+    - Copy: Client ID and Client Secret
 3. Paste into WorkOS
 4. WorkOS handles the rest automatically
 
@@ -176,6 +187,7 @@ Users will be redirected here after logging out.
 **Where**: WorkOS Dashboard → Authentication → Providers → Microsoft
 
 **Steps**:
+
 1. Click "Microsoft"
 2. You'll need Microsoft Azure credentials
 3. Paste into WorkOS
@@ -187,6 +199,7 @@ Users will be redirected here after logging out.
 **Where**: WorkOS Dashboard → Authentication → Email Verification
 
 **Configure**:
+
 - Choose verification requirement (optional, required on signup, etc.)
 - Customize email template (optional)
 - Set sender address
@@ -221,6 +234,7 @@ bun dev
 Navigate to: http://localhost:3000/auth/login
 
 **What should happen**:
+
 - You're redirected to WorkOS AuthKit hosted login page
 - You can sign up with email/password
 - After signup, you're redirected to `http://localhost:3000/home`
@@ -259,6 +273,7 @@ src/app/auth/client-example/page.tsx  ← Client component example
 ## 🔐 Security Features
 
 ✅ **Built-in**:
+
 - Encrypted session cookies (HTTPS-only in production)
 - CSRF protection (SameSite Lax)
 - Automatic token refresh
@@ -281,21 +296,25 @@ src/app/auth/client-example/page.tsx  ← Client component example
 ## 🆘 Troubleshooting
 
 ### "Invalid Redirect URI"
+
 - Ensure `NEXT_PUBLIC_WORKOS_REDIRECT_URI` matches exactly in dashboard
 - Check for trailing slashes
 - Verify protocol (http vs https)
 
 ### "Session not being created"
+
 - Check `WORKOS_COOKIE_PASSWORD` is set (32+ characters)
 - Verify cookies are enabled in browser
 - Check browser DevTools → Application → Cookies
 
 ### "OAuth redirect loops"
+
 - Verify GitHub/Google credentials are correct in WorkOS Dashboard
 - Check OAuth provider redirect URIs match
 - Clear browser cookies and try again
 
 ### User not appearing in dashboard
+
 - Check you're looking in the correct WorkOS Dashboard environment
 - Wait a few seconds for user creation to complete
 - Refresh the User Management page

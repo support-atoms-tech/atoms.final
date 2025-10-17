@@ -28,7 +28,7 @@ export async function getAuthorizationUrl(provider: string, state?: string) {
     }
 
     const url = await workos.authKit.getAuthorizationUrl({
-        provider: provider as any,
+        provider: provider as string,
         clientId,
         redirectUri,
         state,
@@ -100,7 +100,7 @@ export async function createUser(
     lastName?: string,
     password?: string,
 ) {
-    const userData: any = {
+    const userData: Record<string, string> = {
         email,
     };
 
@@ -130,7 +130,10 @@ export async function getUser(userId: string) {
  * @param updates - Fields to update
  * @returns Updated user object
  */
-export async function updateUser(userId: string, updates: Record<string, any>) {
+export async function updateUser(
+    userId: string,
+    updates: Record<string, string | number | boolean | null | undefined>,
+) {
     const user = await workos.userManagement.updateUser(userId, updates);
     return user;
 }
@@ -141,7 +144,9 @@ export async function updateUser(userId: string, updates: Record<string, any>) {
  * @param options - Filter and pagination options
  * @returns List of users
  */
-export async function listUsers(options?: Record<string, any>) {
+export async function listUsers(
+    options?: Record<string, string | number | boolean | null | undefined>,
+) {
     const users = await workos.userManagement.listUsers(options);
     return users;
 }

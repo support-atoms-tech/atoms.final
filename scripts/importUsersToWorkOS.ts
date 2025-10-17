@@ -13,8 +13,8 @@
  * Output: Creates import-report.json with results and any errors
  */
 
-import WorkOS from '@workos-inc/node';
 import * as fs from 'fs';
+import WorkOS from '@workos-inc/node';
 
 const WORKOS_API_KEY = process.env.WORKOS_API_KEY;
 
@@ -55,7 +55,9 @@ async function importUsers() {
         // Read export file
         const exportFile = './scripts/users-export.json';
         if (!fs.existsSync(exportFile)) {
-            throw new Error(`Export file not found: ${exportFile}\nRun exportSupabaseUsers.ts first`);
+            throw new Error(
+                `Export file not found: ${exportFile}\nRun exportSupabaseUsers.ts first`,
+            );
         }
 
         const exportData = JSON.parse(fs.readFileSync(exportFile, 'utf-8'));
@@ -117,7 +119,10 @@ async function importUsers() {
                 const errorMessage = error?.message || String(error);
 
                 // Check if user already exists
-                if (errorMessage.includes('email') && errorMessage.includes('already exists')) {
+                if (
+                    errorMessage.includes('email') &&
+                    errorMessage.includes('already exists')
+                ) {
                     console.log(`  ⚠️  User already exists in WorkOS`);
                     report.results.push({
                         email: profile.email,

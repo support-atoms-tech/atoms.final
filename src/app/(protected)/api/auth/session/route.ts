@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * GET /api/auth/session
@@ -23,9 +23,6 @@ export async function GET(_request: NextRequest) {
         });
     } catch (error) {
         console.error('Session check error:', error);
-        return NextResponse.json(
-            { error: 'Failed to check session' },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: 'Failed to check session' }, { status: 500 });
     }
 }

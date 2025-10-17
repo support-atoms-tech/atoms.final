@@ -20,6 +20,7 @@ Edit `/src/middleware.ts`:
 
 ```typescript
 import { type NextRequest } from 'next/server';
+
 import { updateWorkOSSession } from '@/lib/workos/middleware';
 
 export async function middleware(request: NextRequest) {
@@ -36,11 +37,13 @@ export const config = {
 ### 3️⃣ Configure OAuth Providers in WorkOS Dashboard
 
 **GitHub OAuth**:
+
 1. Go to WorkOS Dashboard → Authentication → Providers
 2. Add GitHub OAuth credentials
 3. Set Redirect URI: `http://localhost:3000/auth/callback`
 
 **Google OAuth**:
+
 1. Go to WorkOS Dashboard → Authentication → Providers
 2. Add Google OAuth credentials
 3. Set Redirect URI: `http://localhost:3000/auth/callback`
@@ -74,33 +77,37 @@ bun dev
 ## 🔍 What Changed
 
 ### For Users
+
 Nothing! Login works the same way.
 
 ### For Developers
 
-| Old | New |
-|-----|-----|
-| Supabase Auth | WorkOS Auth |
-| `supabase.auth.signIn()` | `login()` action |
-| `supabase.auth.signOut()` | `signOut()` action |
-| `supabase.auth.onAuthStateChange()` | `useAuth()` hook |
-| Session JWT | Session cookie |
+| Old                                 | New                |
+| ----------------------------------- | ------------------ |
+| Supabase Auth                       | WorkOS Auth        |
+| `supabase.auth.signIn()`            | `login()` action   |
+| `supabase.auth.signOut()`           | `signOut()` action |
+| `supabase.auth.onAuthStateChange()` | `useAuth()` hook   |
+| Session JWT                         | Session cookie     |
 
 ---
 
 ## 🆘 Troubleshooting
 
 ### Login not working?
+
 - Check WORKOS_API_KEY is set
 - Verify WORKOS_CLIENT_ID is correct
 - Check browser console for errors
 
 ### OAuth redirect loop?
+
 - Verify WORKOS_REDIRECT_URI in .env matches WorkOS Dashboard
 - Check OAuth provider credentials are correct
 - Clear cookies and try again
 
 ### Profile not loading?
+
 - Verify user_id cookie is set
 - Check API endpoint `/api/auth/session` works
 - Check Supabase database is accessible

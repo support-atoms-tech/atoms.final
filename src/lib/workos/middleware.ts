@@ -11,7 +11,8 @@ import workos from './workosClient';
  */
 
 const WORKOS_SESSION_COOKIE = 'wos-session';
-const WORKOS_COOKIE_PASSWORD = process.env.WORKOS_COOKIE_PASSWORD || 'complex_password_at_least_32_characters';
+const WORKOS_COOKIE_PASSWORD =
+    process.env.WORKOS_COOKIE_PASSWORD || 'complex_password_at_least_32_characters';
 
 /**
  * Updates and validates WorkOS session for the current request
@@ -20,7 +21,7 @@ const WORKOS_COOKIE_PASSWORD = process.env.WORKOS_COOKIE_PASSWORD || 'complex_pa
  * @returns NextResponse with updated session cookies
  */
 export async function updateWorkOSSession(request: NextRequest) {
-    let workosResponse = NextResponse.next({
+    const workosResponse = NextResponse.next({
         request,
     });
 
@@ -53,13 +54,17 @@ export async function updateWorkOSSession(request: NextRequest) {
             }
 
             // Update cookie with refreshed session
-            workosResponse.cookies.set(WORKOS_SESSION_COOKIE, refreshResult.sealedSession, {
-                path: '/',
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7, // 7 days
-            });
+            workosResponse.cookies.set(
+                WORKOS_SESSION_COOKIE,
+                refreshResult.sealedSession,
+                {
+                    path: '/',
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    maxAge: 60 * 60 * 24 * 7, // 7 days
+                },
+            );
 
             // Use refreshed session data
             const user = refreshResult.user;
@@ -72,13 +77,17 @@ export async function updateWorkOSSession(request: NextRequest) {
         });
 
         if (refreshResult.authenticated) {
-            workosResponse.cookies.set(WORKOS_SESSION_COOKIE, refreshResult.sealedSession, {
-                path: '/',
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7, // 7 days
-            });
+            workosResponse.cookies.set(
+                WORKOS_SESSION_COOKIE,
+                refreshResult.sealedSession,
+                {
+                    path: '/',
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    maxAge: 60 * 60 * 24 * 7, // 7 days
+                },
+            );
         }
 
         // Proceed with authorization checks

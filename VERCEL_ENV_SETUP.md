@@ -18,22 +18,25 @@
 **Add these 3 variables:**
 
 #### 1. WORKOS_API_KEY
+
 - **Name**: `WORKOS_API_KEY`
 - **Value**:
-  ```
-  sk_test_a2V5XzAxSzRDR1cyMjJXSlFXQlI1RDdDUFczUUM3LGxDdWJmN2tNTDBjaHlRNjhUaEtsalQ0ZTM
-  ```
+    ```
+    sk_test_a2V5XzAxSzRDR1cyMjJXSlFXQlI1RDdDUFczUUM3LGxDdWJmN2tNTDBjaHlRNjhUaEtsalQ0ZTM
+    ```
 - **Environments**: Development, Preview, Production
 
 #### 2. WORKOS_CLIENT_ID
+
 - **Name**: `WORKOS_CLIENT_ID`
 - **Value**:
-  ```
-  client_01K4CGW2J1FGWZYZJDMVWGQZBD
-  ```
+    ```
+    client_01K4CGW2J1FGWZYZJDMVWGQZBD
+    ```
 - **Environments**: Development, Preview, Production
 
 #### 3. WORKOS_COOKIE_PASSWORD
+
 - **Name**: `WORKOS_COOKIE_PASSWORD`
 - **Value**: (Your generated 32+ character password from `openssl rand -base64 24`)
 - **Environments**: Development, Preview, Production
@@ -41,20 +44,22 @@
 ### AuthKit URLs
 
 #### 4. NEXT_PUBLIC_WORKOS_REDIRECT_URI
+
 - **Name**: `NEXT_PUBLIC_WORKOS_REDIRECT_URI`
 - **Value**: (For production)
-  ```
-  https://atoms.tech/auth/callback
-  ```
+    ```
+    https://atoms.tech/auth/callback
+    ```
 - **Environments**: Production ONLY
 - **Note**: "NEXT_PUBLIC" prefix makes it accessible in browser
 
 #### 5. WORKOS_LOGOUT_REDIRECT_URI
+
 - **Name**: `WORKOS_LOGOUT_REDIRECT_URI`
 - **Value**: (For production)
-  ```
-  https://atoms.tech/login
-  ```
+    ```
+    https://atoms.tech/login
+    ```
 - **Environments**: Production ONLY
 
 ### Supabase Configuration (Keep Existing)
@@ -107,9 +112,9 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 
 1. Click **+ Add New**
 2. Fill in:
-   - **Name**: (e.g., `WORKOS_API_KEY`)
-   - **Value**: (the actual value)
-   - **Environment**: Select all that apply
+    - **Name**: (e.g., `WORKOS_API_KEY`)
+    - **Value**: (the actual value)
+    - **Environment**: Select all that apply
 3. Click **Save**
 
 **Example for WORKOS_API_KEY:**
@@ -139,21 +144,21 @@ WORKOS_LOGOUT_REDIRECT_URI=https://atoms.tech/login
 After adding all variables:
 
 1. **Development** environment should have:
-   - WORKOS_API_KEY
-   - WORKOS_CLIENT_ID
-   - WORKOS_COOKIE_PASSWORD
-   - NEXT_PUBLIC_WORKOS_REDIRECT_URI (localhost)
-   - WORKOS_LOGOUT_REDIRECT_URI (localhost)
+    - WORKOS_API_KEY
+    - WORKOS_CLIENT_ID
+    - WORKOS_COOKIE_PASSWORD
+    - NEXT_PUBLIC_WORKOS_REDIRECT_URI (localhost)
+    - WORKOS_LOGOUT_REDIRECT_URI (localhost)
 
 2. **Preview** environment should have:
-   - Same as Development (or staging URLs)
+    - Same as Development (or staging URLs)
 
 3. **Production** environment should have:
-   - WORKOS_API_KEY (sk_live_...)
-   - WORKOS_CLIENT_ID
-   - WORKOS_COOKIE_PASSWORD
-   - NEXT_PUBLIC_WORKOS_REDIRECT_URI (https://atoms.tech)
-   - WORKOS_LOGOUT_REDIRECT_URI (https://atoms.tech)
+    - WORKOS*API_KEY (sk_live*...)
+    - WORKOS_CLIENT_ID
+    - WORKOS_COOKIE_PASSWORD
+    - NEXT_PUBLIC_WORKOS_REDIRECT_URI (https://atoms.tech)
+    - WORKOS_LOGOUT_REDIRECT_URI (https://atoms.tech)
 
 ---
 
@@ -162,13 +167,13 @@ After adding all variables:
 After adding variables:
 
 1. **Option A - Auto Deploy**
-   - If connected to Git, push to GitHub
-   - Vercel automatically redeploys with new env vars
+    - If connected to Git, push to GitHub
+    - Vercel automatically redeploys with new env vars
 
 2. **Option B - Manual Deploy**
-   - Go to Vercel Deployments
-   - Click "Redeploy" on latest deployment
-   - Or push a new commit
+    - Go to Vercel Deployments
+    - Click "Redeploy" on latest deployment
+    - Or push a new commit
 
 ---
 
@@ -179,10 +184,10 @@ After deployment:
 1. Visit: **https://atoms.tech/auth/login**
 2. You should see the WorkOS AuthKit login page
 3. Test signup:
-   - Enter email and password
-   - Should redirect to dashboard
+    - Enter email and password
+    - Should redirect to dashboard
 4. Verify in WorkOS Dashboard:
-   - User should appear in User Management
+    - User should appear in User Management
 
 ---
 
@@ -191,6 +196,7 @@ After deployment:
 ### "Invalid redirect URI" on Production
 
 Check:
+
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI` matches exactly: `https://atoms.tech/auth/callback`
 - No trailing slashes
 - URL is set to Production environment in Vercel
@@ -208,6 +214,7 @@ Check:
 ### localhost Not Working After Deploy
 
 Make sure `.env.local` still exists locally with development URLs:
+
 ```
 NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3000/auth/callback
 WORKOS_LOGOUT_REDIRECT_URI=http://localhost:3000/login

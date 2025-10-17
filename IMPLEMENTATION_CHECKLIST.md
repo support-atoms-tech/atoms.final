@@ -3,6 +3,7 @@
 ## Phase 1: Code Implementation ✅ COMPLETE
 
 ### Backend Setup
+
 - [x] `@workos-inc/authkit-nextjs@2.10.0` installed
 - [x] `@workos-inc/node@7.71.0` installed
 - [x] `src/middleware.ts` - AuthKit middleware configured
@@ -10,15 +11,18 @@
 - [x] Session encryption ready (requires WORKOS_COOKIE_PASSWORD)
 
 ### Authentication Routes
+
 - [x] `src/app/auth/login/route.ts` - Login endpoint
 - [x] `src/app/auth/callback/route.ts` - OAuth callback handler
 - [x] `src/app/auth/logout/route.ts` - Logout endpoint
 
 ### Example Components
+
 - [x] `src/app/auth/server-example/page.tsx` - Server component example
 - [x] `src/app/auth/client-example/page.tsx` - Client component example
 
 ### Documentation
+
 - [x] `FINAL_AUTHKIT_SETUP.md` - Quick overview
 - [x] `AUTHKIT_SETUP.md` - Complete guide
 - [x] `AUTHKIT_COMPLETE_SUMMARY.txt` - This summary
@@ -31,24 +35,28 @@
 ## Phase 2: Configuration ⏳ YOUR ACTION REQUIRED
 
 ### Get WorkOS Credentials
+
 - [ ] Create WorkOS account at https://dashboard.workos.com/
 - [ ] Navigate to API Keys section
 - [ ] Copy API Key (starts with `sk_test_`)
 - [ ] Copy Client ID (starts with `client_`)
 
 ### Generate Secure Password
+
 - [ ] Run: `openssl rand -base64 24`
 - [ ] Save the output (32+ character password)
 
 ### Create Environment Variables
+
 - [ ] Copy `.env.example` to `.env.local`
 - [ ] Add WORKOS_API_KEY
 - [ ] Add WORKOS_CLIENT_ID
 - [ ] Add WORKOS_COOKIE_PASSWORD
 - [ ] Verify NEXT_PUBLIC_WORKOS_REDIRECT_URI
-- [ ] Keep existing NEXT_PUBLIC_SUPABASE_* variables
+- [ ] Keep existing NEXT*PUBLIC_SUPABASE*\* variables
 
 ### Configure WorkOS Dashboard
+
 - [ ] Go to https://dashboard.workos.com/
 - [ ] Navigate to: Authentication → Redirects
 - [ ] Add Redirect URI: `https://atoms.tech/auth/callback`
@@ -61,18 +69,20 @@
 - [ ] Follow setup wizard
 
 ### Configure OAuth Providers (Optional)
+
 - [ ] GitHub OAuth (if needed)
-  - [ ] Get GitHub credentials
-  - [ ] Add to WorkOS Dashboard
+    - [ ] Get GitHub credentials
+    - [ ] Add to WorkOS Dashboard
 - [ ] Google OAuth (if needed)
-  - [ ] Get Google credentials
-  - [ ] Add to WorkOS Dashboard
+    - [ ] Get Google credentials
+    - [ ] Add to WorkOS Dashboard
 
 ---
 
 ## Phase 3: Testing ⏳ YOUR ACTION REQUIRED
 
 ### Local Testing
+
 - [ ] Run `bun dev`
 - [ ] Visit `http://localhost:3000/auth/login`
 - [ ] Verify WorkOS AuthKit hosted login page loads
@@ -85,6 +95,7 @@
 - [ ] Test Google OAuth (if configured)
 
 ### Production Configuration
+
 - [ ] Update NEXT_PUBLIC_WORKOS_REDIRECT_URI to `https://atoms.tech/auth/callback`
 - [ ] Update WORKOS_LOGOUT_REDIRECT_URI to `https://atoms.tech/login`
 - [ ] Add production environment variables to Vercel
@@ -97,12 +108,14 @@
 ## Phase 4: Integration ⏳ OPTIONAL
 
 ### Update Your Pages
+
 - [ ] Update login page to use `/auth/login` endpoint
 - [ ] Update protected pages to use `withAuth()` or `useAuth()`
 - [ ] Add logout button with link to `/auth/logout`
 - [ ] Update navigation to show user info
 
 ### Database Integration (Optional)
+
 - [ ] Add workos_user_id to profiles table
 - [ ] Map existing users to WorkOS users
 - [ ] Test data consistency
@@ -112,6 +125,7 @@
 ## Phase 5: Deployment ⏳ YOUR ACTION REQUIRED
 
 ### Pre-Deployment
+
 - [ ] All tests passing locally
 - [ ] No console errors
 - [ ] Environment variables set
@@ -119,6 +133,7 @@
 - [ ] Backup current authentication system
 
 ### Staging Deployment
+
 - [ ] Deploy to staging environment
 - [ ] Test all authentication flows
 - [ ] Verify user creation in WorkOS
@@ -126,6 +141,7 @@
 - [ ] Monitor error logs
 
 ### Production Deployment
+
 - [ ] Deploy to production
 - [ ] Update DNS/domain if needed
 - [ ] Test complete user flow
@@ -136,18 +152,18 @@
 
 ## Reference Files
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `AUTHKIT_COMPLETE_SUMMARY.txt` | This checklist | ✅ |
-| `FINAL_AUTHKIT_SETUP.md` | Quick reference | ✅ |
-| `AUTHKIT_SETUP.md` | Complete guide | ✅ |
-| `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` | Dashboard config | ✅ |
-| `.env.example` | Environment template | ✅ |
-| `src/middleware.ts` | Session management | ✅ |
-| `src/app/layout.tsx` | AuthKitProvider | ✅ |
-| `src/app/auth/login/route.ts` | Login endpoint | ✅ |
-| `src/app/auth/callback/route.ts` | OAuth callback | ✅ |
-| `src/app/auth/logout/route.ts` | Logout endpoint | ✅ |
+| File                                 | Purpose              | Status |
+| ------------------------------------ | -------------------- | ------ |
+| `AUTHKIT_COMPLETE_SUMMARY.txt`       | This checklist       | ✅     |
+| `FINAL_AUTHKIT_SETUP.md`             | Quick reference      | ✅     |
+| `AUTHKIT_SETUP.md`                   | Complete guide       | ✅     |
+| `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` | Dashboard config     | ✅     |
+| `.env.example`                       | Environment template | ✅     |
+| `src/middleware.ts`                  | Session management   | ✅     |
+| `src/app/layout.tsx`                 | AuthKitProvider      | ✅     |
+| `src/app/auth/login/route.ts`        | Login endpoint       | ✅     |
+| `src/app/auth/callback/route.ts`     | OAuth callback       | ✅     |
+| `src/app/auth/logout/route.ts`       | Logout endpoint      | ✅     |
 
 ---
 
@@ -177,29 +193,29 @@ bun run build
 
 ## Important URLs
 
-| Purpose | URL |
-|---------|-----|
-| WorkOS Dashboard | https://dashboard.workos.com/ |
-| API Keys | https://dashboard.workos.com/api-keys |
-| Settings | https://dashboard.workos.com/settings |
-| Authentication | https://dashboard.workos.com/authentication |
-| Redirects | https://dashboard.workos.com/redirects |
-| Users | https://dashboard.workos.com/user-management/users |
-| WorkOS Docs | https://workos.com/docs/authkit |
-| API Reference | https://workos.com/docs/reference/authkit |
+| Purpose          | URL                                                |
+| ---------------- | -------------------------------------------------- |
+| WorkOS Dashboard | https://dashboard.workos.com/                      |
+| API Keys         | https://dashboard.workos.com/api-keys              |
+| Settings         | https://dashboard.workos.com/settings              |
+| Authentication   | https://dashboard.workos.com/authentication        |
+| Redirects        | https://dashboard.workos.com/redirects             |
+| Users            | https://dashboard.workos.com/user-management/users |
+| WorkOS Docs      | https://workos.com/docs/authkit                    |
+| API Reference    | https://workos.com/docs/reference/authkit          |
 
 ---
 
 ## Common Issues & Solutions
 
-| Issue | Solution |
-|-------|----------|
-| "Invalid Redirect URI" | Verify NEXT_PUBLIC_WORKOS_REDIRECT_URI matches dashboard exactly |
-| "Cookie password too short" | Generate new: `openssl rand -base64 24` (32+ chars) |
-| "Session not working" | Check WORKOS_COOKIE_PASSWORD is set and 32+ characters |
-| "User not in dashboard" | Wait a few seconds, refresh dashboard, check email |
-| "OAuth not working" | Verify OAuth provider credentials in WorkOS Dashboard |
-| "TypeScript errors" | Run `bun run type-check` to see full errors |
+| Issue                       | Solution                                                         |
+| --------------------------- | ---------------------------------------------------------------- |
+| "Invalid Redirect URI"      | Verify NEXT_PUBLIC_WORKOS_REDIRECT_URI matches dashboard exactly |
+| "Cookie password too short" | Generate new: `openssl rand -base64 24` (32+ chars)              |
+| "Session not working"       | Check WORKOS_COOKIE_PASSWORD is set and 32+ characters           |
+| "User not in dashboard"     | Wait a few seconds, refresh dashboard, check email               |
+| "OAuth not working"         | Verify OAuth provider credentials in WorkOS Dashboard            |
+| "TypeScript errors"         | Run `bun run type-check` to see full errors                      |
 
 ---
 

@@ -9,10 +9,12 @@ All code is implemented and ready to use. You just need to configure WorkOS.
 ## 📋 What Was Done
 
 ### ✅ Installation
+
 - `@workos-inc/authkit-nextjs@2.10.0` installed
 - All dependencies added to package.json
 
 ### ✅ Implementation
+
 - **Middleware**: Session management with `authkitMiddleware()`
 - **Layout**: `AuthKitProvider` wrapped around entire app
 - **Login Endpoint**: `/auth/login` - Initiates AuthKit flow
@@ -21,6 +23,7 @@ All code is implemented and ready to use. You just need to configure WorkOS.
 - **Examples**: Server & client component examples provided
 
 ### ✅ Documentation
+
 - `AUTHKIT_SETUP.md` - Complete guide
 - `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` - Dashboard configuration
 - `.env.authkit` - Environment variable template
@@ -63,19 +66,24 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key
 ### Step 4: Configure WorkOS Dashboard
 
 **Redirects**:
+
 - Add: `https://atoms.tech/auth/callback`
 - Add: `http://localhost:3000/auth/callback`
 
 **Login Endpoint**:
+
 - Set: `https://atoms.tech/auth/login`
 
 **Logout Redirect**:
+
 - Set: `https://atoms.tech/login`
 
 **User Management**:
+
 - Click "Set up User Management"
 
 **OAuth** (optional):
+
 - Add GitHub credentials (if you want GitHub login)
 - Add Google credentials (if you want Google login)
 
@@ -143,17 +151,20 @@ export default function Component() {
 ## ✨ Features
 
 ✅ **Email/Password Authentication**
+
 - Signup with email and password
 - Login with email and password
 - Automatic user creation
 
 ✅ **OAuth Providers**
+
 - GitHub (if configured)
 - Google (if configured)
 - Microsoft (if configured)
 - Any provider WorkOS supports
 
 ✅ **Session Management**
+
 - Automatic encrypted cookies
 - Token refresh
 - Secure HttpOnly cookies
@@ -161,6 +172,7 @@ export default function Component() {
 - Session expiry
 
 ✅ **User Management**
+
 - Create users via API
 - List users
 - Update users
@@ -169,6 +181,7 @@ export default function Component() {
 - Manage roles
 
 ✅ **Enterprise Features**
+
 - SAML SSO (Enterprise)
 - Directory Sync (Enterprise)
 - MFA/2FA (Optional)
@@ -198,27 +211,28 @@ After setup, test:
 ### Vercel Setup
 
 1. **Add Environment Variables**:
-   - Go to: Vercel Project Settings → Environment Variables
-   - Add all variables from Step 3 above
-   - Use production values for atoms.tech
+    - Go to: Vercel Project Settings → Environment Variables
+    - Add all variables from Step 3 above
+    - Use production values for atoms.tech
 
 2. **Update Redirect URIs**:
-   - WorkOS Dashboard → Redirects
-   - Change development URIs to production:
-     - `https://atoms.tech/auth/callback`
-     - `https://atoms.tech/login`
+    - WorkOS Dashboard → Redirects
+    - Change development URIs to production:
+        - `https://atoms.tech/auth/callback`
+        - `https://atoms.tech/login`
 
 3. **Deploy**:
-   ```bash
-   git push
-   # Vercel automatically deploys
-   ```
+    ```bash
+    git push
+    # Vercel automatically deploys
+    ```
 
 ---
 
 ## 🔐 Security Notes
 
 ✅ **Implemented**:
+
 - HttpOnly cookies (prevents XSS)
 - Secure flag (HTTPS-only in production)
 - SameSite Lax (CSRF protection)
@@ -230,16 +244,16 @@ After setup, test:
 
 ## 📁 File References
 
-| File | Purpose |
-|------|---------|
-| `src/middleware.ts` | Session management & authentication |
-| `src/app/layout.tsx` | AuthKitProvider wrapper |
-| `src/app/auth/login/route.ts` | Login endpoint |
-| `src/app/auth/callback/route.ts` | OAuth callback |
-| `src/app/auth/logout/route.ts` | Logout endpoint |
-| `.env.authkit` | Environment template |
-| `AUTHKIT_SETUP.md` | Complete guide |
-| `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` | Dashboard setup |
+| File                                 | Purpose                             |
+| ------------------------------------ | ----------------------------------- |
+| `src/middleware.ts`                  | Session management & authentication |
+| `src/app/layout.tsx`                 | AuthKitProvider wrapper             |
+| `src/app/auth/login/route.ts`        | Login endpoint                      |
+| `src/app/auth/callback/route.ts`     | OAuth callback                      |
+| `src/app/auth/logout/route.ts`       | Logout endpoint                     |
+| `.env.authkit`                       | Environment template                |
+| `AUTHKIT_SETUP.md`                   | Complete guide                      |
+| `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` | Dashboard setup                     |
 
 ---
 
@@ -266,6 +280,7 @@ After setup, test:
 ## 🆘 Need Help?
 
 Check these files in order:
+
 1. `WORKOS_AUTHKIT_DASHBOARD_CONFIG.md` - If dashboard config issue
 2. `AUTHKIT_SETUP.md` - For complete guide
 3. `WORKOS_QUICKSTART.md` - For quick reference

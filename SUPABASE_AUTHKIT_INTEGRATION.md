@@ -3,6 +3,7 @@
 ## Overview
 
 This guide integrates WorkOS AuthKit with Supabase for:
+
 - User authentication via WorkOS AuthKit
 - Access tokens for Supabase REST/GraphQL APIs
 - Row-level security (RLS) with role-based access
@@ -19,9 +20,9 @@ This guide integrates WorkOS AuthKit with Supabase for:
 1. Click "Add Auth Provider"
 2. Select "WorkOS"
 3. Enter your credentials:
-   - **Client ID**: `client_01K4CGW2J1FGWZYZJDMVWGQZBD`
-   - **Client Secret**: Get from WorkOS Dashboard
-   - **Issuer URL**: (see below)
+    - **Client ID**: `client_01K4CGW2J1FGWZYZJDMVWGQZBD`
+    - **Client Secret**: Get from WorkOS Dashboard
+    - **Issuer URL**: (see below)
 
 ### Issuer URL Format
 
@@ -32,6 +33,7 @@ https://api.workos.com/user_management/client_01K4CGW2J1FGWZYZJDMVWGQZBD
 ```
 
 **Full URL**:
+
 ```
 https://api.workos.com/user_management/client_01K4CGW2J1FGWZYZJDMVWGQZBD
 ```
@@ -67,14 +69,14 @@ Create a JWT Template with these claims to work with Supabase RLS:
 
 ### Key Claims Explained
 
-| Claim | Purpose |
-|-------|---------|
-| `sub` | User ID (matches Supabase auth.users.id) |
-| `email` | User email address |
-| `email_verified` | Email verification status |
-| `aud` | Audience (set to "authenticated") |
-| `role` | Supabase RLS role (must be "authenticated") |
-| `user_role` | Your app's role (from WorkOS) |
+| Claim            | Purpose                                     |
+| ---------------- | ------------------------------------------- |
+| `sub`            | User ID (matches Supabase auth.users.id)    |
+| `email`          | User email address                          |
+| `email_verified` | Email verification status                   |
+| `aud`            | Audience (set to "authenticated")           |
+| `role`           | Supabase RLS role (must be "authenticated") |
+| `user_role`      | Your app's role (from WorkOS)               |
 
 ---
 
@@ -368,8 +370,9 @@ export async function syncWorkOSUserToSupabase(
 
 ```typescript
 import { authenticateWithCode } from '@workos-inc/authkit-nextjs';
-import { syncWorkOSUserToSupabase } from '@/lib/supabase/sync-user';
 import { NextRequest, NextResponse } from 'next/server';
+
+import { syncWorkOSUserToSupabase } from '@/lib/supabase/sync-user';
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -385,10 +388,7 @@ export async function GET(request: NextRequest) {
 
         // Sync user to Supabase
         if (response.user && response.accessToken) {
-            await syncWorkOSUserToSupabase(
-                response.user,
-                response.accessToken,
-            );
+            await syncWorkOSUserToSupabase(response.user, response.accessToken);
         }
 
         return NextResponse.redirect(new URL('/home', request.url));
@@ -530,6 +530,7 @@ export default async function TestPage() {
 ### "Invalid issuer" error
 
 Check that the issuer URL matches exactly:
+
 ```
 https://api.workos.com/user_management/client_01K4CGW2J1FGWZYZJDMVWGQZBD
 ```
@@ -539,6 +540,7 @@ No trailing slashes or typos.
 ### "Unauthorized" when querying Supabase
 
 Verify:
+
 - WorkOS token is being passed in Authorization header
 - JWT template includes `"aud": "authenticated"`
 - RLS policies allow the operation
@@ -547,6 +549,7 @@ Verify:
 ### "User not found" in profiles table
 
 Run sync function during callback:
+
 ```typescript
 await syncWorkOSUserToSupabase(user, accessToken);
 ```
@@ -554,6 +557,7 @@ await syncWorkOSUserToSupabase(user, accessToken);
 ### RLS policy not working
 
 Check:
+
 - RLS is enabled on the table
 - Policy uses correct JWT claims
 - `auth.uid()` matches WorkOS user ID

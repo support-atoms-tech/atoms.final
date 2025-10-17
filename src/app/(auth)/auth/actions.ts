@@ -4,10 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createUser, authenticateWithCode } from '@/lib/workos/workosAuth';
 import { getUserOrganizationsServer } from '@/lib/db/server';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { createClient } from '@/lib/supabase/supabaseServer';
 import { COOKIE_NAME } from '@/lib/utils/cookieUtils';
+// Note: These imports are kept for potential future use in auth actions
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { authenticateWithCode, createUser } from '@/lib/workos/workosAuth';
 import { OrganizationType } from '@/types';
 
 /**
@@ -205,7 +208,7 @@ export async function signup(formData: FormData) {
             };
         }
 
-        const userData = await createResp.json();
+        await createResp.json();
 
         // Automatically sign in the new user
         const signInResp = await fetch('https://api.workos.com/authkit/sign_in', {
