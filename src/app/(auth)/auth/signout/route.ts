@@ -1,6 +1,8 @@
-import { signOut } from '@/app/(auth)/auth/actions';
+import { signOut } from '@workos-inc/authkit-nextjs';
 
-export async function POST() {
-    const result = await signOut();
-    return result;
-}
+/**
+ * POST /auth/signout
+ *
+ * Sign out the current user using WorkOS AuthKit
+ */
+export const POST = signOut();
