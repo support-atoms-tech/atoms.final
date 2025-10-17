@@ -1,21 +1,22 @@
 import { redirect } from 'next/navigation';
 
-import { createClient } from '@/lib/supabase/supabaseServer';
+import { getAuthorizationUrl } from '@/lib/workos/workosAuth';
 
-export async function GET(request: Request) {
-    const requestUrl = new URL(request.url);
-    const supabase = await createClient();
+/**
+ * GitHub OAuth initiation route
+ * Redirects to WorkOS GitHub OAuth flow
+ */
+export async function GET(_request: Request) {
+    try {
+        const authUrl = await getAuthorizationUrl('github');
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-            redirectTo: `${requestUrl.origin}/auth/callback`,
-        },
-    });
+        if (!authUrl) {
+            throw new Error('Failed to generate authorization URL');
+        }
 
-    if (error) {
+        return redirect(authUrl);
+    } catch (error) {
+        console.error('GitHub OAuth error:', error);
         return redirect('/login?error=Could not authenticate with GitHub');
     }
-
-    return redirect(data.url);
 }

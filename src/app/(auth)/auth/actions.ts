@@ -4,41 +4,68 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { createUser, authenticateWithCode } from '@/lib/workos/workosAuth';
 import { getUserOrganizationsServer } from '@/lib/db/server';
 import { createClient } from '@/lib/supabase/supabaseServer';
 import { COOKIE_NAME } from '@/lib/utils/cookieUtils';
 import { OrganizationType } from '@/types';
 
+/**
+ * Authenticate user with WorkOS using email and password
+ */
 export async function login(formData: FormData) {
-    const supabase = await createClient();
     const cookieStore = await cookies();
 
-    const data = {
-        email: formData.get('email') as string,
-        password: formData.get('password') as string,
-    };
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     const externalAuthId = (formData.get('external_auth_id') as string) || null;
 
-    try {
-        const { error, data: authData } = await supabase.auth.signInWithPassword(data);
+    if (!email || !password) {
+        return {
+            error: 'Email and password are required',
+            success: false,
+        };
+    }
 
-        if (error || !authData.user) {
+    try {
+        // For now, use WorkOS API directly to authenticate
+        // In production, you'd use the WorkOS SDK method
+        const workosApiKey = process.env.WORKOS_API_KEY;
+        const clientId = process.env.WORKOS_CLIENT_ID;
+
+        if (!workosApiKey || !clientId) {
+            throw new Error('WorkOS credentials not configured');
+        }
+
+        // Call WorkOS API to authenticate with password
+        const response = await fetch('https://api.workos.com/authkit/sign_in', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${workosApiKey}`,
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                email,
+                password,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
             return {
-                error: error?.message || 'Invalid credentials',
+                error: errorData.message || 'Invalid credentials',
                 success: false,
             };
         }
 
+        const authData = await response.json();
+        const workosUserId = authData.user.id;
+
         // If this login was initiated by AuthKit (Standalone Connect), complete the flow
         if (externalAuthId) {
             try {
-                // Call WorkOS API to complete AuthKit OAuth
-                const workosApiKey = process.env.WORKOS_API_KEY;
-                if (!workosApiKey) {
-                    return { success: false, error: 'WORKOS_API_KEY not configured' };
-                }
-
-                const resp = await fetch(
+                const completeResp = await fetch(
                     'https://api.workos.com/authkit/oauth2/complete',
                     {
                         method: 'POST',
@@ -49,30 +76,29 @@ export async function login(formData: FormData) {
                         body: JSON.stringify({
                             external_auth_id: externalAuthId,
                             user: {
-                                id: authData.user.id,
+                                id: workosUserId,
                                 email: authData.user.email,
-                                first_name: authData.user.user_metadata?.first_name,
-                                last_name: authData.user.user_metadata?.last_name,
+                                first_name: authData.user.first_name,
+                                last_name: authData.user.last_name,
                             },
                         }),
                     },
                 );
 
-                if (!resp.ok) {
-                    const errText = await resp.text();
+                if (!completeResp.ok) {
+                    const errText = await completeResp.text();
                     return {
                         success: false,
-                        error: `WorkOS API error (${resp.status}): ${errText}`,
+                        error: `WorkOS API error (${completeResp.status}): ${errText}`,
                     };
                 }
 
-                const { redirect_uri } = await resp.json();
+                const { redirect_uri } = await completeResp.json();
 
                 if (!redirect_uri) {
                     return { success: false, error: 'No redirect_uri from WorkOS' };
                 }
 
-                // Return the redirect URI for the client to navigate to
                 return {
                     success: true,
                     authkitRedirect: redirect_uri,
@@ -86,24 +112,21 @@ export async function login(formData: FormData) {
             }
         }
 
-        const organizations = await getUserOrganizationsServer(authData.user.id);
+        // Get user organizations from database
+        const organizations = await getUserOrganizationsServer(workosUserId);
 
-        let redirectUrl = '/home'; // Default fallback - route to /home by default
+        let redirectUrl = '/home';
 
-        // Find enterprise organization first
         const enterpriseOrg = organizations.find(
             (org) => org.type === OrganizationType.enterprise,
         );
 
-        // Only set cookie if enterprise org exists or if no preferred_org_id is set yet
         const existingPreferredOrgId = cookieStore.get('preferred_org_id')?.value;
 
         if (enterpriseOrg) {
-            // If enterprise org exists, always set it as preferred and redirect there
             redirectUrl = `/org/${enterpriseOrg.id}`;
             cookieStore.set('preferred_org_id', enterpriseOrg.id);
         } else if (!existingPreferredOrgId && organizations.length > 0) {
-            // Only set a new preferred org if none exists and we have orgs
             const personalOrg = organizations.find(
                 (org) => org.type === OrganizationType.personal,
             );
@@ -114,7 +137,8 @@ export async function login(formData: FormData) {
             }
         }
 
-        cookieStore.set('user_id', authData.user.id);
+        // Set user ID cookie (for backwards compatibility with existing code)
+        cookieStore.set('user_id', workosUserId);
 
         revalidatePath('/', 'layout');
         return {
@@ -126,81 +150,103 @@ export async function login(formData: FormData) {
         return {
             error: 'An unexpected error occurred. Please try again.',
             success: false,
-            data: error,
         };
     }
 }
 
+/**
+ * Create a new user account with WorkOS
+ */
 export async function signup(formData: FormData) {
-    const supabase = await createClient();
-
-    const data = {
-        email: formData.get('email') as string,
-        password: formData.get('password') as string,
-    };
-
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     const name = formData.get('name') as string;
 
-    try {
-        //Clear the session if it exists
-        await supabase.auth.signOut();
+    if (!email || !password || !name) {
+        return {
+            error: 'Email, password, and name are required',
+            success: false,
+        };
+    }
 
-        const { data: authData, error } = await supabase.auth.signUp({
-            ...data,
-            options: {
-                data: {
-                    full_name: name,
-                },
-                emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/home`,
+    try {
+        const workosApiKey = process.env.WORKOS_API_KEY;
+        const clientId = process.env.WORKOS_CLIENT_ID;
+
+        if (!workosApiKey || !clientId) {
+            throw new Error('WorkOS credentials not configured');
+        }
+
+        // Parse name into first and last
+        const nameParts = name.trim().split(/\s+/);
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || undefined;
+
+        // Create user in WorkOS
+        const createResp = await fetch('https://api.workos.com/user_management/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${workosApiKey}`,
             },
+            body: JSON.stringify({
+                email,
+                password,
+                first_name: firstName,
+                last_name: lastName,
+            }),
         });
 
-        if (error) {
+        if (!createResp.ok) {
+            const errorData = await createResp.json();
             return {
-                error: error.message,
+                error: errorData.message || 'Failed to create account',
                 success: false,
             };
         }
 
-        if (!authData.session) {
+        const userData = await createResp.json();
+
+        // Automatically sign in the new user
+        const signInResp = await fetch('https://api.workos.com/authkit/sign_in', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${workosApiKey}`,
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                email,
+                password,
+            }),
+        });
+
+        if (!signInResp.ok) {
             return {
-                message: 'Check your email to confirm your account',
+                message: 'Account created. Please log in.',
                 success: true,
             };
-        }
-
-        // Prefetch user data to make subsequent page loads faster
-        if (authData.user) {
-            await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', authData.user.id)
-                .single();
         }
 
         revalidatePath('/', 'layout');
         redirect('/home');
     } catch (error) {
+        console.error('Error signing up:', error);
         return {
             error: 'An unexpected error occurred',
             success: false,
-            data: error,
         };
     }
 }
 
+/**
+ * Sign out the current user
+ */
 export async function signOut() {
-    const supabase = await createClient();
-
     try {
-        const { error } = await supabase.auth.signOut();
-
-        if (error) {
-            throw error;
-        }
-
-        // Clear auth cookies on server side
         const cookieStore = await cookies();
+
+        // Clear all auth cookies on server side
         Object.values(COOKIE_NAME).forEach((name) => {
             cookieStore.set(name, '', {
                 expires: new Date(0),
@@ -208,12 +254,19 @@ export async function signOut() {
             });
         });
 
-        revalidatePath('/', 'layout');
+        // Also clear WorkOS session cookies
+        cookieStore.set('workos_session', '', {
+            expires: new Date(0),
+            path: '/',
+        });
 
-        // Send a properly formatted JSON response
-        return Response.json({ success: true });
+        revalidatePath('/', 'layout');
+        redirect('/login');
     } catch (error) {
         console.error('Error signing out:', error);
-        return Response.json({ success: false, error: 'Failed to sign out' });
+        return {
+            error: 'Failed to sign out',
+            success: false,
+        };
     }
 }

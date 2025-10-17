@@ -1,21 +1,22 @@
 import { redirect } from 'next/navigation';
 
-import { createClient } from '@/lib/supabase/supabaseServer';
+import { getAuthorizationUrl } from '@/lib/workos/workosAuth';
 
-export async function GET(request: Request) {
-    const requestUrl = new URL(request.url);
-    const supabase = await createClient();
+/**
+ * Google OAuth initiation route
+ * Redirects to WorkOS Google OAuth flow
+ */
+export async function GET(_request: Request) {
+    try {
+        const authUrl = await getAuthorizationUrl('google');
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: `${requestUrl.origin}/auth/callback`,
-        },
-    });
+        if (!authUrl) {
+            throw new Error('Failed to generate authorization URL');
+        }
 
-    if (error) {
+        return redirect(authUrl);
+    } catch (error) {
+        console.error('Google OAuth error:', error);
         return redirect('/login?error=Could not authenticate with Google');
     }
-
-    return redirect(data.url);
 }

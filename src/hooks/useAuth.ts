@@ -1,9 +1,14 @@
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { supabase } from '@/lib/supabase/supabaseBrowser';
 import { Profile } from '@/types';
 
+/**
+ * useAuth Hook - WorkOS Authentication
+ *
+ * Manages authentication state and user profile on the client side.
+ * Checks for WorkOS session via API and fetches user profile.
+ */
 export function useAuth() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -11,153 +16,107 @@ export function useAuth() {
     const router = useRouter();
     const [initialized, setInitialized] = useState(false);
 
-    const fetchUserProfile = async (userId: string) => {
+    /**
+     * Fetch user profile from database
+     */
+    const fetchUserProfile = useCallback(async (userId: string) => {
         try {
             console.log('useAuth: Fetching profile for user:', userId);
-            const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
 
-            if (error) {
-                console.error('useAuth: Error fetching user profile:', error);
-                throw error;
+            const response = await fetch(`/api/auth/profile/${userId}`);
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch profile: ${response.statusText}`);
             }
+
+            const profile: Profile = await response.json();
             console.log('useAuth: Profile fetched successfully:', profile?.full_name);
             setUserProfile(profile);
         } catch (error) {
             console.error('useAuth: Error in fetchUserProfile:', error);
             setUserProfile(null);
         }
-    };
+    }, []);
 
-    useEffect(() => {
-        if (initialized) return;
+    /**
+     * Check current session and fetch user data
+     */
+    const checkSession = useCallback(async () => {
+        try {
+            console.log('useAuth: Checking session...');
 
-        const isDevelopment = process.env.NODE_ENV === 'development';
+            // Check if user is logged in via API
+            const response = await fetch('/api/auth/session', {
+                method: 'GET',
+                credentials: 'include',
+            });
 
-        const checkUser = async () => {
-            try {
-                console.log('useAuth: Checking session...');
-                setInitialized(true);
-
-                // In development, try to get user from cookies first
-                if (isDevelopment) {
-                    console.log(
-                        'useAuth: Development mode - checking for user_id cookie',
-                    );
-
-                    // Try to get user_id from cookie
-                    const userIdCookie = document.cookie
-                        .split('; ')
-                        .find((row) => row.startsWith('user_id='))
-                        ?.split('=')[1];
-
-                    if (userIdCookie) {
-                        console.log('useAuth: Found user_id in cookie:', userIdCookie);
-                        setIsAuthenticated(true);
-                        await fetchUserProfile(userIdCookie);
-                        setIsLoading(false);
-                        return;
-                    } else {
-                        console.log('useAuth: No user_id cookie found in development');
-                        setIsAuthenticated(false);
-                        setUserProfile(null);
-                        setIsLoading(false);
-                        return;
-                    }
-                }
-
-                // Add timeout to prevent hanging in production
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Session check timeout')), 3000),
-                );
-
-                const result = await Promise.race([sessionPromise, timeoutPromise]);
-                const {
-                    data: { session },
-                    error,
-                } = result as {
-                    data: { session: { user?: { id: string } } | null };
-                    error: unknown;
-                };
-
-                console.log('useAuth: Session check result:', {
-                    session: !!session,
-                    error,
-                });
-
-                if (error) {
-                    console.error('useAuth: Session error:', error);
-                    throw error;
-                }
-
-                setIsAuthenticated(!!session);
-                if (session?.user) {
-                    console.log('useAuth: Fetching user profile for:', session.user.id);
-                    await fetchUserProfile(session.user.id);
-                } else {
-                    console.log('useAuth: No session, clearing profile');
-                    setUserProfile(null);
-                }
-            } catch (error) {
-                console.error('useAuth: Error checking auth session:', error);
+            if (!response.ok) {
                 setIsAuthenticated(false);
                 setUserProfile(null);
-            } finally {
-                console.log('useAuth: Setting loading to false');
-                setIsLoading(false);
+                return;
             }
-        };
 
-        // Check initial session state
-        checkUser();
+            const data = await response.json();
 
-        // Fallback timeout to ensure loading state doesn't persist indefinitely
-        const fallbackTimeout = setTimeout(() => {
-            console.log('useAuth: Fallback timeout - forcing loading to false');
-            setIsLoading(false);
-        }, 2000); // Reduced to 2 seconds since we're skipping session check in dev
-
-        // Listen for auth state changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('useAuth: Auth state change:', event, !!session);
-            setIsAuthenticated(!!session);
-            if (session?.user) {
-                console.log(
-                    'useAuth: Auth state change - fetching profile for:',
-                    session.user.id,
-                );
-                await fetchUserProfile(session.user.id);
+            if (data.user && data.user.id) {
+                console.log('useAuth: User session found:', data.user.id);
+                setIsAuthenticated(true);
+                await fetchUserProfile(data.user.id);
             } else {
-                console.log('useAuth: Auth state change - no session, clearing profile');
+                console.log('useAuth: No valid session found');
+                setIsAuthenticated(false);
                 setUserProfile(null);
             }
-            // Ensure loading state is set to false after auth state change
-            console.log('useAuth: Auth state change - setting loading to false');
+        } catch (error) {
+            console.error('useAuth: Error checking session:', error);
+            setIsAuthenticated(false);
+            setUserProfile(null);
+        } finally {
             setIsLoading(false);
-        });
+        }
+    }, [fetchUserProfile]);
 
-        return () => {
-            subscription.unsubscribe();
-            clearTimeout(fallbackTimeout);
-        };
-    }, [initialized]);
-
-    const signOut = async () => {
+    /**
+     * Sign out the user
+     */
+    const signOut = useCallback(async () => {
         try {
-            await supabase.auth.signOut();
+            await fetch('/api/auth/signout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+
             setUserProfile(null);
             setIsAuthenticated(false);
             router.push('/login');
         } catch (error) {
-            console.error('Error signing out:', error);
+            console.error('useAuth: Error signing out:', error);
         }
-    };
+    }, [router]);
+
+    useEffect(() => {
+        if (initialized) return;
+
+        setInitialized(true);
+
+        // Check initial session state
+        checkSession();
+
+        // Set up polling to check session periodically (every 5 minutes)
+        const pollInterval = setInterval(checkSession, 5 * 60 * 1000);
+
+        // Set fallback timeout to ensure loading doesn't persist
+        const fallbackTimeout = setTimeout(() => {
+            console.log('useAuth: Fallback timeout - forcing loading to false');
+            setIsLoading(false);
+        }, 3000);
+
+        return () => {
+            clearInterval(pollInterval);
+            clearTimeout(fallbackTimeout);
+        };
+    }, [initialized, checkSession]);
 
     return {
         isAuthenticated,
