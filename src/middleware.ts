@@ -3,9 +3,14 @@ import { type NextRequest } from 'next/server';
 
 import { updateSession } from '@/lib/supabase/middleware';
 
-export const middleware = authkitMiddleware(async (request: NextRequest) => {
-    return await updateSession(request);
-});
+export const middleware = authkitMiddleware(
+    async (request: NextRequest) => {
+        return await updateSession(request);
+    },
+    {
+        redirectUri: process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI,
+    },
+);
 
 export const config = {
     matcher: [
