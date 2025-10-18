@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(_request: NextRequest) {
     try {
         // Clear the session cookie
-        const cookieStore = cookies();
+        const cookieStore = await cookies();
         cookieStore.delete('wos-session');
 
         return NextResponse.json({ success: true });
@@ -17,7 +17,7 @@ export async function POST(_request: NextRequest) {
 export async function GET(request: NextRequest) {
     try {
         // Clear the session cookie
-        const cookieStore = cookies();
+        const cookieStore = await cookies();
         cookieStore.delete('wos-session');
 
         // Redirect to login page
