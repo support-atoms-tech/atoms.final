@@ -58,8 +58,8 @@ function LoginForm() {
                 }
 
                 // Handle normal login redirect
-                if (result.success && result.redirectTo) {
-                    router.push(result.redirectTo);
+                if (result.success) {
+                    router.push('/home/user');
                 } else {
                     setError(result.error || 'An unexpected error occurred');
                 }
