@@ -272,41 +272,24 @@ export async function requestPasswordReset(email: string) {
             process.env.WORKOS_PASSWORD_RESET_URL ||
             'https://atoms.kooshapari.com/auth/reset-password';
 
-        // Create password reset token
+        console.log('Auth action: Using password reset URL base:', passwordResetUrlBase);
+
+        // Create password reset token (this automatically sends an email)
         const workos = getWorkOSClient();
         const passwordReset = await workos.userManagement.createPasswordReset({
             email,
         });
 
         console.log('Auth action: Password reset created:', passwordReset.id);
+        console.log('Auth action: Password reset URL:', passwordReset.passwordResetUrl);
 
-        // Send password reset email
-        try {
-            await workos.userManagement.sendPasswordResetEmail({
-                email: email,
-                passwordResetUrl: passwordResetUrlBase,
-            });
-
-            console.log('Auth action: Password reset email sent to:', email);
-
-            return {
-                success: true,
-                message: `Password reset link has been sent to ${email}. Please check your email.`,
-            };
-        } catch (emailError: unknown) {
-            console.error(
-                'Auth action: Email send error:',
-                emailError instanceof Error ? emailError.message : String(emailError),
-            );
-
-            // If email sending fails, return the direct link as fallback
-            console.log('Auth action: Falling back to direct reset link');
-            return {
-                success: true,
-                resetUrl: passwordReset.passwordResetUrl,
-                message: 'Email could not be sent. Here is your direct reset link:',
-            };
-        }
+        // The createPasswordReset method automatically sends an email
+        // If we need to customize the URL, we can use the passwordResetUrl from the response
+        return {
+            success: true,
+            message: `Password reset link has been sent to ${email}. Please check your email.`,
+            resetUrl: passwordReset.passwordResetUrl, // Provide as fallback
+        };
     } catch (error) {
         const errorString = String(error);
         console.error('Auth action error (password reset):', errorString);
