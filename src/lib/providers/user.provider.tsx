@@ -5,15 +5,16 @@ import { ReactNode, createContext, useCallback, useContext, useState } from 'rea
 import { Profile } from '@/types';
 
 /**
- * Simplified user representation for WorkOS
+ * Authenticated user representation that stores the Supabase profile id and optional WorkOS id.
  */
-interface WorkOSUser {
+interface AppUser {
     id: string;
     email: string;
+    workosId: string;
 }
 
 interface UserContextType {
-    user: WorkOSUser | null;
+    user: AppUser | null;
     profile: Profile | null;
     refreshUser: () => Promise<void>;
 }
@@ -32,10 +33,10 @@ export function UserProvider({
     initialProfile,
 }: {
     children: ReactNode;
-    initialUser?: WorkOSUser;
+    initialUser?: AppUser;
     initialProfile?: Profile;
 }) {
-    const [user, _setUser] = useState<WorkOSUser | null>(initialUser || null);
+    const [user, _setUser] = useState<AppUser | null>(initialUser || null);
     const [profile, setProfile] = useState<Profile | null>(initialProfile || null);
 
     /**

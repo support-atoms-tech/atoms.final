@@ -1526,6 +1526,51 @@ export type Database = {
                     },
                 ];
             };
+            signup_requests: {
+                Row: {
+                    id: string;
+                    email: string;
+                    full_name: string;
+                    message: string | null;
+                    status: string;
+                    created_at: string;
+                    updated_at: string;
+                    approved_at: string | null;
+                    denied_at: string | null;
+                    approved_by: string | null;
+                    denied_by: string | null;
+                    denial_reason: string | null;
+                };
+                Insert: {
+                    id?: string;
+                    email: string;
+                    full_name: string;
+                    message?: string | null;
+                    status?: string;
+                    created_at?: string;
+                    updated_at?: string;
+                    approved_at?: string | null;
+                    denied_at?: string | null;
+                    approved_by?: string | null;
+                    denied_by?: string | null;
+                    denial_reason?: string | null;
+                };
+                Update: {
+                    id?: string;
+                    email?: string;
+                    full_name?: string;
+                    message?: string | null;
+                    status?: string;
+                    created_at?: string;
+                    updated_at?: string;
+                    approved_at?: string | null;
+                    denied_at?: string | null;
+                    approved_by?: string | null;
+                    denied_by?: string | null;
+                    denial_reason?: string | null;
+                };
+                Relationships: [];
+            };
         };
         Views: {
             document_summary: {

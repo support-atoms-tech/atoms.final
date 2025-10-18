@@ -1,0 +1,784 @@
+{
+    "successCount": 74,
+    "createdCount": 0,
+    "updatedCount": 74,
+    "errorCount": 0,
+    "oauthLinkedCount": 0,
+    "results": [
+        {
+            "email": "aaryaptm09@gmail.com",
+            "workosUserId": "user_01K7QW9YB5KPZPWPYJ0HX8B0KN",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "example22@gmail.com",
+            "workosUserId": "user_01K7QWAB9BM4CNHJE61ZNK4GHK",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "bmadhavr@yahoo.com",
+            "workosUserId": "user_01K7QW9ZNJEKEN8AMSJ2JRENVX",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "rfutch@deltadevteam.com",
+            "workosUserId": "user_01K7QWA3XXDB5DHA4C1HBMS06M",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "sdunga1@asu.edu",
+            "workosUserId": "user_01K7QW9Z47YWFJS7810E4W3DDZ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "marianam6933@gmail.com",
+            "workosUserId": "user_01K7QW9ZY5JS4W4M09QN2SD7HP",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "examplefawpf@gmail.com",
+            "workosUserId": "user_01K7QWADJVEJSCW0862VGG4JV1",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "aarya@atoms.tech",
+            "workosUserId": "user_01K7QWA1JVEW55Z6QJBTKTE8NW",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "sawyerkesti@gmail.com",
+            "workosUserId": "user_01K7QW9YVWN6KB4P49ZTTQE3BJ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QW9YVWN6KB4P49ZTTQE3BJ/identities"
+                }
+            ]
+        },
+        {
+            "email": "shiv.patel@gmail.com",
+            "workosUserId": "user_01K7QWA124KWDCYTMWN4C5D2EZ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA124KWDCYTMWN4C5D2EZ/identities"
+                }
+            ]
+        },
+        {
+            "email": "cesar_andres_97@hotmail.com",
+            "workosUserId": "user_01K7QWA1V1MN29Q9MPHRQ5BNJJ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "marianam6033@gmail.com",
+            "workosUserId": "user_01K7QWA4EAP3FPNZDR4XE1M33C",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "texemac136@nomrista.com",
+            "workosUserId": "user_01K7QWA1ACYWRZVM0JCFTRF798",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "dpatel6@ltu.edu",
+            "workosUserId": "user_01K7QWA2N9Y5E27DGT4VVMRWNS",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "sawyerkesti9@gmail.com",
+            "workosUserId": "user_01K7QWA2XQ8E2KHQ4GWJ862EBP",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA2XQ8E2KHQ4GWJ862EBP/identities"
+                }
+            ]
+        },
+        {
+            "email": "example3@gmail.com",
+            "workosUserId": "user_01K7QWABHVJTNP8PX77VKZY49T",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "this.is.a.test@gmail.com",
+            "workosUserId": "user_01K7QWAEWCBVN1EJW3T3BRJZN0",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "sawyer.t.kesti@gmail.com",
+            "workosUserId": "user_01K7QWA072G21DGTFHRBTT0PRC",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA072G21DGTFHRBTT0PRC/identities"
+                }
+            ]
+        },
+        {
+            "email": "skesti12@gmail.com",
+            "workosUserId": "user_01K7QW9XT4E34J6ENFEGSHE3F5",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QW9XT4E34J6ENFEGSHE3F5/identities"
+                }
+            ]
+        },
+        {
+            "email": "skesti@asu.edu",
+            "workosUserId": "user_01K7QWA2CRRY16JBC2DQ9P5BSD",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA2CRRY16JBC2DQ9P5BSD/identities"
+                },
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA2CRRY16JBC2DQ9P5BSD/identities"
+                }
+            ]
+        },
+        {
+            "email": "fwfew@dwef.com",
+            "workosUserId": "user_01K7QWA6PRSF4XZR5K9AK0TYCK",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "aiegjp23j9@example.com",
+            "workosUserId": "user_01K7QWAE3VX0EP3NGSH33F250F",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "mikemikhailov2003@gmail.com",
+            "workosUserId": "user_01K7QWA35JPFTCDE8A82JKYJ33",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "josephffelix@gmail.com",
+            "workosUserId": "user_01K7QW9Y2FVGJV67BGSDTNYQDZ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QW9Y2FVGJV67BGSDTNYQDZ/identities"
+                }
+            ]
+        },
+        {
+            "email": "salkesti@gmail.com",
+            "workosUserId": "user_01K7QWA0R12JP1KQ42AQ45K539",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA0R12JP1KQ42AQ45K539/identities"
+                }
+            ]
+        },
+        {
+            "email": "gulibar1@asu.edu",
+            "workosUserId": "user_01K7QWA57GK00Q65QWD921TGWP",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "songjeongjun320@gmail.com",
+            "workosUserId": "user_01K7QWA762YN8KS8XPPAZP8ZMX",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA762YN8KS8XPPAZP8ZMX/identities"
+                }
+            ]
+        },
+        {
+            "email": "sarahkesti0@gmail.com",
+            "workosUserId": "user_01K7R0S29NEGNXK1S2VJ58F8VF",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7R0S29NEGNXK1S2VJ58F8VF/identities"
+                }
+            ]
+        },
+        {
+            "email": "kestijim@gmail.com",
+            "workosUserId": "user_01K7QWA24N3P9MYG1EQ5GA5WPD",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA24N3P9MYG1EQ5GA5WPD/identities"
+                }
+            ]
+        },
+        {
+            "email": "misteria13597@yahoo.com",
+            "workosUserId": "user_01K7QWA4696Z9AV40K1TXZGF24",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA4696Z9AV40K1TXZGF24/identities"
+                }
+            ]
+        },
+        {
+            "email": "jsong132@asu.edu",
+            "workosUserId": "user_01K6KRS318MXNP4AK08AK29830",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "djakkula@asu.edu",
+            "workosUserId": "user_01K7QWA5NZ47M7GAM9C90KW0ET",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "wiviwak326@eduhed.com",
+            "workosUserId": "user_01K7QWA9PEAYC9MNSMPFVDKV8V",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "kooshapari@gmail.com",
+            "workosUserId": "user_01K7QWA3DJ5H3JRGXQ82RCE8Z7",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA3DJ5H3JRGXQ82RCE8Z7/identities"
+                }
+            ]
+        },
+        {
+            "email": "oknackk@gmail.com",
+            "workosUserId": "user_01K7QWA0FK55J2JQCK8E8TY3CA",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA0FK55J2JQCK8E8TY3CA/identities"
+                }
+            ]
+        },
+        {
+            "email": "oneclickasu@gmail.com",
+            "workosUserId": "user_01K7QWA7DZMTCNXS5Z088R1WEN",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "llm-test@atoms.tech",
+            "workosUserId": "user_01K7QWA86D4KWR0Y2BAZJCH4RX",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "mdzulfik@asu.edu",
+            "workosUserId": "user_01K7QWA5YPK30BCZFTXMVS5B27",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "giohitt@gmail.com",
+            "workosUserId": "user_01K76B2JZRQVM7B95PHMXTY595",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "jahnavisingh6@gmail.com",
+            "workosUserId": "user_01K7R0S5GBDJD1SYCK721SFW9F",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7R0S5GBDJD1SYCK721SFW9F/identities"
+                }
+            ]
+        },
+        {
+            "email": "385a390eaac740358114ecdfc7d9ecc2@harakirimail.com",
+            "workosUserId": "user_01K7QWA8XXC6F57DAF5HQXHFXG",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "kooshapari@kooshapari.com",
+            "workosUserId": "user_01K6EV07KR2MNMDQ60BC03ZM1A",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "user@example.com",
+            "workosUserId": "user_01K7QWAA64P2G2G17MXPM5W0DT",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "fancychefjr@yahoo.com",
+            "workosUserId": "user_01K7QWA96KDJ8HM29RF42VB79T",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA96KDJ8HM29RF42VB79T/identities"
+                }
+            ]
+        },
+        {
+            "email": "support@atoms.tech",
+            "workosUserId": "user_01K7QWABTWXKZ30SZW46Z30M4R",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWABTWXKZ30SZW46Z30M4R/identities"
+                }
+            ]
+        },
+        {
+            "email": "zmanita@asu.edu",
+            "workosUserId": "user_01K7QWA8DWVVEEWHTHC81NBY0V",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "testing.user@gmail.com",
+            "workosUserId": "user_01K7QWAB0V1W3V8YQRR3AG7VY4",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "s.hivpatel@gmail.com",
+            "workosUserId": "user_01K7QWA7P7GPP2ZTAE21WXFG8K",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "test@gmail.com",
+            "workosUserId": "user_01K7QWAAE5H8894BF21H5VHYQB",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "coolwolfy2004@gmail.com",
+            "workosUserId": "user_01K7QWA67HSJ1696PW5D2N4AEE",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA67HSJ1696PW5D2N4AEE/identities"
+                }
+            ]
+        },
+        {
+            "email": "cbelang2@asu.edu",
+            "workosUserId": "user_01K7QWAF50XJPBMXWYRER4WV4A",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "frank1677@naver.com",
+            "workosUserId": "user_01K7QWA7YR37W0R9KXZYHEC021",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "ramshabukhari89@yahoo.com",
+            "workosUserId": "user_01K7QWAFCYRYKPCP41AH0Z4D2A",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "user@user.com",
+            "workosUserId": "user_01K7QWACNDCAG504E5ESHMHJHB",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "emespin5@asu.edu",
+            "workosUserId": "user_01K7QWAC3B8FCR9EY9QD4G1XKZ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWAC3B8FCR9EY9QD4G1XKZ/identities"
+                }
+            ]
+        },
+        {
+            "email": "jrprice5@asu.edu",
+            "workosUserId": "user_01K6KVYBRMB2PJ71WRMN9GSMD6",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "cathyvo@asu.edu",
+            "workosUserId": "user_01K6KVZRZ0YJ5EVD3SJ26TWDJR",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "sidd.soc@gmail.com",
+            "workosUserId": "user_01K7QWAD0RDHB7ZGZPA6HTQ3JP",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWAD0RDHB7ZGZPA6HTQ3JP/identities"
+                }
+            ]
+        },
+        {
+            "email": "ghitt@asu.edu",
+            "workosUserId": "user_01K7QWAGD7NBZJCMQBZHH73MEG",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWAGD7NBZJCMQBZHH73MEG/identities"
+                }
+            ]
+        },
+        {
+            "email": "amcasta4@gmail.com",
+            "workosUserId": "user_01K7QWAFPH39NVGK79XEWWTYJG",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWAFPH39NVGK79XEWWTYJG/identities"
+                },
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWAFPH39NVGK79XEWWTYJG/identities"
+                }
+            ]
+        },
+        {
+            "email": "shivpate.l@gmail.com",
+            "workosUserId": "user_01K7QWACBXV2ZCRGR8VHZ9Q609",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "jinduoli@asu.edu",
+            "workosUserId": "user_01K7QWADVJ4KXEH1K2XC8D1CG1",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "lkwokcs@gmail.com",
+            "workosUserId": "user_01K7QWA4YHY6XVG5WP93G9XQS9",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA4YHY6XVG5WP93G9XQS9/identities"
+                }
+            ]
+        },
+        {
+            "email": "cathyyvo2004@gmail.com",
+            "workosUserId": "user_01K7QWA4P230GDWWM5KNPH7X09",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA4P230GDWWM5KNPH7X09/identities"
+                }
+            ]
+        },
+        {
+            "email": "charlesbelanger00@gmail.com",
+            "workosUserId": "user_01K7QWA8P2H6PCH74P7K29ETBN",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "github",
+                    "error": "Failed to link github: Cannot POST /user_management/users/user_01K7QWA8P2H6PCH74P7K29ETBN/identities"
+                }
+            ]
+        },
+        {
+            "email": "ccaperla@asu.edu",
+            "workosUserId": "user_01K7QWA9EWZ0P4MAX01CX6AFM6",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "user561@example.com",
+            "workosUserId": "user_01K7QWADA8N26QCWZT57QE586H",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "shivpatel@gmail.com",
+            "workosUserId": "user_01K6KVPRWBW1T4K5TE1MF1VV7C",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "gbordoli@asu.edu",
+            "workosUserId": "user_01K7QW9ZCQ5THGSGM3BWJ5SGEQ",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QW9ZCQ5THGSGM3BWJ5SGEQ/identities"
+                }
+            ]
+        },
+        {
+            "email": "hdesai12@asu.edu",
+            "workosUserId": "user_01K7QWAFYHNY0WJY3RWDHY2FWD",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWAFYHNY0WJY3RWDHY2FWD/identities"
+                }
+            ]
+        },
+        {
+            "email": "ameypande2709@gmail.com",
+            "workosUserId": "user_01K7QWAAQ75TDS73YQHJT9GZK7",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "ujjwal.patil.ext@siemens.com",
+            "workosUserId": "user_01K7QWAEM8E4ZXMS92QP2A88SB",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true
+        },
+        {
+            "email": "giorgio.bordoli01@gmail.com",
+            "workosUserId": "user_01K7QWA9Y0B3GR0WNF4SB1Y7TA",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWA9Y0B3GR0WNF4SB1Y7TA/identities"
+                }
+            ]
+        },
+        {
+            "email": "2021bec122@sggs.ac.in",
+            "workosUserId": "user_01K7QWAGP8TP2R2EHWWSCDSN0W",
+            "status": "updated",
+            "message": "User updated successfully",
+            "action": "update",
+            "passwordImported": true,
+            "oauthErrors": [
+                {
+                    "provider": "google",
+                    "error": "Failed to link google: Cannot POST /user_management/users/user_01K7QWAGP8TP2R2EHWWSCDSN0W/identities"
+                }
+            ]
+        }
+    ],
+    "importedAt": "2025-10-17T04:57:32.296Z"
+}

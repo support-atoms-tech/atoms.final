@@ -1,7 +1,6 @@
 'use client';
 
-import { SiGithub } from '@icons-pack/react-simple-icons';
-import { AlertCircle, Loader2, Mail } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
 
@@ -16,7 +15,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 
 // Create a separate client component for the login form
 function LoginForm() {
@@ -34,22 +32,17 @@ function LoginForm() {
         setError('');
 
         try {
-            await login(formData);
+            const result = await login(formData);
+            if (result && result.success) {
+                // Session cookie is set server-side; redirect to dashboard
+                window.location.href = '/home/user';
+            } else if (result && !result.success) {
+                setError(result.error || 'An error occurred');
+                setIsPending(false);
+            }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An error occurred';
             setError(errorMessage);
-            setIsPending(false);
-        }
-    };
-
-    const handleOAuthSignIn = async () => {
-        try {
-            setIsPending(true);
-            // On the client, we can only redirect to the sign-in URL
-            // The login server action will handle getting the URL
-            await login(new FormData());
-        } catch (err) {
-            console.error('OAuth sign-in error:', err);
             setIsPending(false);
         }
     };
@@ -82,7 +75,9 @@ function LoginForm() {
                                     type="email"
                                     placeholder="Email address"
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                        setEmail(e.target.value)
+                                    }
                                     required
                                 />
                             </div>
@@ -92,7 +87,9 @@ function LoginForm() {
                                     type="password"
                                     placeholder="Password"
                                     value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                        setPassword(e.target.value)
+                                    }
                                     required
                                 />
                             </div>
@@ -110,44 +107,23 @@ function LoginForm() {
                         </Button>
                     </form>
 
-                    <div className="relative my-6">
-                        <div className="absolute inset-0 flex items-center">
-                            <Separator className="w-full bg-gray-200 dark:bg-muted" />
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                            <span className="px-2 bg-background text-gray-500 dark:text-muted-foreground">
-                                Or continue with
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button
-                            variant="outline"
-                            onClick={handleOAuthSignIn}
-                            disabled={isPending}
+                    <div className="text-center mt-4">
+                        <Link
+                            href="/forgot-password"
+                            className="text-sm text-primary hover:text-primary/80 font-medium"
                         >
-                            <Mail className="mr-2 h-4 w-4" />
-                            Google
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={handleOAuthSignIn}
-                            disabled={isPending}
-                        >
-                            <SiGithub className="mr-2 h-4 w-4" />
-                            GitHub
-                        </Button>
+                            Forgot password?
+                        </Link>
                     </div>
                 </CardContent>
                 <CardFooter>
                     <p className="text-center w-full text-sm text-gray-600 dark:text-gray-300">
                         Don&apos;t have an account?{' '}
                         <Link
-                            href="/signup"
+                            href="/signup-request"
                             className="font-medium text-primary hover:text-primary/80"
                         >
-                            Sign up
+                            Request access
                         </Link>
                     </p>
                 </CardFooter>

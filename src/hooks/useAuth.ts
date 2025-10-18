@@ -13,17 +13,26 @@ export function useAuth() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userProfile, setUserProfile] = useState<Profile | null>(null);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
     const router = useRouter();
     const [initialized, setInitialized] = useState(false);
 
     /**
      * Fetch user profile from database
      */
-    const fetchUserProfile = useCallback(async (userId: string) => {
+    const fetchUserProfile = useCallback(async (userId: string, token: string) => {
         try {
             console.log('useAuth: Fetching profile for user:', userId);
 
-            const response = await fetch(`/api/auth/profile/${userId}`);
+            if (!userId) {
+                throw new Error('Missing profile identifier');
+            }
+
+            const response = await fetch(`/api/auth/profile/${userId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
 
             if (!response.ok) {
                 throw new Error(`Failed to fetch profile: ${response.statusText}`);
@@ -52,26 +61,40 @@ export function useAuth() {
             });
 
             if (!response.ok) {
+                console.log(
+                    'useAuth: Session check failed with status:',
+                    response.status,
+                );
                 setIsAuthenticated(false);
                 setUserProfile(null);
+                setAccessToken(null);
                 return;
             }
 
             const data = await response.json();
 
-            if (data.user && data.user.id) {
-                console.log('useAuth: User session found:', data.user.id);
+            if (data.user && data.user.id && data.accessToken) {
+                console.log('useAuth: User session found:', data.user.id, {
+                    workosId: data.user.workosId,
+                });
                 setIsAuthenticated(true);
-                await fetchUserProfile(data.user.id);
+                setAccessToken(data.accessToken);
+                if (data.profile) {
+                    setUserProfile(data.profile as Profile);
+                } else {
+                    await fetchUserProfile(data.user.id, data.accessToken);
+                }
             } else {
                 console.log('useAuth: No valid session found');
                 setIsAuthenticated(false);
                 setUserProfile(null);
+                setAccessToken(null);
             }
         } catch (error) {
             console.error('useAuth: Error checking session:', error);
             setIsAuthenticated(false);
             setUserProfile(null);
+            setAccessToken(null);
         } finally {
             setIsLoading(false);
         }
@@ -89,6 +112,7 @@ export function useAuth() {
 
             setUserProfile(null);
             setIsAuthenticated(false);
+            setAccessToken(null);
             router.push('/login');
         } catch (error) {
             console.error('useAuth: Error signing out:', error);
@@ -123,5 +147,6 @@ export function useAuth() {
         isLoading,
         signOut,
         userProfile,
+        accessToken,
     };
 }
