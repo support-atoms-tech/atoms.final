@@ -156,15 +156,11 @@ export async function POST(request: NextRequest) {
                 const workos = getWorkOSClient();
 
                 // Send invitation via WorkOS API
-                const invitation = await workos.userManagement.sendInvitation({
+                const _invitation = await workos.userManagement.sendInvitation({
                     email: signupRequest.email,
                     // No organizationId means application-wide invitation
                     expiresInDays: 7,
                 });
-
-                console.log('WorkOS invitation created:', invitation.id);
-
-                console.log('Invitation email sent to:', signupRequest.email);
             } catch (invitationError: unknown) {
                 console.error('Failed to send WorkOS invitation:', invitationError);
 

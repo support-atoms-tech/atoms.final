@@ -33,8 +33,6 @@ export async function login(formData: FormData) {
             };
         }
 
-        console.log('Auth action: Authenticating user with email:', email);
-
         // Use WorkOS User Management API for password authentication
         const response = await fetch(
             'https://api.workos.com/user_management/authenticate',
@@ -74,7 +72,6 @@ export async function login(formData: FormData) {
         }
 
         const authData = await response.json();
-        console.log('Auth action: Authentication successful for user:', authData.user.id);
 
         // Persist the WorkOS session cookie so withAuth() can access it on subsequent requests.
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -87,8 +84,6 @@ export async function login(formData: FormData) {
             },
             appUrl,
         );
-
-        console.log('Auth action: Authentication successful, returning user data');
 
         return {
             success: true,
@@ -127,19 +122,12 @@ export async function resetPassword(token: string, password: string) {
             };
         }
 
-        console.log('Auth action: Resetting password with token');
-
         // Reset the password using WorkOS API
         const workos = getWorkOSClient();
-        const response = await workos.userManagement.resetPassword({
+        const _response = await workos.userManagement.resetPassword({
             token,
             newPassword: password,
         });
-
-        console.log(
-            'Auth action: Password reset successful for user:',
-            response.user?.id,
-        );
 
         return {
             success: true,
@@ -179,8 +167,6 @@ export async function acceptInvitation(data: {
             };
         }
 
-        console.log('Auth action: Accepting invitation with token');
-
         // Authenticate with invitation via WorkOS API
         // This creates the user account and authenticates them in one step
         const workos = getWorkOSClient();
@@ -196,8 +182,6 @@ export async function acceptInvitation(data: {
                 success: false,
             };
         }
-
-        console.log('Auth action: Invitation accepted for user:', response.user.id);
 
         // Update user profile with name
         try {
@@ -235,8 +219,6 @@ export async function acceptInvitation(data: {
             appUrl,
         );
 
-        console.log('Auth action: Session saved for new user');
-
         // Redirect to home page
         redirect('/home/user');
     } catch (error: unknown) {
@@ -265,23 +247,16 @@ export async function requestPasswordReset(email: string) {
             };
         }
 
-        console.log('Auth action: Requesting password reset for:', email);
-
         // Get the password reset URL base from environment
-        const passwordResetUrlBase =
+        const _passwordResetUrlBase =
             process.env.WORKOS_PASSWORD_RESET_URL ||
             'https://atoms.kooshapari.com/auth/reset-password';
-
-        console.log('Auth action: Using password reset URL base:', passwordResetUrlBase);
 
         // Create password reset token (this automatically sends an email)
         const workos = getWorkOSClient();
         const passwordReset = await workos.userManagement.createPasswordReset({
             email,
         });
-
-        console.log('Auth action: Password reset created:', passwordReset.id);
-        console.log('Auth action: Password reset URL:', passwordReset.passwordResetUrl);
 
         // The createPasswordReset method automatically sends an email
         // If we need to customize the URL, we can use the passwordResetUrl from the response
