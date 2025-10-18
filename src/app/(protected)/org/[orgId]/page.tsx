@@ -28,7 +28,11 @@ export default function OrgPage() {
     const orgId = params?.orgId && params.orgId !== 'user' ? params.orgId : '';
 
     // Fetch organization data
-    const { data: organization, isLoading: orgLoading } = useOrgQuery(orgId);
+    const {
+        data: organization,
+        isLoading: orgLoading,
+        error: orgError,
+    } = useOrgQuery(orgId);
 
     // Use useEffect to set the organization when it changes
     useEffect(() => {
@@ -40,15 +44,29 @@ export default function OrgPage() {
     }, [organization, setCurrentOrganization]);
 
     // Fetch projects data
-    const { data: projects, isLoading: projectsLoading } = useProjectsByMembershipForOrg(
-        orgId,
-        user?.id || '',
-    );
+    const {
+        data: projects,
+        isLoading: projectsLoading,
+        error: projectsError,
+    } = useProjectsByMembershipForOrg(orgId, user?.id || '');
     const {
         data: externalDocuments,
         isLoading: documentsLoading,
         error: documentsError,
     } = useExternalDocumentsByOrg(params?.orgId || '');
+
+    // Log errors for debugging
+    useEffect(() => {
+        if (orgError) {
+            console.error('Organization query error:', orgError);
+        }
+        if (projectsError) {
+            console.error('Projects query error:', projectsError);
+        }
+        if (documentsError) {
+            console.error('External documents query error:', documentsError);
+        }
+    }, [orgError, projectsError, documentsError]);
 
     const handleProjectClick = (project: Project) => {
         setCurrentProjectId(project.id);
@@ -69,7 +87,7 @@ export default function OrgPage() {
                 <OrgDashboard
                     organization={organization}
                     orgLoading={orgLoading}
-                    projects={projects}
+                    projects={projectsError ? [] : projects}
                     projectsLoading={projectsLoading}
                     externalDocuments={documentsError ? [] : externalDocuments}
                     documentsLoading={documentsLoading}
