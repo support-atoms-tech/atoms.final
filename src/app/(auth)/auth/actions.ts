@@ -4,9 +4,19 @@ import { saveSession } from '@workos-inc/authkit-nextjs';
 import { WorkOS } from '@workos-inc/node';
 import { redirect } from 'next/navigation';
 
-const workos = new WorkOS(process.env.WORKOS_API_KEY, {
-    clientId: process.env.WORKOS_CLIENT_ID,
-});
+// Helper function to get WorkOS client
+function getWorkOSClient() {
+    const apiKey = process.env.WORKOS_API_KEY;
+    const clientId = process.env.WORKOS_CLIENT_ID;
+
+    if (!apiKey) {
+        throw new Error('WORKOS_API_KEY environment variable is required');
+    }
+
+    return new WorkOS(apiKey, {
+        clientId,
+    });
+}
 
 /**
  * Authenticate user with email and password using WorkOS
@@ -120,6 +130,7 @@ export async function resetPassword(token: string, password: string) {
         console.log('Auth action: Resetting password with token');
 
         // Reset the password using WorkOS API
+        const workos = getWorkOSClient();
         const response = await workos.userManagement.resetPassword({
             token,
             newPassword: password,
@@ -172,6 +183,7 @@ export async function acceptInvitation(data: {
 
         // Authenticate with invitation via WorkOS API
         // This creates the user account and authenticates them in one step
+        const workos = getWorkOSClient();
         const response = await workos.userManagement.authenticateWithCode({
             clientId: process.env.WORKOS_CLIENT_ID!,
             code: invitationToken,
@@ -189,6 +201,7 @@ export async function acceptInvitation(data: {
 
         // Update user profile with name
         try {
+            const workos = getWorkOSClient();
             await workos.userManagement.updateUser({
                 userId: response.user.id,
                 firstName,
@@ -201,6 +214,7 @@ export async function acceptInvitation(data: {
 
         // Set password for the new user
         try {
+            const workos = getWorkOSClient();
             await workos.userManagement.updateUser({
                 userId: response.user.id,
                 password,
@@ -259,6 +273,7 @@ export async function requestPasswordReset(email: string) {
             'https://atoms.kooshapari.com/auth/reset-password';
 
         // Create password reset token
+        const workos = getWorkOSClient();
         const passwordReset = await workos.userManagement.createPasswordReset({
             email,
         });

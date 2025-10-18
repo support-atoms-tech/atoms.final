@@ -8,12 +8,22 @@ import { SignupApprovalEmail } from '@/emails/SignupApprovalEmail';
 import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
 import { getSupabaseServiceRoleClient } from '@/lib/supabase/supabase-service-role';
 
-// Initialize WorkOS client
-const workos = new WorkOS(process.env.WORKOS_API_KEY, {
-    clientId: process.env.WORKOS_CLIENT_ID,
-});
-
+// Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Helper function to get WorkOS client
+function getWorkOSClient() {
+    const apiKey = process.env.WORKOS_API_KEY;
+    const clientId = process.env.WORKOS_CLIENT_ID;
+
+    if (!apiKey) {
+        throw new Error('WORKOS_API_KEY environment variable is required');
+    }
+
+    return new WorkOS(apiKey, {
+        clientId,
+    });
+}
 
 /**
  * GET /api/admin/signup-requests
@@ -143,6 +153,8 @@ export async function POST(request: NextRequest) {
 
             // Create WorkOS invitation
             try {
+                const workos = getWorkOSClient();
+
                 // Send invitation via WorkOS API
                 const invitation = await workos.userManagement.sendInvitation({
                     email: signupRequest.email,
