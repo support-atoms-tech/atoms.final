@@ -41,7 +41,6 @@ import {
     useDeleteProject,
     useDuplicateProject,
 } from '@/hooks/mutations/useProjectMutations';
-import { useExternalDocumentsByOrg } from '@/hooks/queries/useExternalDocuments';
 import { useOrgMemberRole } from '@/hooks/queries/useOrgMember';
 import { OrganizationRole, hasOrganizationPermission } from '@/lib/auth/permissions';
 import { useUser } from '@/lib/providers/user.provider';
@@ -135,18 +134,16 @@ export default function OrgDashboard(props: OrgDashboardProps) {
         enabled: !!selectedDocumentId,
     });
 
-    // Fetch external documents to calculate total usage
-    const { data: externalDocuments } = useExternalDocumentsByOrg(props.orgId || '');
-
+    // Calculate total usage from external documents passed as props
     useEffect(() => {
-        if (externalDocuments) {
-            const usage = externalDocuments.reduce(
+        if (props.externalDocuments) {
+            const usage = props.externalDocuments.reduce(
                 (sum, file) => sum + (file.size || 0),
                 0,
             );
             setTotalUsage(usage);
         }
-    }, [externalDocuments]);
+    }, [props.externalDocuments]);
 
     const handleCreateProject = () => {
         setIsCreatePanelOpen(true);
