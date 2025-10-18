@@ -145,6 +145,15 @@ function LoginForm() {
                         </Button>
                     </form>
 
+                    <div className="text-center">
+                        <Link
+                            href="/forgot-password"
+                            className="text-sm text-primary hover:text-primary/80"
+                        >
+                            Forgot your password?
+                        </Link>
+                    </div>
+
                     <div className="relative my-6">
                         <div className="absolute inset-0 flex items-center">
                             <Separator className="w-full bg-gray-200 dark:bg-muted" />
