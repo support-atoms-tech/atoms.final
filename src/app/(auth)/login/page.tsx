@@ -100,45 +100,45 @@ function LoginForm() {
                         </div>
                     )}
 
+                    {/* OAuth Buttons */}
+                    <div className="space-y-3">
+                        <form action={loginWithGoogle} className="w-full">
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                                <GoogleIcon />
+                                Continue with Google
+                            </Button>
+                        </form>
+
+                        <form action={loginWithGitHub} className="w-full">
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                                <GitHubIcon />
+                                Continue with GitHub
+                            </Button>
+                        </form>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-gray-300 dark:border-gray-700" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white dark:bg-black/40 px-2 text-gray-500 dark:text-gray-400">
+                                Or continue with email
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Email/Password Form */}
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {/* OAuth Buttons */}
-                        <div className="space-y-3">
-                            <form action={loginWithGoogle} className="w-full">
-                                <Button
-                                    type="submit"
-                                    variant="outline"
-                                    className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                >
-                                    <GoogleIcon />
-                                    Continue with Google
-                                </Button>
-                            </form>
-
-                            <form action={loginWithGitHub} className="w-full">
-                                <Button
-                                    type="submit"
-                                    variant="outline"
-                                    className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                >
-                                    <GitHubIcon />
-                                    Continue with GitHub
-                                </Button>
-                            </form>
-                        </div>
-
-                        {/* Divider */}
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <span className="w-full border-t border-gray-300 dark:border-gray-700" />
-                            </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                                <span className="bg-white dark:bg-black/40 px-2 text-gray-500 dark:text-gray-400">
-                                    Or continue with email
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Email/Password Form */}
                         <div className="space-y-4">
                             <div className="space-y-2">
                                 <Input
