@@ -7,9 +7,9 @@ import { Suspense, useEffect } from 'react';
 import OrgDashboard from '@/app/(protected)/org/[orgId]/OrgDashboard.client';
 import { OrgDashboardSkeleton } from '@/components/custom/skeletons/OrgDashboardSkeleton';
 import LayoutView from '@/components/views/LayoutView';
-import { useExternalDocumentsByOrg } from '@/hooks/queries/useExternalDocuments';
-import { useOrganization as useOrgQuery } from '@/hooks/queries/useOrganization';
-import { useProjectsByMembershipForOrg } from '@/hooks/queries/useProject';
+import { useAuthenticatedExternalDocumentsByOrg } from '@/hooks/queries/useAuthenticatedExternalDocuments';
+import { useAuthenticatedOrganization as useOrgQuery } from '@/hooks/queries/useAuthenticatedOrganization';
+import { useAuthenticatedProjectsByMembershipForOrg } from '@/hooks/queries/useAuthenticatedProjects';
 import { useOrganization } from '@/lib/providers/organization.provider';
 import { useUser } from '@/lib/providers/user.provider';
 import { useContextStore } from '@/store/context.store';
@@ -48,12 +48,12 @@ export default function OrgPage() {
         data: projects,
         isLoading: projectsLoading,
         error: projectsError,
-    } = useProjectsByMembershipForOrg(orgId, user?.id || '');
+    } = useAuthenticatedProjectsByMembershipForOrg(orgId, user?.id || '');
     const {
         data: externalDocuments,
         isLoading: documentsLoading,
         error: documentsError,
-    } = useExternalDocumentsByOrg(params?.orgId || '');
+    } = useAuthenticatedExternalDocumentsByOrg(params?.orgId || '');
 
     // Log errors for debugging
     useEffect(() => {
