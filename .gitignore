@@ -52,7 +52,6 @@ next-env.d.ts
 .cursorrules
 .cursor/
 
-bun.lock
 
 .kiro
 .vscode
