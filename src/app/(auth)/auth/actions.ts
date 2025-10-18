@@ -20,6 +20,62 @@ function getWorkOSClient() {
 }
 
 /**
+ * Initiate OAuth login with Google
+ */
+export async function loginWithGoogle() {
+    try {
+        const workos = getWorkOSClient();
+        const clientId = process.env.WORKOS_CLIENT_ID;
+        const redirectUri =
+            process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
+            `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+
+        if (!clientId) {
+            throw new Error('WORKOS_CLIENT_ID is required');
+        }
+
+        const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+            provider: 'GoogleOAuth',
+            redirectUri,
+            clientId,
+        });
+
+        redirect(authorizationUrl);
+    } catch (error) {
+        console.error('Google OAuth error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Initiate OAuth login with GitHub
+ */
+export async function loginWithGitHub() {
+    try {
+        const workos = getWorkOSClient();
+        const clientId = process.env.WORKOS_CLIENT_ID;
+        const redirectUri =
+            process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
+            `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+
+        if (!clientId) {
+            throw new Error('WORKOS_CLIENT_ID is required');
+        }
+
+        const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+            provider: 'GitHubOAuth',
+            redirectUri,
+            clientId,
+        });
+
+        redirect(authorizationUrl);
+    } catch (error) {
+        console.error('GitHub OAuth error:', error);
+        throw error;
+    }
+}
+
+/**
  * Authenticate user with email and password using WorkOS
  */
 export async function login(formData: FormData) {
