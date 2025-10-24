@@ -4,23 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { getUserOrganizations } from '@/lib/db/client';
-import { OrganizationType } from '@/types';
+import { Organization, OrganizationType } from '@/types';
 import { QueryFilters } from '@/types/base/filters.types';
 
 export function useOrganization(orgId: string) {
-    const {
-        supabase,
-        isLoading: authLoading,
-        error: authError,
-    } = useAuthenticatedSupabase();
-
-    return useQuery({
+    return useQuery<Organization | null>({
         queryKey: queryKeys.organizations.detail(orgId),
         queryFn: async () => {
-            if (!supabase) {
-                throw new Error(authError ?? 'Supabase client not available');
-            }
-
             // Handle empty or invalid orgId more gracefully
             if (!orgId || orgId === '') {
                 console.warn('Empty organization ID provided');
@@ -44,25 +34,25 @@ export function useOrganization(orgId: string) {
                 return null; // Return null instead of throwing to prevent UI errors
             }
 
-            const { data, error } = await supabase
-                .from('organizations')
-                .select('*')
-                .eq('id', orgId)
-                .eq('is_deleted', false)
-                .single();
+            const response = await fetch(`/api/organizations/${orgId}`, {
+                method: 'GET',
+                cache: 'no-store',
+            });
 
-            if (error) {
-                console.error('Error fetching organization:', error);
-                return null; // Return null instead of throwing to prevent UI errors
+            if (!response.ok) {
+                console.error(
+                    'Error fetching organization via API:',
+                    response.statusText,
+                );
+                return null;
             }
-            return data;
+
+            const payload = (await response.json()) as {
+                organization: Organization | null;
+            };
+            return (payload.organization as Organization | null) ?? null;
         },
-        enabled:
-            !!orgId &&
-            orgId !== 'user' &&
-            orgId !== 'project' &&
-            !authLoading &&
-            !!supabase,
+        enabled: !!orgId && orgId !== 'user' && orgId !== 'project',
     });
 }
 
