@@ -5,6 +5,13 @@ import {
     Column,
     Property,
 } from '@/components/custom/BlockCanvas/types';
+import { synthesizeNaturalColumns } from '@/components/custom/BlockCanvas/utils/naturalFields';
+import {
+    buildColumnMetadataPayload,
+    getMetadataColumnsFromBlock,
+    hasVirtualNativePlaceholders,
+    mergeNaturalColumnsFromPlaceholders,
+} from '@/components/custom/BlockCanvas/utils/requirementsNativeColumns';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { Database } from '@/types/base/database.types';
 import { Block } from '@/types/base/documents.types';
@@ -32,6 +39,31 @@ const normalizeColumns = (
             property: resolvedProperty ?? undefined,
         } satisfies Column;
     });
+
+// Simple in-memory caches for org properties and document→org mapping
+const ORG_PROPERTIES_CACHE = new Map<string, { properties: Property[]; ts: number }>();
+const DOCUMENT_ORG_CACHE = new Map<string, string>();
+const ORG_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const getCachedOrgProperties = (orgId: string | null | undefined): Property[] => {
+    if (!orgId) return [];
+    const entry = ORG_PROPERTIES_CACHE.get(orgId);
+    if (!entry) return [];
+    if (Date.now() - entry.ts > ORG_CACHE_TTL_MS) return [];
+    return entry.properties;
+};
+
+const setCachedOrgProperties = (orgId: string, properties: Property[]) => {
+    ORG_PROPERTIES_CACHE.set(orgId, { properties, ts: Date.now() });
+};
+
+const setCachedDocumentOrg = (documentId: string, orgId: string | null | undefined) => {
+    if (orgId) DOCUMENT_ORG_CACHE.set(documentId, orgId);
+};
+
+const getCachedDocumentOrg = (documentId: string): string | undefined => {
+    return DOCUMENT_ORG_CACHE.get(documentId);
+};
 
 // This interface is currently unused but kept for future use
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -90,6 +122,46 @@ export const useDocumentRealtime = ({
                 }
 
                 const client = supabase;
+
+                // Resolve organization id (for default property options) via API
+                let organizationId: string | null = null;
+                try {
+                    const resp = await fetch(`/api/documents/${documentId}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                    });
+                    if (resp.ok) {
+                        const payload = (await resp.json()) as {
+                            organizationId?: string | null;
+                        };
+                        organizationId = payload.organizationId ?? null;
+                        setCachedDocumentOrg(documentId, organizationId);
+                    }
+                } catch {
+                    // no-op
+                }
+
+                // Fetch org properties to hydrate virtual columns (status/priority options, capitalization)
+                let orgProperties: Property[] = getCachedOrgProperties(organizationId);
+                if (organizationId) {
+                    try {
+                        if (orgProperties.length === 0) {
+                            const resProps = await fetch(
+                                `/api/organizations/${organizationId}/properties`,
+                                { method: 'GET', cache: 'no-store' },
+                            );
+                            if (resProps.ok) {
+                                const payload = (await resProps.json()) as {
+                                    properties?: Property[];
+                                };
+                                orgProperties = payload.properties || [];
+                                setCachedOrgProperties(organizationId, orgProperties);
+                            }
+                        }
+                    } catch {
+                        // no-op
+                    }
+                }
 
                 // Fetch blocks
                 const { data: blocksData, error: blocksError } = await client
@@ -170,9 +242,15 @@ export const useDocumentRealtime = ({
                 console.log('🔍 Columns grouped by block:', columnsByBlock);
 
                 // Combine blocks with their requirements and columns
+                // centralized natural field config from utils
+
+                const synthesizedForPersist: Array<{
+                    blockId: string;
+                    columns: Column[];
+                }> = [];
                 const blocksWithRequirements: BlockWithRequirements[] = blocksData.map(
                     (block: Block) => {
-                        const blockColumns = columnsByBlock[block.id] || [];
+                        let blockColumns = columnsByBlock[block.id] || [];
                         console.log('🔍 Block data assembly:', {
                             blockId: block.id,
                             blockType: block.type,
@@ -180,6 +258,43 @@ export const useDocumentRealtime = ({
                             columnsCount: blockColumns.length,
                             columns: blockColumns,
                         });
+
+                        // If metadata references virtual/native placeholders, merge synthesized natural columns
+                        try {
+                            const contentAny = block.content as unknown as {
+                                tableKind?: string;
+                                columns?: unknown[];
+                            };
+                            const tableKind = contentAny?.tableKind;
+                            const metadataColumns = getMetadataColumnsFromBlock(
+                                block as unknown as Database['public']['Tables']['blocks']['Row'],
+                            );
+                            const hasVirtualPlaceholders =
+                                hasVirtualNativePlaceholders(metadataColumns);
+
+                            const isReqTable =
+                                block.type === 'table' && tableKind === 'requirements';
+
+                            if (isReqTable && hasVirtualPlaceholders) {
+                                const { mergedColumns, persistColumns } =
+                                    mergeNaturalColumnsFromPlaceholders(
+                                        block as unknown as Database['public']['Tables']['blocks']['Row'],
+                                        blockColumns,
+                                        orgProperties,
+                                    );
+                                const changed =
+                                    mergedColumns.length !== blockColumns.length;
+                                blockColumns = mergedColumns;
+                                if (changed && persistColumns.length > 0) {
+                                    synthesizedForPersist.push({
+                                        blockId: block.id,
+                                        columns: persistColumns,
+                                    });
+                                }
+                            }
+                        } catch {
+                            // no-op on fallback creation errors
+                        }
 
                         return {
                             ...block,
@@ -204,6 +319,53 @@ export const useDocumentRealtime = ({
                 });
 
                 setError(null);
+
+                // Persist synthesized virtual columns into block metadata (best-effort, non-blocking)
+                if (synthesizedForPersist.length > 0) {
+                    (async () => {
+                        try {
+                            for (const entry of synthesizedForPersist) {
+                                const { blockId, columns } = entry;
+                                // Read existing content
+                                const { data: blk, error: readErr } = await client
+                                    .from('blocks')
+                                    .select('content')
+                                    .eq('id', blockId)
+                                    .single();
+                                if (readErr) continue;
+
+                                const content: unknown = blk?.content ?? {};
+                                const isObj =
+                                    typeof content === 'object' && content !== null;
+                                const current = (isObj ? content : {}) as {
+                                    columns?: unknown[];
+                                    requirements?: unknown[];
+                                    rows?: unknown[];
+                                    tableKind?: string;
+                                };
+
+                                const columnMetadata =
+                                    buildColumnMetadataPayload(columns);
+
+                                const updated = {
+                                    ...current,
+                                    tableKind: current.tableKind ?? 'requirements',
+                                    columns: columnMetadata,
+                                } as Record<string, unknown>;
+
+                                await client
+                                    .from('blocks')
+                                    .update({
+                                        content:
+                                            updated as unknown as Database['public']['Tables']['blocks']['Row']['content'],
+                                    })
+                                    .eq('id', blockId);
+                            }
+                        } catch {
+                            // best-effort only
+                        }
+                    })();
+                }
             } catch (err) {
                 setError(err as Error);
             } finally {
@@ -304,6 +466,10 @@ export const useDocumentRealtime = ({
                 },
                 // Handle individual block changes instead of fetching all blocks
                 (payload) => {
+                    // schedule background hydration if a requirements table was inserted
+                    if (payload.eventType === 'INSERT') {
+                        scheduleHydrationOnInsert(payload as unknown as { new: unknown });
+                    }
                     setBlocks((prevBlocks) => {
                         if (!prevBlocks) return prevBlocks;
 
@@ -314,13 +480,38 @@ export const useDocumentRealtime = ({
                             );
                             if (exists) return prevBlocks;
 
+                            // For requirement tables, synthesize virtual natural columns immediately
+                            let synthesizedColumns: Column[] = [];
+                            try {
+                                const contentAny = (
+                                    payload.new as unknown as {
+                                        content?: { tableKind?: string };
+                                    }
+                                )?.content;
+                                const tableKind = contentAny?.tableKind;
+                                if (
+                                    (payload.new as Block).type === 'table' &&
+                                    tableKind === 'requirements'
+                                ) {
+                                    const cachedOrgId = getCachedDocumentOrg(documentId);
+                                    const cachedProps =
+                                        getCachedOrgProperties(cachedOrgId);
+                                    synthesizedColumns = synthesizeNaturalColumns(
+                                        (payload.new as Block).id,
+                                        cachedProps,
+                                    );
+                                }
+                            } catch {
+                                // no-op
+                            }
+
                             return [
                                 ...prevBlocks,
                                 {
                                     ...(payload.new as Block),
                                     order: payload.new.position,
                                     requirements: [],
-                                    columns: [],
+                                    columns: synthesizedColumns,
                                 },
                             ].sort((a, b) => (a.order || 0) - (b.order || 0));
                         }
@@ -347,6 +538,129 @@ export const useDocumentRealtime = ({
                 },
             )
             .subscribe();
+
+        // Background hydrator: when a new requirements table is inserted, refresh org props and hydrate options
+        const _maybeHydrateInsertedBlock = async (blockId: string) => {
+            try {
+                const cachedOrgId = getCachedDocumentOrg(documentId);
+                let orgId = cachedOrgId ?? null;
+                if (!orgId) {
+                    const resp = await fetch(`/api/documents/${documentId}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                    });
+                    if (resp.ok) {
+                        const payload = (await resp.json()) as {
+                            organizationId?: string | null;
+                        };
+                        orgId = payload.organizationId ?? null;
+                        setCachedDocumentOrg(documentId, orgId);
+                    }
+                }
+
+                if (!orgId) return;
+
+                let props = getCachedOrgProperties(orgId);
+                if (props.length === 0) {
+                    const resProps = await fetch(
+                        `/api/organizations/${orgId}/properties`,
+                        { method: 'GET', cache: 'no-store' },
+                    );
+                    if (resProps.ok) {
+                        const payload = (await resProps.json()) as {
+                            properties?: Property[];
+                        };
+                        props = payload.properties || [];
+                        setCachedOrgProperties(orgId, props);
+                    }
+                }
+
+                if (props.length === 0) return;
+
+                setBlocks((prev) => {
+                    if (!prev) return prev;
+                    return prev.map((b) => {
+                        if (b.id !== blockId) return b;
+                        const nextCols = (b.columns || []).map((c) => {
+                            const nameLc = (c.property?.name || '').toLowerCase();
+                            if (nameLc === 'status' || nameLc === 'priority') {
+                                const matching = props.find(
+                                    (p) => p.name.toLowerCase() === nameLc,
+                                );
+                                if (matching) {
+                                    return {
+                                        ...c,
+                                        property: {
+                                            ...(c.property || ({} as Property)),
+                                            name: matching.name,
+                                            property_type: matching.property_type,
+                                            options: matching.options,
+                                        },
+                                    } as Column;
+                                }
+                            }
+                            return c;
+                        });
+                        return { ...b, columns: nextCols };
+                    });
+                });
+            } catch {
+                // no-op
+            }
+        };
+
+        // Schedule hydration on block INSERT events
+        const scheduleHydrationOnInsert = (payload: { new: unknown }) => {
+            try {
+                const newBlock = payload.new as Block;
+                const contentAny = (
+                    newBlock as unknown as { content?: { tableKind?: string } }
+                )?.content;
+                const tableKind = contentAny?.tableKind;
+                if (newBlock.type === 'table' && tableKind === 'requirements') {
+                    setTimeout(() => _maybeHydrateInsertedBlock(newBlock.id), 200);
+                    // Also persist initial virtual columns metadata best-effort
+                    setTimeout(async () => {
+                        try {
+                            const cachedOrgId = getCachedDocumentOrg(documentId);
+                            const props = getCachedOrgProperties(cachedOrgId);
+                            const virtual = synthesizeNaturalColumns(newBlock.id, props);
+                            // Read and update block content
+                            const { data: blk } = await client
+                                .from('blocks')
+                                .select('content')
+                                .eq('id', newBlock.id)
+                                .single();
+                            const content: unknown = blk?.content ?? {};
+                            const isObj = typeof content === 'object' && content !== null;
+                            const current = (isObj ? content : {}) as {
+                                columns?: unknown[];
+                                requirements?: unknown[];
+                                rows?: unknown[];
+                                tableKind?: string;
+                            };
+                            const columnMetadata = buildColumnMetadataPayload(virtual);
+                            const updated = {
+                                ...current,
+                                tableKind: current.tableKind ?? 'requirements',
+                                columns: columnMetadata,
+                            } as Record<string, unknown>;
+                            await client
+                                .from('blocks')
+                                .update({
+                                    content:
+                                        updated as unknown as Database['public']['Tables']['blocks']['Row']['content'],
+                                })
+                                .eq('id', newBlock.id);
+                        } catch {
+                            // best-effort only
+                        }
+                    }, 250);
+                }
+            } catch {
+                // no-op
+            }
+        };
 
         // Subscribe to requirements changes
         const requirementsSubscription = client
