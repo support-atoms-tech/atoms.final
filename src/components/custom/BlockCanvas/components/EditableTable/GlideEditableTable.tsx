@@ -2381,11 +2381,14 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     .map((i) => sortedData[i])
                     .filter(Boolean);
                 if (rowsToDeleteLocal.length > 0) {
-                    setRowsToDelete(rowsToDeleteLocal);
                     if (props.skipDeleteConfirm) {
-                        // Skip confirmation dialog and delete directly
-                        setTimeout(() => handleRowDeleteConfirm(), 0);
+                        // Delegate confirmation to parent; do not mutate local state here
+                        const firstRow = rowsToDeleteLocal[0];
+                        if (firstRow) {
+                            void props.onDelete?.(firstRow);
+                        }
                     } else {
+                        setRowsToDelete(rowsToDeleteLocal);
                         setRowDeleteConfirmOpen(true);
                     }
                 }
@@ -4702,14 +4705,19 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                               >
                                                   <button
                                                       onClick={() => {
-                                                          setRowsToDelete(rowsToDelete);
                                                           if (props.skipDeleteConfirm) {
-                                                              setTimeout(
-                                                                  () =>
-                                                                      handleRowDeleteConfirm(),
-                                                                  0,
-                                                              );
+                                                              // Delegate confirmation to parent; do not mutate local state here
+                                                              const firstRow =
+                                                                  rowsToDelete[0];
+                                                              if (firstRow) {
+                                                                  void props.onDelete?.(
+                                                                      firstRow,
+                                                                  );
+                                                              }
                                                           } else {
+                                                              setRowsToDelete(
+                                                                  rowsToDelete,
+                                                              );
                                                               setRowDeleteConfirmOpen(
                                                                   true,
                                                               );
