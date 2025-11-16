@@ -276,6 +276,16 @@ export const TableBlock: React.FC<BlockProps> = ({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [requirementToDelete, setRequirementToDelete] =
         useState<DynamicRequirement | null>(null);
+    const [relationshipCheck, setRelationshipCheck] = useState<{
+        hasRelationships: boolean;
+        relationshipCount: number;
+        relatedRequirements: Array<{
+            id: string;
+            name: string;
+            external_id: string | null;
+        }>;
+    } | null>(null);
+    const [isCheckingRelationships, setIsCheckingRelationships] = useState(false);
 
     // Use the document store for edit mode state
     const { isEditMode, useTanStackTables, useGlideTables } = useDocumentStore();
@@ -497,11 +507,39 @@ export const TableBlock: React.FC<BlockProps> = ({
 
     const handleDeleteRequirement = useCallback(
         async (dynamicReq: DynamicRequirement) => {
-            // Open the delete dialog instead of deleting immediately
-            setRequirementToDelete(dynamicReq);
-            setDeleteDialogOpen(true);
+            // Prevent duplicate checks if already checking
+            if (isCheckingRelationships) return;
+
+            // Check for relationships first before opening the dialog
+            setIsCheckingRelationships(true);
+
+            try {
+                const params = new URLSearchParams({
+                    requirementId: dynamicReq.id,
+                    type: 'check',
+                });
+                const response = await fetch(`/api/requirements/relationships?${params}`);
+
+                if (!response.ok) {
+                    throw new Error('Failed to check requirement relationships');
+                }
+
+                const checkResult = await response.json();
+
+                // Only set state after successful fetch
+                setRequirementToDelete(dynamicReq);
+                setRelationshipCheck(checkResult);
+                setDeleteDialogOpen(true);
+            } catch (error) {
+                console.error('Error checking relationships:', error);
+                // On error, show error message instead of opening dialog
+                // Don't set inconsistent state
+                alert('Failed to check requirement relationships. Please try again.');
+            } finally {
+                setIsCheckingRelationships(false);
+            }
         },
-        [],
+        [isCheckingRelationships],
     );
 
     const handleConfirmDelete = useCallback(async () => {
@@ -513,6 +551,7 @@ export const TableBlock: React.FC<BlockProps> = ({
         );
         setDeleteDialogOpen(false);
         setRequirementToDelete(null);
+        setRelationshipCheck(null);
     }, [requirementToDelete, deleteRequirement, userProfile?.id]);
 
     const handleNameChange = useCallback(
@@ -560,8 +599,37 @@ export const TableBlock: React.FC<BlockProps> = ({
                 return columnDef;
             })
             .sort((a, b) => a.position - b.position);
+
+        // Add system "Links" column if there are requirements
+        // This column shows relationship counts and is always placed after the first column (usually External_ID or Name)
+        if (mapped.length > 0 && localRequirements.length > 0) {
+            const firstColPosition = mapped[0].position ?? 0;
+            const linksColumn = {
+                id: '__system_links__',
+                header: 'Links',
+                accessor: '__links__' as keyof DynamicRequirement,
+                type: 'text' as EditableColumnType,
+                width: 80,
+                position: firstColPosition + 1, // Place after first column
+                required: false,
+                isSortable: false,
+            };
+
+            // Insert Links column after first column and adjust positions of remaining columns
+            const withLinks = [
+                mapped[0], // Keep first column at its original position
+                linksColumn,
+                ...mapped.slice(1).map((col) => ({
+                    ...col,
+                    position: (col.position ?? 0) + 1,
+                })),
+            ];
+
+            return withLinks;
+        }
+
         return mapped;
-    }, [effectiveColumnsRaw, tableContentMetadata?.columns]);
+    }, [effectiveColumnsRaw, tableContentMetadata?.columns, localRequirements.length]);
 
     // Memoize dynamicRequirements to avoid recreating every render unless localRequirements changes
     const dynamicRequirements = useMemo(() => {
@@ -581,6 +649,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                     ...req,
                     position: meta?.position ?? req.position ?? idx,
                     height: meta?.height,
+                    __links__: '🔗', // Add links indicator for system column
                 };
             })
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -998,7 +1067,13 @@ export const TableBlock: React.FC<BlockProps> = ({
             {requirementToDelete && (
                 <DeleteRequirementDialog
                     open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
+                    onOpenChange={(open) => {
+                        setDeleteDialogOpen(open);
+                        if (!open) {
+                            setRequirementToDelete(null);
+                            setRelationshipCheck(null);
+                        }
+                    }}
                     requirementId={requirementToDelete.id}
                     requirementName={
                         (requirementToDelete.Name as string) ||
@@ -1006,6 +1081,8 @@ export const TableBlock: React.FC<BlockProps> = ({
                         'Unnamed Requirement'
                     }
                     onConfirmDelete={handleConfirmDelete}
+                    relationshipCheck={relationshipCheck}
+                    isCheckingRelationships={isCheckingRelationships}
                 />
             )}
         </div>
