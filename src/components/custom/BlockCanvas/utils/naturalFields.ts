@@ -71,7 +71,7 @@ export function ensureNaturalColumns(
         const nmLc = (nm as string).toLowerCase();
         if (nmLc) byNameLc.set(nmLc, c);
     }
-    const merged: Column[] = [...existing];
+    let merged: Column[] = [...existing];
     for (const uiName of naturalFieldOrder) {
         const dbKey = uiNameToDbKey[uiName] || uiName.toLowerCase();
         const has = byNameLc.has(dbKey) || byNameLc.has(uiName.toLowerCase());
@@ -96,6 +96,24 @@ export function ensureNaturalColumns(
                     c.property = { ...c.property, options: matched.options } as Property;
                 }
             }
+        }
+    }
+    // Remove any virtual duplicates if a real column for that natural field exists
+    for (const uiName of naturalFieldOrder) {
+        const dbKey = uiNameToDbKey[uiName] || uiName.toLowerCase();
+        const realExists = merged.some((c) => {
+            const propName =
+                (c as unknown as { property?: { name?: string } })?.property?.name || '';
+            const isVirtual =
+                typeof c.property_id === 'string' &&
+                (c.property_id as string).startsWith('virtual-');
+            const matches =
+                (propName as string).toLowerCase() === dbKey ||
+                (propName as string).toLowerCase() === uiName.toLowerCase();
+            return matches && !isVirtual;
+        });
+        if (realExists) {
+            merged = merged.filter((c) => c.id !== `virtual-${dbKey}`);
         }
     }
     merged.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));

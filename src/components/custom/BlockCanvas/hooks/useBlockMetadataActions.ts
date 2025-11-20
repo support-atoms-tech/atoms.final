@@ -47,11 +47,12 @@ export const useBlockMetadataActions = () => {
                 const supabase = getClientOrThrow();
 
                 // Fetch existing content to preserve other fields
+                // Use maybeSingle() to handle cases where block might not exist yet
                 const { data: blockData, error: fetchError } = await supabase
                     .from('blocks')
                     .select('content')
                     .eq('id', blockId)
-                    .single();
+                    .maybeSingle();
 
                 if (fetchError) {
                     console.error(
@@ -59,6 +60,17 @@ export const useBlockMetadataActions = () => {
                         fetchError,
                     );
                     throw fetchError;
+                }
+
+                // If block doesn't exist, we can't update metadata
+                // This can happen when metadata is saved before the block is fully created
+                // In that case, we should silently skip the save rather than throwing an error
+                if (!blockData) {
+                    console.warn(
+                        '[updateBlockMetadata] Block not found, skipping metadata update (block may not be created yet):',
+                        blockId,
+                    );
+                    return; // Silently return instead of throwing
                 }
 
                 // Casting to unknown puts validation on us. Fallbacks included below.

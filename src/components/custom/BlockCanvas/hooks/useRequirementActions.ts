@@ -568,12 +568,36 @@ export const useRequirementActions = ({
                     }
                 }
 
+                // Resolve organization_id from document context
+                let organizationId: string | null = null;
+                try {
+                    const resp = await fetch(`/api/documents/${documentId}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                    });
+                    if (resp.ok) {
+                        const payload = (await resp.json()) as {
+                            organizationId?: string | null;
+                        };
+                        organizationId = payload.organizationId ?? null;
+                    }
+                } catch (error) {
+                    console.error('Error resolving organization_id:', error);
+                }
+
+                if (!organizationId) {
+                    throw new Error(
+                        'Failed to resolve organization_id from document context',
+                    );
+                }
+
                 const newRequirementData = {
                     ...baseData,
                     created_by: userId,
                     name: safeName,
                     external_id: externalId,
                     position, // Add the position field
+                    organization_id: organizationId, // Add organization_id
                     // Ensure ai_analysis is properly initialized
                     ai_analysis: {
                         descriptionHistory: [
