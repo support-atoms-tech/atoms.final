@@ -1213,6 +1213,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 );
 
                 debouncedSave();
+                // Explicitly save column metadata (width) when column is resized
+                saveTableMetadataRef.current?.({ includeColumns: true });
                 return updated;
             });
 
@@ -1259,6 +1261,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             });
 
             debouncedSave();
+            // Explicitly save column metadata (position) when column is reordered
+            saveTableMetadataRef.current?.({ includeColumns: true });
         },
         [debouncedSave, localColumns, addToHistory],
     );
