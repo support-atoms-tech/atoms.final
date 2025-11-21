@@ -1,10 +1,12 @@
 'use client';
 
-import { ChevronDown, CircleAlert, Grid, PenTool, Pencil } from 'lucide-react';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import { ChevronDown, CircleAlert, Grid, Link2, PenTool, Pencil } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
+import { RequirementPicker } from '@/components/custom/Diagrams/RequirementPicker';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -31,11 +33,21 @@ type DiagramType = 'flowchart' | 'sequence' | 'class';
 export default function Draw() {
     // const organizationId = '9badbbf0-441c-49f6-91e7-3d9afa1c13e6';
     const organizationId = usePathname().split('/')[2];
+    const projectId = usePathname().split('/')[4];
     const [prompt, setPrompt] = useState('');
     const [diagramType, setDiagramType] = useState<DiagramType>('flowchart');
     const [excalidrawApi, setExcalidrawApi] = useState<{
         addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
+        linkRequirement: (
+            requirementId: string,
+            requirementName: string,
+            documentId: string,
+        ) => void;
+        unlinkRequirement: () => void;
     } | null>(null);
+    const [selectedElements, setSelectedElements] = useState<
+        readonly ExcalidrawElement[]
+    >([]);
 
     // Gallery/editor state management
     const [activeTab, setActiveTab] = useState<string>('editor');
@@ -73,12 +85,6 @@ export default function Draw() {
         const pendingReqId = sessionStorage.getItem('pendingDiagramRequirementId');
         const pendingDocId = sessionStorage.getItem('pendingDiagramDocumentId');
 
-        console.log('[Canvas] Reading sessionStorage:', {
-            pendingPrompt: pendingPrompt ? pendingPrompt.substring(0, 20) + '...' : null,
-            pendingReqId,
-            pendingDocId,
-        });
-
         if (pendingPrompt) {
             setPrompt(pendingPrompt);
             sessionStorage.removeItem('pendingDiagramPrompt');
@@ -90,7 +96,6 @@ export default function Draw() {
         }
         // Read documentId
         if (pendingDocId) {
-            console.log('[Canvas] Reading documentId:', pendingDocId);
             setPendingDocumentId(pendingDocId);
             sessionStorage.removeItem('pendingDiagramDocumentId');
         }
@@ -125,13 +130,11 @@ export default function Draw() {
         }
 
         if (!prompt.trim()) {
-            console.log('Prompt is empty, skipping generation.');
             return;
         }
 
         // Already generating, don't trigger again
         if (isGenerating || pipelineRunId) {
-            console.log('Already generating, skipping duplicate request');
             return;
         }
 
@@ -140,25 +143,27 @@ export default function Draw() {
 
         // Safety timeout to ensure the button doesn't get stuck in "generating" state
         const safetyTimer = setTimeout(() => {
-            console.log('Safety timeout triggered - resetting generation state');
             setIsGenerating(false);
             setPipelineRunId('');
         }, 15000); // 15 seconds timeout
 
         try {
+            const pipelineInputs = [
+                {
+                    input_name: 'Requirements(s)',
+                    value: prompt.trim(),
+                },
+                {
+                    input_name: 'Diagram-type',
+                    value: diagramType,
+                },
+            ];
+
             const { run_id } = await startPipeline({
                 pipelineType: 'text-to-mermaid',
-                customPipelineInputs: [
-                    {
-                        input_name: 'Requirements(s)',
-                        value: prompt.trim(),
-                    },
-                    {
-                        input_name: 'Diagram-type',
-                        value: diagramType,
-                    },
-                ],
+                customPipelineInputs: pipelineInputs,
             });
+
             setPipelineRunId(run_id);
             // Clear the safety timeout since we got a successful response
             clearTimeout(safetyTimer);
@@ -195,23 +200,26 @@ export default function Draw() {
 
         switch (pipelineResponse.state) {
             case 'DONE': {
-                console.log('Pipeline response: DONE');
-
                 // Parse the JSON string from outputs.output
                 let parsedOutput;
                 try {
                     const output = pipelineResponse.outputs?.output;
+
                     if (!output || typeof output !== 'string') {
+                        console.error('[Gumloop] Invalid output format - not a string');
                         throw new Error('Invalid output format');
                     }
                     parsedOutput = JSON.parse(output);
+
                     const mermaidSyntax = parsedOutput?.mermaid_syntax;
 
                     if (!mermaidSyntax) {
-                        console.error('No mermaid syntax found in response');
-                        console.log('parsedOutput: ', parsedOutput);
+                        console.error(
+                            '[Gumloop] No mermaid syntax found - checking all output keys:',
+                            Object.keys(parsedOutput || {}),
+                        );
                         setError(
-                            'Failed to generate diagram: No mermaid syntax in response',
+                            `Failed to generate diagram: Pipeline returned no mermaid syntax. Output keys: ${Object.keys(parsedOutput || {}).join(', ')}`,
                         );
                         break;
                     }
@@ -233,8 +241,6 @@ export default function Draw() {
                         .replace(/^```[\w]*\n?/, '')
                         .replace(/\n?```$/, '');
                     cleanedSyntax = cleanedSyntax.trim();
-
-                    // console.log('Cleaned mermaid syntax:', cleanedSyntax);
 
                     if (excalidrawApi) {
                         excalidrawApi.addMermaidDiagram(cleanedSyntax).catch((err) => {
@@ -262,8 +268,7 @@ export default function Draw() {
                 break;
             }
             default:
-                // For states like RUNNING or others, just log and don't reset
-                console.log('Pipeline in progress, state:', pipelineResponse.state);
+                // For states like RUNNING or others, just don't reset
                 return;
         }
     }, [pipelineResponse, excalidrawApi]);
@@ -276,8 +281,24 @@ export default function Draw() {
     }, [handleGenerate]);
 
     const handleExcalidrawMount = useCallback(
-        (api: { addMermaidDiagram: (mermaidSyntax: string) => Promise<void> }) => {
+        (api: {
+            addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
+            linkRequirement: (
+                requirementId: string,
+                requirementName: string,
+                documentId: string,
+            ) => void;
+            unlinkRequirement: () => void;
+        }) => {
             setExcalidrawApi(api);
+        },
+        [],
+    );
+
+    // Handle selection change from Excalidraw
+    const handleSelectionChange = useCallback(
+        (elements: readonly ExcalidrawElement[]) => {
+            setSelectedElements(elements);
         },
         [],
     );
@@ -407,6 +428,7 @@ export default function Draw() {
                             onDiagramSaved={handleDiagramSaved}
                             onDiagramNameChange={handleDiagramNameChange}
                             onDiagramIdChange={setSelectedDiagramId}
+                            onSelectionChange={handleSelectionChange}
                             key={`pendingReq-${pendingRequirementId}-${instanceKey}`}
                             pendingRequirementId={pendingRequirementId}
                             pendingDocumentId={pendingDocumentId}
@@ -446,6 +468,59 @@ export default function Draw() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Link Requirement - appears when diagram elements are selected */}
+                        {selectedElements.length > 0 &&
+                            (() => {
+                                // Get current requirement ID from first selected element with a requirement
+                                const currentReqId =
+                                    (
+                                        selectedElements.find(
+                                            (el) =>
+                                                'requirementId' in el && el.requirementId,
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        ) as any
+                                    )?.requirementId || '';
+
+                                return (
+                                    <div className="mb-2.5 p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-secondary">
+                                        <div className="flex items-center gap-2 text-sm font-medium mb-2.5 text-gray-700 dark:text-gray-300">
+                                            <Link2 size={16} />
+                                            <span>
+                                                {selectedElements.length} element
+                                                {selectedElements.length > 1
+                                                    ? 's'
+                                                    : ''}{' '}
+                                                selected
+                                            </span>
+                                        </div>
+                                        <RequirementPicker
+                                            projectId={projectId}
+                                            value={currentReqId}
+                                            onChange={(reqId, reqName, docId) => {
+                                                excalidrawApi?.linkRequirement(
+                                                    reqId,
+                                                    reqName,
+                                                    docId,
+                                                );
+                                            }}
+                                        />
+                                        {currentReqId && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    excalidrawApi?.unlinkRequirement()
+                                                }
+                                                className="w-full mt-2"
+                                            >
+                                                Unlink Requirement
+                                            </Button>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                         <button
                             onClick={handleManualGenerate}
                             disabled={isGenerating}

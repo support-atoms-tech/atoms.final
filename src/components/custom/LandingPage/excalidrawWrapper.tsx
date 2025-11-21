@@ -40,11 +40,18 @@ type NormalizedZoomValue = AppState['zoom']['value'];
 interface ExcalidrawWrapperProps {
     onMounted?: (api: {
         addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
+        linkRequirement: (
+            requirementId: string,
+            requirementName: string,
+            documentId: string,
+        ) => void;
+        unlinkRequirement: () => void;
     }) => void;
     diagramId?: string | null;
     onDiagramSaved?: (id: string) => void;
     onDiagramNameChange?: (name: string) => void;
     onDiagramIdChange?: (id: string | null) => void;
+    onSelectionChange?: (elements: readonly ExcalidrawElement[]) => void;
     pendingRequirementId?: string | null;
     pendingDocumentId?: string | null;
 }
@@ -75,6 +82,7 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
     onDiagramSaved,
     onDiagramNameChange,
     onDiagramIdChange,
+    onSelectionChange,
     pendingRequirementId,
     pendingDocumentId,
 }) => {
@@ -136,6 +144,9 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
     const prevScrollXRef = useRef<number | null>(null);
     const prevScrollYRef = useRef<number | null>(null);
     const prevZoomRef = useRef<number | null>(null);
+    const prevSelectionIdsRef = useRef<string>('');
+    const prevDiagramNameRef = useRef<string>('');
+    const prevDiagramIdRef = useRef<string | null>(null);
 
     // Function to generate a thumbnail of the current diagram
     const generateThumbnail = useCallback(
@@ -197,11 +208,6 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
 
                 if (!response.ok) {
                     if (response.status === 404) {
-                        console.log(
-                            'No diagram found with ID:',
-                            id,
-                            '- treating as new diagram',
-                        );
                         return false;
                     }
 
@@ -315,7 +321,6 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             const { diagram: data } = await response.json();
 
             if (data && data.name !== diagramName) {
-                console.log('Updating diagram name from database:', data.name);
                 setDiagramName(data.name || 'Untitled Diagram');
             }
         } catch (err) {
@@ -325,7 +330,8 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
 
     // Periodically check for name updates in the database
     useEffect(() => {
-        if (!diagramId) return;
+        // Only refresh for diagrams that exist in the database
+        if (!diagramId || !isExistingDiagram) return;
 
         // Initial refresh
         refreshDiagramName();
@@ -336,7 +342,8 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
         return () => {
             clearInterval(intervalId);
         };
-    }, [diagramId, refreshDiagramName]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [diagramId, isExistingDiagram]);
 
     const createNewDiagram = useCallback(() => {
         // Generate a UUID v4
@@ -368,8 +375,6 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             });
         }
 
-        console.log('created new diagram');
-
         setIsLoading(false);
     }, [projectId, isDarkMode]);
 
@@ -383,23 +388,12 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 let excalidrawElements = convertToExcalidrawElements(skeletonElements);
 
                 // Attach requirementId if present (for requirement→diagram flow)
-                console.log('Before check');
                 if (pendingRequirementId) {
-                    console.log('pendingrequirementId was present', pendingRequirementId);
                     excalidrawElements = addRequirementIdToElements(
                         excalidrawElements as unknown as ExcalidrawElement[],
                         pendingRequirementId,
                         pendingDocumentId,
                     ) as unknown as typeof excalidrawElements;
-                    console.log(
-                        '[Excalidraw] requirementId attached to mermaid elements',
-                        {
-                            pendingRequirementId,
-                            documentId: pendingDocumentId,
-                            elementCount: excalidrawElements.length,
-                            elements: excalidrawElements,
-                        },
-                    );
                 }
 
                 if (excalidrawApiRef.current) {
@@ -489,107 +483,6 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
         [pendingRequirementId, pendingDocumentId, excalidrawApiRef],
     );
 
-    // Expose the addMermaidDiagram function to parent
-    useEffect(() => {
-        if (onMounted) {
-            console.log('onMounted called, pendingRequirementId:', pendingRequirementId);
-            onMounted({ addMermaidDiagram });
-        }
-    }, [onMounted, pendingRequirementId, addMermaidDiagram]);
-
-    // Watch for external diagramId changes
-    useEffect(() => {
-        if (externalDiagramId !== undefined) {
-            setDiagramId(externalDiagramId);
-
-            if (externalDiagramId) {
-                loadDiagram(externalDiagramId);
-            }
-        }
-    }, [externalDiagramId, loadDiagram]);
-
-    // Reset loading state when component unmounts or when diagram ID changes
-    useEffect(() => {
-        return () => {
-            setIsLoading(false);
-        };
-    }, [diagramId]);
-
-    // Update theme in Excalidraw when dark mode changes
-    useEffect(() => {
-        if (excalidrawApiRef.current) {
-            excalidrawApiRef.current.updateScene({
-                appState: {
-                    theme: isDarkMode ? 'dark' : 'light',
-                },
-            });
-        }
-    }, [isDarkMode]);
-
-    // Initialize diagram ID and load data on mount
-    useEffect(() => {
-        const initializeDiagram = async () => {
-            try {
-                // Clear previous diagram when project changes
-                if (projectId) {
-                    // Only load diagram if no external ID was provided
-                    if (!externalDiagramId) {
-                        // Use a project-specific storage key to prevent leakage between projects
-                        const projectStorageKey = `${LAST_DIAGRAM_ID_KEY}_${projectId}`;
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const idFromUrl = urlParams.get('id');
-                        const lastDiagramId = localStorage.getItem(projectStorageKey);
-
-                        // Priority: URL param > localStorage > new diagram
-                        let id: string | null = null;
-
-                        if (idFromUrl && isValidUuid(idFromUrl)) {
-                            id = idFromUrl;
-                        } else if (lastDiagramId && isValidUuid(lastDiagramId)) {
-                            id = lastDiagramId;
-                            // Update URL with the stored ID
-                            const newUrl = new URL(window.location.href);
-                            newUrl.searchParams.set('id', id);
-                            window.history.pushState({}, '', newUrl);
-                        }
-
-                        if (id) {
-                            setDiagramId(id);
-                            localStorage.setItem(projectStorageKey, id);
-
-                            const loadSuccess = await loadDiagram(id);
-                            if (!loadSuccess) {
-                                createNewDiagram();
-                            }
-                        } else {
-                            createNewDiagram();
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error initializing diagram:', error);
-                setIsLoading(false);
-            }
-        };
-
-        // Helper function to validate UUID
-        const isValidUuid = (id: string): boolean => {
-            const uuidRegex =
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            return uuidRegex.test(id);
-        };
-
-        initializeDiagram();
-    }, [
-        isDarkMode,
-        projectId,
-        externalDiagramId,
-        loadDiagram,
-        createNewDiagram,
-        pendingRequirementId,
-        pendingDocumentId,
-    ]);
-
     const hasChanges = useCallback(
         (elements: readonly ExcalidrawElement[], appState: AppState) => {
             if (!lastSavedDataRef.current) return true;
@@ -639,13 +532,11 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 !isExistingDiagram &&
                 (!elements || elements.length === 0)
             ) {
-                console.log('New diagram with no elements - skipping save');
                 return;
             }
 
             // Check if there are actual changes to save
             if (!forceSave && !customDiagramId && !hasChanges(elements, appState)) {
-                console.log('No changes detected - skipping save');
                 return;
             }
 
@@ -731,19 +622,18 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 setLastSaved(new Date());
                 const projectStorageKey = `${LAST_DIAGRAM_ID_KEY}_${projectId}`;
                 localStorage.setItem(projectStorageKey, idToUse);
-                console.log('Diagram saved successfully');
             } catch (error) {
                 console.error('Error saving diagram:', error);
             } finally {
                 setIsAutoSaving(false);
             }
         },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [
             diagramId,
             diagramName,
             generateThumbnail,
             hasChanges,
-            isAutoSaving,
             isExistingDiagram,
             onDiagramSaved,
             organizationId,
@@ -752,6 +642,191 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             supabaseLoading,
         ],
     );
+
+    // Debounced save function to avoid too many API calls
+    const debouncedSave = useCallback(
+        (
+            elements: readonly ExcalidrawElement[],
+            appState: AppState,
+            files: BinaryFiles,
+        ) => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            saveTimeoutRef.current = setTimeout(() => {
+                saveDiagram(elements, appState, files);
+            }, 2000);
+        },
+        [saveDiagram],
+    );
+
+    // Utility functions for requirement linking
+    const updateElementRequirementLink = useCallback(
+        (requirementId: string, _requirementName: string, documentId: string) => {
+            if (!excalidrawApiRef.current) return;
+
+            const elements = excalidrawApiRef.current.getSceneElements();
+            const selectedIds = Object.keys(
+                excalidrawApiRef.current.getAppState().selectedElementIds || {},
+            );
+
+            // Update selected elements with requirementId and documentId
+            const updatedElements = elements.map((el) => {
+                if (selectedIds.includes(el.id)) {
+                    // Add custom properties to element
+                    return {
+                        ...el,
+                        requirementId,
+                        documentId: documentId,
+                    } as unknown as ExcalidrawElement;
+                }
+                return el;
+            });
+
+            // Update the scene with modified elements
+            excalidrawApiRef.current.updateScene({
+                elements: updatedElements,
+            });
+
+            // Trigger save after linking
+            const appState = excalidrawApiRef.current.getAppState();
+            const files = excalidrawApiRef.current.getFiles();
+            debouncedSave(updatedElements, appState, files);
+        },
+        [debouncedSave],
+    );
+
+    const removeElementRequirementLink = useCallback(() => {
+        if (!excalidrawApiRef.current) return;
+
+        const elements = excalidrawApiRef.current.getSceneElements();
+        const selectedIds = Object.keys(
+            excalidrawApiRef.current.getAppState().selectedElementIds || {},
+        );
+
+        // Remove requirementId and documentId from selected elements
+        const updatedElements = elements.map((el) => {
+            if (selectedIds.includes(el.id)) {
+                // Create a new element without the requirementId and documentId properties
+                const {
+                    requirementId: _requirementId,
+                    documentId: _documentId,
+                    ...rest
+                } = el as ElementWithRequirementProps;
+                return rest as ExcalidrawElement;
+            }
+            return el;
+        });
+
+        // Update the scene with modified elements
+        excalidrawApiRef.current.updateScene({
+            elements: updatedElements,
+        });
+
+        // Trigger save after unlinking
+        const appState = excalidrawApiRef.current.getAppState();
+        const files = excalidrawApiRef.current.getFiles();
+        debouncedSave(updatedElements, appState, files);
+    }, [debouncedSave]);
+
+    // Expose the API functions to parent
+    const hasInitializedApiRef = useRef(false);
+    useEffect(() => {
+        if (onMounted && !hasInitializedApiRef.current) {
+            hasInitializedApiRef.current = true;
+            onMounted({
+                addMermaidDiagram,
+                linkRequirement: updateElementRequirementLink,
+                unlinkRequirement: removeElementRequirementLink,
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [onMounted]);
+
+    // Watch for external diagramId changes
+    useEffect(() => {
+        if (externalDiagramId !== undefined) {
+            setDiagramId(externalDiagramId);
+
+            if (externalDiagramId) {
+                loadDiagram(externalDiagramId);
+            }
+        }
+    }, [externalDiagramId, loadDiagram]);
+
+    // Reset loading state when component unmounts or when diagram ID changes
+    useEffect(() => {
+        return () => {
+            setIsLoading(false);
+        };
+    }, [diagramId]);
+
+    // Update theme in Excalidraw when dark mode changes
+    useEffect(() => {
+        if (excalidrawApiRef.current) {
+            excalidrawApiRef.current.updateScene({
+                appState: {
+                    theme: isDarkMode ? 'dark' : 'light',
+                },
+            });
+        }
+    }, [isDarkMode]);
+
+    // Initialize diagram ID and load data on mount
+    useEffect(() => {
+        const initializeDiagram = async () => {
+            try {
+                // Clear previous diagram when project changes
+                if (projectId) {
+                    // Only load diagram if no external ID was provided
+                    if (!externalDiagramId) {
+                        // Use a project-specific storage key to prevent leakage between projects
+                        const projectStorageKey = `${LAST_DIAGRAM_ID_KEY}_${projectId}`;
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const idFromUrl = urlParams.get('id');
+                        const lastDiagramId = localStorage.getItem(projectStorageKey);
+
+                        // Priority: URL param > localStorage > new diagram
+                        let id: string | null = null;
+
+                        if (idFromUrl && isValidUuid(idFromUrl)) {
+                            id = idFromUrl;
+                        } else if (lastDiagramId && isValidUuid(lastDiagramId)) {
+                            id = lastDiagramId;
+                            // Update URL with the stored ID
+                            const newUrl = new URL(window.location.href);
+                            newUrl.searchParams.set('id', id);
+                            window.history.pushState({}, '', newUrl);
+                        }
+
+                        if (id) {
+                            setDiagramId(id);
+                            localStorage.setItem(projectStorageKey, id);
+
+                            const loadSuccess = await loadDiagram(id);
+                            if (!loadSuccess) {
+                                createNewDiagram();
+                            }
+                        } else {
+                            createNewDiagram();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error initializing diagram:', error);
+                setIsLoading(false);
+            }
+        };
+
+        // Helper function to validate UUID
+        const isValidUuid = (id: string): boolean => {
+            const uuidRegex =
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            return uuidRegex.test(id);
+        };
+
+        initializeDiagram();
+    }, [isDarkMode, projectId, externalDiagramId, loadDiagram, createNewDiagram]);
 
     // Handle Save As operation
     const handleSaveAs = async () => {
@@ -771,23 +846,6 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
         setIsSaveAsDialogOpen(false);
         setNewDiagramName('');
     };
-
-    // Debounced save function to avoid too many API calls
-    const debouncedSave = useCallback(
-        (
-            elements: readonly ExcalidrawElement[],
-            appState: AppState,
-            files: BinaryFiles,
-        ) => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            saveTimeoutRef.current = setTimeout(() => {
-                saveDiagram(elements, appState, files);
-            }, 2000);
-        },
-        [saveDiagram],
-    );
 
     // Modify handleChange to update tooltip and position it over all related elements
     const handleChange = useCallback(
@@ -820,8 +878,28 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 return;
             }
 
-            // Determine if a single element with requirementId is selected
+            // Determine if elements are selected
             const selectedIds = Object.keys(appState.selectedElementIds || {});
+            const currentSelectionKey = selectedIds.sort().join(',');
+
+            // Only notify parent if selection actually changed (prevents infinite loop)
+            if (
+                onSelectionChange &&
+                currentSelectionKey !== prevSelectionIdsRef.current
+            ) {
+                prevSelectionIdsRef.current = currentSelectionKey;
+
+                if (selectedIds.length > 0) {
+                    const currentSelectedElements = elements.filter((el) =>
+                        selectedIds.includes(el.id),
+                    );
+                    onSelectionChange(currentSelectedElements);
+                } else {
+                    onSelectionChange([]);
+                }
+            }
+
+            // Handle existing requirement tooltip logic for already-linked elements
             if (selectedIds.length >= 1 && excalidrawApiRef.current) {
                 const selectedId = selectedIds[0];
                 // Only process if this is a new selection
@@ -891,7 +969,7 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 setBoundingBoxOverlay(null);
             }
         },
-        [debouncedSave],
+        [debouncedSave, onSelectionChange],
     );
 
     // Function to calculate bounding box for a group of elements
@@ -1003,16 +1081,18 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
         };
     }, []);
 
-    // Notify parent component when diagram name changes
+    // Notify parent component when diagram name changes (with guard to prevent loop)
     useEffect(() => {
-        if (onDiagramNameChange) {
+        if (onDiagramNameChange && diagramName !== prevDiagramNameRef.current) {
+            prevDiagramNameRef.current = diagramName;
             onDiagramNameChange(diagramName);
         }
     }, [diagramName, onDiagramNameChange]);
 
-    // Whenever diagramId changes, notify parent
+    // Whenever diagramId changes, notify parent (with guard to prevent loop)
     useEffect(() => {
-        if (onDiagramIdChange) {
+        if (onDiagramIdChange && diagramId !== prevDiagramIdRef.current) {
+            prevDiagramIdRef.current = diagramId;
             onDiagramIdChange(diagramId);
         }
     }, [diagramId, onDiagramIdChange]);
@@ -1113,19 +1193,23 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                         transform: 'none',
                     }}
                     onClick={() => {
-                        if (typeof window !== 'undefined') {
+                        if (typeof window !== 'undefined' && linkTooltip.requirementId) {
                             sessionStorage.setItem(
                                 'jumpToRequirementId',
                                 linkTooltip.requirementId,
                             );
-                            console.log(
-                                'Set requirementId in sessionStorage:',
-                                linkTooltip.requirementId,
+                        }
+
+                        // Check if documentId exists before navigating
+                        if (linkTooltip.documentId) {
+                            router.push(
+                                `/org/${organizationId}/project/${projectId}/documents/${linkTooltip.documentId}`,
+                            );
+                        } else {
+                            console.error(
+                                'Cannot navigate: documentId is missing from element',
                             );
                         }
-                        router.push(
-                            `/org/${organizationId}/project/${projectId}/documents/${linkTooltip.documentId}`,
-                        );
                     }}
                 >
                     Jump to Requirement
