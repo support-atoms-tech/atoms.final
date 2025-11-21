@@ -208,6 +208,45 @@ export async function POST(
                         pos += 1;
                     }
                 }
+
+                // Save initial metadata with columns after they're created
+                if (createdColumns.length > 0) {
+                    // Fetch columns with property names for metadata
+                    const { data: colsWithProps } = await supabase
+                        .from('columns')
+                        .select('id, position, width, property:properties(name)')
+                        .eq('block_id', block.id)
+                        .order('position', { ascending: true });
+                    const columnMetadata =
+                        (colsWithProps || []).map((c, idx) => ({
+                            columnId: (c as { id: string }).id,
+                            position:
+                                typeof (c as { position?: number }).position === 'number'
+                                    ? (c as { position?: number }).position
+                                    : idx,
+                            width: (c as { width?: number }).width ?? 200,
+                            name:
+                                ((c as unknown as { property?: { name?: string | null } })
+                                    ?.property?.name ||
+                                    '') ??
+                                '',
+                        })) || [];
+                    const currentContent = (block.content || {}) as unknown as {
+                        columns?: unknown[];
+                        requirements?: unknown[];
+                        tableKind?: string;
+                    };
+                    await supabase
+                        .from('blocks')
+                        .update({
+                            content: {
+                                ...currentContent,
+                                columns: columnMetadata,
+                                tableKind: currentContent.tableKind ?? 'requirements',
+                            } as unknown as Json,
+                        })
+                        .eq('id', block.id);
+                }
             }
         }
 

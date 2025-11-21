@@ -5,6 +5,8 @@
 export type ParsedTable = {
     headers: string[];
     rows: Array<Array<unknown>>;
+    rawHeaderRow?: Array<unknown>;
+    usedFirstRowAsHeader?: boolean;
 };
 
 export async function parseTableFile(file: File): Promise<ParsedTable> {
@@ -53,7 +55,10 @@ function isLikelyCsvName(name: string): boolean {
 export function parseCsvText(text: string): ParsedTable {
     const rows = tokenizeCsv(text);
     if (rows.length === 0) return { headers: [], rows: [] };
-    const headerCandidate = rows[0].map((h) => sanitizeHeader(String(h ?? '')));
+    const headerCandidateRaw = rows[0] || [];
+    const headerCandidate = headerCandidateRaw.map((h) =>
+        sanitizeHeader(String(h ?? '')),
+    );
 
     // If header is empty or all blank, synthesize Column N
     const allBlank = headerCandidate.every((h) => !h);
@@ -68,7 +73,12 @@ export function parseCsvText(text: string): ParsedTable {
         }
         return out;
     });
-    return { headers, rows: dataRows };
+    return {
+        headers,
+        rows: dataRows,
+        rawHeaderRow: headerCandidateRaw,
+        usedFirstRowAsHeader: true,
+    };
 }
 
 function tokenizeCsv(input: string): string[][] {
@@ -147,7 +157,8 @@ async function parseExcel(buf: ArrayBuffer): Promise<ParsedTable> {
         Array<unknown>
     >;
     if (!aoa || aoa.length === 0) return { headers: [], rows: [] };
-    const rawHeaders = (aoa[0] || []).map((h) => sanitizeHeader(String(h ?? '')));
+    const headerCandidateRaw = aoa[0] || [];
+    const rawHeaders = headerCandidateRaw.map((h) => sanitizeHeader(String(h ?? '')));
     const headers =
         rawHeaders.length > 0
             ? uniqifyHeaders(rawHeaders)
@@ -159,7 +170,12 @@ async function parseExcel(buf: ArrayBuffer): Promise<ParsedTable> {
         }
         return out;
     });
-    return { headers, rows: dataRows };
+    return {
+        headers,
+        rows: dataRows,
+        rawHeaderRow: headerCandidateRaw,
+        usedFirstRowAsHeader: true,
+    };
 }
 
 // ---------------- ReqIF (minimal STRING attributes) ----------------
@@ -229,7 +245,7 @@ function parseReqIF(xmlText: string): ParsedTable {
         rows.push(row);
     }
 
-    return { headers, rows };
+    return { headers, rows, usedFirstRowAsHeader: false };
 }
 
 // ---------------- Helpers ----------------

@@ -45,6 +45,7 @@ export const SortableBlock: React.FC<BlockProps> = ({
             ref={setNodeRef}
             style={style}
             {...attributes}
+            id={`block-${block.id}`}
             className={cn(
                 'relative group bg-background w-full max-w-full min-w-0 p-2',
                 'flex space-x-2',

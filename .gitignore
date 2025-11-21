@@ -59,4 +59,3 @@ next-env.d.ts
 # Testing N8N, DB sql files
 N8N
 DB_Analyze
-python_fastAPI_fetch_clean/

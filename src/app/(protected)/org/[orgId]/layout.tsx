@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { OrgDashboardSkeleton } from '@/components/custom/skeletons/OrgDashboardSkeleton';
@@ -38,11 +38,13 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
             return notFound();
         }
 
-        // Handle other errors
-        return (
-            <div className="error-container">
-                <p>Error loading organization: {(error as Error).message}</p>
-            </div>
-        );
+        // Redirect unauthenticated users to login
+        const msg = (error as Error)?.message?.toLowerCase?.() || '';
+        if (msg.includes('not authenticated') || msg.includes('profile not found')) {
+            redirect('/login');
+        }
+
+        // Fallback: redirect to login for other errors as well
+        redirect('/login');
     }
 }

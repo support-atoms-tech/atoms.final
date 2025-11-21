@@ -551,6 +551,56 @@ export async function POST(
                 );
             }
 
+            // Update block content.columns metadata to include this new column
+            try {
+                const { data: cols } = await supabase
+                    .from('columns')
+                    .select('id, position, width, property:properties(name)')
+                    .eq('block_id', body.blockId)
+                    .order('position', { ascending: true });
+                // Read current content
+                const { data: blk } = await supabase
+                    .from('blocks')
+                    .select('content')
+                    .eq('id', body.blockId)
+                    .maybeSingle();
+                if (blk) {
+                    // Only update metadata if block exists
+                    const current = (blk?.content || {}) as unknown as {
+                        columns?: unknown[];
+                        rows?: unknown[];
+                        requirements?: unknown[];
+                        tableKind?: string;
+                    };
+                    const meta =
+                        (cols || []).map((c, idx) => ({
+                            columnId: (c as { id: string }).id,
+                            position:
+                                typeof (c as { position?: number }).position === 'number'
+                                    ? (c as { position?: number }).position
+                                    : idx,
+                            width: (c as { width?: number }).width ?? 200,
+                            name:
+                                ((c as unknown as { property?: { name?: string | null } })
+                                    ?.property?.name ||
+                                    '') ??
+                                '',
+                        })) || [];
+                    await supabase
+                        .from('blocks')
+                        .update({
+                            content: {
+                                ...current,
+                                columns: meta,
+                                tableKind: current.tableKind ?? 'requirements',
+                            } as unknown as Json,
+                        })
+                        .eq('id', body.blockId);
+                }
+            } catch {
+                // best-effort only; non-fatal
+            }
+
             return NextResponse.json({
                 property,
                 column,
@@ -605,6 +655,54 @@ export async function POST(
                     { error: 'Failed to fetch property', details: propErr.message },
                     { status: 500 },
                 );
+            }
+            // Update block content.columns metadata to include this new column
+            try {
+                const { data: cols } = await supabase
+                    .from('columns')
+                    .select('id, position, width, property:properties(name)')
+                    .eq('block_id', body.blockId)
+                    .order('position', { ascending: true });
+                const { data: blk } = await supabase
+                    .from('blocks')
+                    .select('content')
+                    .eq('id', body.blockId)
+                    .maybeSingle();
+                if (blk) {
+                    // Only update metadata if block exists
+                    const current = (blk?.content || {}) as unknown as {
+                        columns?: unknown[];
+                        rows?: unknown[];
+                        requirements?: unknown[];
+                        tableKind?: string;
+                    };
+                    const meta =
+                        (cols || []).map((c, idx) => ({
+                            columnId: (c as { id: string }).id,
+                            position:
+                                typeof (c as { position?: number }).position === 'number'
+                                    ? (c as { position?: number }).position
+                                    : idx,
+                            width: (c as { width?: number }).width ?? 200,
+                            name:
+                                ((c as unknown as { property?: { name?: string | null } })
+                                    ?.property?.name ||
+                                    '') ??
+                                '',
+                        })) || [];
+                    await supabase
+                        .from('blocks')
+                        .update({
+                            content: {
+                                ...current,
+                                columns: meta,
+                                tableKind: current.tableKind ?? 'requirements',
+                            } as unknown as Json,
+                        })
+                        .eq('id', body.blockId);
+                }
+            } catch {
+                // non-fatal
             }
             return NextResponse.json({
                 property,

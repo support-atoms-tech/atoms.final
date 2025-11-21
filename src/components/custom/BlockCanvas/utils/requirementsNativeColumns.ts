@@ -85,7 +85,9 @@ export const mergeNaturalColumnsFromPlaceholders = (
     );
 
     // If we added anything, suggest persisting those new virtuals to metadata
-    const persistColumns = toAdd;
+    // Persist the full, merged set when virtual placeholders were detected
+    // so metadata replaces virtual entries with real column ids/names.
+    const persistColumns = mergedColumns;
     return { mergedColumns, persistColumns };
 };
 

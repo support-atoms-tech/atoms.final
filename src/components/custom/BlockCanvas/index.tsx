@@ -32,6 +32,7 @@ import {
     BlockType,
     BlockWithRequirements,
 } from '@/components/custom/BlockCanvas/types';
+import { transformCellValueByType } from '@/components/custom/BlockCanvas/utils/detectColumnTypes';
 import { Button } from '@/components/ui/button';
 import { useDocumentRealtime } from '@/hooks/queries/useDocumentRealtime';
 import { useAuth } from '@/hooks/useAuth';
@@ -362,9 +363,56 @@ export function BlockCanvas({
 
     const createTableWithImport = useCallback(
         async (
-            imported: { headers: string[]; rows: Array<Array<unknown>> },
+            imported: {
+                tableType: 'generic' | 'requirements';
+                requirementsMapping?: Partial<
+                    Record<
+                        'External_ID' | 'Name' | 'Description' | 'Status' | 'Priority',
+                        string | '__leave_blank__' | '__auto_generate__'
+                    >
+                >;
+                columns: {
+                    name: string;
+                    type: 'text' | 'select' | 'multi_select' | 'number' | 'date';
+                    options?: string[];
+                }[];
+                rows: Array<Array<unknown>>;
+                includeHeader: boolean;
+            },
             name: string,
         ) => {
+            if (imported.tableType === 'requirements') {
+                // Server-side requirements pipeline import (creates block + columns + requirements)
+                await fetch(`/api/documents/${documentId}/requirements/import`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        columns: imported.columns,
+                        rows: imported.rows,
+                        includeHeader: imported.includeHeader,
+                        mapping: imported.requirementsMapping || {},
+                    }),
+                });
+                // Refresh document to show new block
+                await refetchDocument?.({ silent: false });
+                // Smoothly scroll to the newly added block (best-effort)
+                if (typeof window !== 'undefined') {
+                    setTimeout(() => {
+                        const nodes = document.querySelectorAll('[id^="block-"]');
+                        const last = nodes[nodes.length - 1] as HTMLElement | undefined;
+                        if (last) {
+                            last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            last.style.transition = 'background-color 300ms ease';
+                            last.style.backgroundColor = 'rgba(153, 59, 246, 0.18)';
+                            setTimeout(() => {
+                                last.style.backgroundColor = '';
+                            }, 1200);
+                        }
+                    }, 350);
+                }
+                return;
+            }
             // 1) Create a generic table block
             const content: Json = {
                 tableKind: 'genericTable',
@@ -377,23 +425,30 @@ export function BlockCanvas({
             if (!blockId) return;
 
             // 2) Create columns sequentially to preserve order (API computes next position)
-            const headers = (imported.headers || []).map((h, i) =>
-                (h || '').trim() ? h : `Column ${i + 1}`,
-            );
-            for (const header of headers) {
+            const incomingCols =
+                imported.columns?.map((c, i) => ({
+                    name: (c.name || '').trim() ? c.name : `Column ${i + 1}`,
+                    type: c.type,
+                    options: c.options || [],
+                })) || [];
+
+            for (const col of incomingCols) {
                 await fetch(`/api/documents/${documentId}/columns`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         mode: 'new',
                         blockId,
-                        name: header,
-                        // Map to DB enum string directly ('text' default for import)
-                        propertyType: 'text',
+                        name: col.name,
+                        // Map to DB enum string directly
+                        propertyType: mapEditableToDbType(col.type),
                         propertyConfig: {
                             scope: ['document'],
                             is_base: false,
-                            options: [],
+                            options:
+                                col.type === 'select' || col.type === 'multi_select'
+                                    ? col.options || []
+                                    : [],
                         },
                         defaultValue: '',
                     }),
@@ -406,8 +461,9 @@ export function BlockCanvas({
                 const r = rows[i] || [];
                 // Build rowData object keyed by header names
                 const rowData: Record<string, unknown> = {};
-                for (let c = 0; c < headers.length; c++) {
-                    rowData[headers[c]] = r[c] ?? '';
+                for (let c = 0; c < incomingCols.length; c++) {
+                    const col = incomingCols[c];
+                    rowData[col.name] = transformImportedCell(r[c], col.type);
                 }
                 await fetch(`/api/documents/${documentId}/rows`, {
                     method: 'POST',
@@ -423,6 +479,22 @@ export function BlockCanvas({
             // 4) Hydrate relations for the new block to reflect columns immediately
             if (typeof refetchDocument === 'function') {
                 await refetchDocument({ silent: false });
+            }
+            // 5) Smoothly scroll to the created block
+            if (typeof window !== 'undefined' && blockId) {
+                setTimeout(() => {
+                    const el = document.getElementById(`block-${blockId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        (el as HTMLElement).style.transition =
+                            'background-color 300ms ease';
+                        (el as HTMLElement).style.backgroundColor =
+                            'rgba(153, 59, 246, 0.18)';
+                        setTimeout(() => {
+                            (el as HTMLElement).style.backgroundColor = '';
+                        }, 1200);
+                    }
+                }, 350);
             }
         },
         [documentId, originalHandleAddBlock, refetchDocument],
@@ -583,7 +655,31 @@ export function BlockCanvas({
                     (async (
                         layout: 'blank' | 'requirements_default' | 'import',
                         name: string,
-                        imported?: { headers: string[]; rows: Array<Array<unknown>> },
+                        imported?: {
+                            tableType: 'generic' | 'requirements';
+                            requirementsMapping?: Partial<
+                                Record<
+                                    | 'External_ID'
+                                    | 'Name'
+                                    | 'Description'
+                                    | 'Status'
+                                    | 'Priority',
+                                    string | '__leave_blank__' | '__auto_generate__'
+                                >
+                            >;
+                            columns: {
+                                name: string;
+                                type:
+                                    | 'text'
+                                    | 'select'
+                                    | 'multi_select'
+                                    | 'number'
+                                    | 'date';
+                                options?: string[];
+                            }[];
+                            rows: Array<Array<unknown>>;
+                            includeHeader: boolean;
+                        },
                     ) => {
                         if (layout === 'import' && imported) {
                             await createTableWithImport(imported, name);
@@ -625,6 +721,30 @@ export function BlockCanvas({
             />
         </div>
     );
+}
+
+function mapEditableToDbType(
+    type: 'text' | 'select' | 'multi_select' | 'number' | 'date',
+): string {
+    switch (type) {
+        case 'select':
+            return 'select';
+        case 'multi_select':
+            return 'multi_select';
+        case 'number':
+            return 'number';
+        case 'date':
+            return 'date';
+        default:
+            return 'text';
+    }
+}
+
+function transformImportedCell(
+    raw: unknown,
+    type: 'text' | 'select' | 'multi_select' | 'number' | 'date',
+): unknown {
+    return transformCellValueByType(raw, type);
 }
 
 /*
