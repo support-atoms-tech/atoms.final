@@ -148,34 +148,36 @@ function tokenizeCsv(input: string): string[][] {
 // ---------------- Excel (.xlsx/.xls via SheetJS) ----------------
 
 async function parseExcel(buf: ArrayBuffer): Promise<ParsedTable> {
-    const XLSX = await import('xlsx');
-    const wb = XLSX.read(buf, { type: 'array' });
-    const sheetName = wb.SheetNames[0];
-    if (!sheetName) return { headers: [], rows: [] };
-    const ws = wb.Sheets[sheetName];
-    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as Array<
-        Array<unknown>
-    >;
-    if (!aoa || aoa.length === 0) return { headers: [], rows: [] };
-    const headerCandidateRaw = aoa[0] || [];
-    const rawHeaders = headerCandidateRaw.map((h) => sanitizeHeader(String(h ?? '')));
-    const headers =
-        rawHeaders.length > 0
-            ? uniqifyHeaders(rawHeaders)
-            : generateDefaultHeaders(aoa[0]?.length || 0);
-    const dataRows = aoa.slice(1).map((r) => {
-        const out: unknown[] = [];
-        for (let i = 0; i < headers.length; i++) {
-            out.push((r || [])[i] ?? '');
-        }
-        return out;
-    });
-    return {
-        headers,
-        rows: dataRows,
-        rawHeaderRow: headerCandidateRaw,
-        usedFirstRowAsHeader: true,
-    };
+    try {
+        // Lazy import xlsx only when actually needed
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) return { headers: [], rows: [] };
+        const ws = wb.Sheets[sheetName];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as Array<
+            Array<unknown>
+        >;
+        if (!aoa || aoa.length === 0) return { headers: [], rows: [] };
+        const rawHeaders = (aoa[0] || []).map((h) => sanitizeHeader(String(h ?? '')));
+        const headers =
+            rawHeaders.length > 0
+                ? uniqifyHeaders(rawHeaders)
+                : generateDefaultHeaders(aoa[0]?.length || 0);
+        const dataRows = aoa.slice(1).map((r) => {
+            const out: unknown[] = [];
+            for (let i = 0; i < headers.length; i++) {
+                out.push((r || [])[i] ?? '');
+            }
+            return out;
+        });
+        return { headers, rows: dataRows };
+    } catch (error) {
+        console.error('Failed to import or parse Excel file:', error);
+        throw new Error(
+            'Excel parsing is not available. Please ensure xlsx package is installed.',
+        );
+    }
 }
 
 // ---------------- ReqIF (minimal STRING attributes) ----------------

@@ -94,7 +94,7 @@ export default function DocumentPage() {
                 } else {
                     console.log('Element not found for requirementId:', requirementId);
                 }
-            }, 1500);
+            }, 2500); // Increased timeout to give BlockCanvas more time to render
 
             return () => clearTimeout(timeout);
         }
