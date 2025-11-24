@@ -37,6 +37,7 @@ import debounce from 'lodash/debounce';
 import { useParams } from 'next/navigation';
 import { useLayer } from 'react-laag';
 
+import { ConflictWarning } from '@/components/custom/BlockCanvas/components/ConflictWarning';
 import {
     BlockTableMetadata,
     useBlockMetadataActions,
@@ -44,7 +45,9 @@ import {
 import { useColumnActions } from '@/components/custom/BlockCanvas/hooks/useColumnActions';
 import { PropertyType } from '@/components/custom/BlockCanvas/types';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { useBroadcastCellUpdate } from '@/hooks/useBroadcastCellUpdate';
 import { useUser } from '@/lib/providers/user.provider';
+import { useDocumentStore } from '@/store/document.store';
 
 import { DeleteConfirmDialog, TableControls, TableLoadingSkeleton } from './components';
 import { AddColumnDialog } from './components/AddColumnDialog';
@@ -335,7 +338,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         }
     }, [refreshAfterSave, data, saveRow]);
 
-    const useDebouncedSave = (delay = 5000) => {
+    // Debounce saves - reduced to 500ms for real-time collaboration
+    const useDebouncedSave = (delay = 500) => {
         const debounced = useRef(
             debounce(() => {
                 void handleSaveAllRef.current?.();
@@ -385,6 +389,18 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         console.error('Project ID is missing from the URL.');
     }
 
+    // Real-time broadcast for concurrent editing (always enabled to receive updates)
+    const { broadcastCellUpdate, broadcastCursorMove } = useBroadcastCellUpdate({
+        documentId: String(documentId),
+        userId,
+        enabled: true, // Always enabled - need to receive updates even in read-only mode
+    });
+
+    // Subscribe to pending cell updates from other users for real-time display
+    const pendingCellUpdates = useDocumentStore((state) => state.pendingCellUpdates);
+    const activeUsers = useDocumentStore((state) => state.activeUsers);
+
+    // Column actions for creating columns
     const { createPropertyAndColumn, createColumnFromProperty, appendPropertyOptions } =
         useColumnActions({
             orgId: String(orgId),
@@ -606,6 +622,76 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         localColumnsRef.current = localColumns;
     }, [localColumns]);
 
+    // Apply pending updates to local data for immediate display
+    useEffect(() => {
+        if (!blockId || pendingCellUpdates.size === 0) return;
+
+        console.log('[GlideEditableTable] 🔄 Processing pending cell updates:', {
+            blockId,
+            updatesCount: pendingCellUpdates.size,
+            updates: Array.from(pendingCellUpdates.values()),
+        });
+
+        setLocalData((prevData) => {
+            const updatedData = [...prevData];
+            let hasChanges = false;
+
+            pendingCellUpdates.forEach((update) => {
+                // Only apply updates for this block
+                if (update.blockId !== blockId) {
+                    console.log(
+                        '[GlideEditableTable] ⏭️ Skipping update for different block:',
+                        {
+                            updateBlockId: update.blockId,
+                            currentBlockId: blockId,
+                        },
+                    );
+                    return;
+                }
+
+                const rowIndex = updatedData.findIndex((row) => row.id === update.rowId);
+                if (rowIndex === -1) {
+                    console.log('[GlideEditableTable] ⚠️ Row not found:', update.rowId);
+                    return;
+                }
+
+                // Find the column accessor using ref to avoid initialization error
+                const column = localColumnsRef.current.find(
+                    (col) => col.id === update.columnId,
+                );
+                if (!column) {
+                    console.log(
+                        '[GlideEditableTable] ⚠️ Column not found:',
+                        update.columnId,
+                    );
+                    return;
+                }
+
+                // Apply the update
+                const currentValue = updatedData[rowIndex][column.accessor];
+                if (currentValue !== update.value) {
+                    console.log('[GlideEditableTable] ✨ Applying cell update to UI:', {
+                        rowId: update.rowId,
+                        column: column.accessor,
+                        oldValue: currentValue,
+                        newValue: update.value,
+                    });
+                    updatedData[rowIndex] = {
+                        ...updatedData[rowIndex],
+                        [column.accessor]: update.value,
+                    } as T;
+                    hasChanges = true;
+                }
+            });
+
+            if (hasChanges) {
+                console.log('[GlideEditableTable] ✅ UI updated with remote changes');
+            }
+
+            return hasChanges ? updatedData : prevData;
+        });
+    }, [pendingCellUpdates, blockId]);
+
     const [localData, setLocalData] = useState<T[]>(() => [...data]);
 
     const [colSizes, setColSizes] = useState<Partial<Record<keyof T, number>>>({});
@@ -674,6 +760,13 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     // Add Column dialog state
     const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
     const [pendingInsertIndex, setPendingInsertIndex] = useState<number | null>(null);
+
+    // Conflict detection state
+    const [conflictingUsers, setConflictingUsers] = useState<
+        Array<{ userId: string; userName: string }>
+    >([]);
+    const [showConflictWarning, setShowConflictWarning] = useState(false);
+    const currentEditingCell = useRef<{ rowId: string; columnId: string } | null>(null);
 
     const { renderLayer, layerProps } = useLayer({
         isOpen: columnMenu !== undefined,
@@ -1491,6 +1584,16 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     new: newValueStr,
                 });
 
+                // Broadcast cell update immediately for real-time collaboration
+                if (blockId && column.id) {
+                    void broadcastCellUpdate({
+                        blockId,
+                        rowId,
+                        columnId: column.id,
+                        value: newValueStr,
+                    });
+                }
+
                 // record history before making change (if not undoing)
                 if (!isUndoingRef.current) {
                     addToHistory({
@@ -1527,6 +1630,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     accessor: String(accessor),
                     value: numVal,
                 });
+
+                // Broadcast cell update immediately for real-time collaboration
+                if (blockId && column.id) {
+                    void broadcastCellUpdate({
+                        blockId,
+                        rowId,
+                        columnId: column.id,
+                        value: numVal,
+                    });
+                }
+
                 setLocalData((prev) =>
                     prev.map((r) =>
                         r.id === rowId ? ({ ...r, [accessor]: numVal } as T) : r,
@@ -1549,6 +1663,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         accessor: String(accessor),
                         value: displayValue,
                     });
+
+                    // Broadcast cell update immediately for real-time collaboration
+                    if (blockId && column.id) {
+                        void broadcastCellUpdate({
+                            blockId,
+                            rowId,
+                            columnId: column.id,
+                            value: displayValue,
+                        });
+                    }
+
                     setLocalData((prev) =>
                         prev.map((r) =>
                             r.id === rowId
@@ -1570,6 +1695,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         accessor: String(accessor),
                         values,
                     });
+
+                    // Broadcast cell update immediately for real-time collaboration
+                    if (blockId && column.id) {
+                        void broadcastCellUpdate({
+                            blockId,
+                            rowId,
+                            columnId: column.id,
+                            value: values,
+                        });
+                    }
+
                     setLocalData((prev) =>
                         prev.map((r) =>
                             r.id === rowId ? ({ ...r, [accessor]: values } as T) : r,
@@ -1618,6 +1754,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         accessor: String(accessor),
                         iso,
                     });
+
+                    // Broadcast cell update immediately for real-time collaboration
+                    if (blockId && column.id) {
+                        void broadcastCellUpdate({
+                            blockId,
+                            rowId,
+                            columnId: column.id,
+                            value: iso,
+                        });
+                    }
+
                     setLocalData((prev) =>
                         prev.map((r) =>
                             r.id === rowId ? ({ ...r, [accessor]: iso } as T) : r,
@@ -2618,6 +2765,21 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             const column = localColumns[colIndex];
             const rowData = sortedData[rowIndex];
 
+            // Broadcast cursor position to other users
+            if (blockId && rowData?.id && column?.id && broadcastCursorMove) {
+                void broadcastCursorMove({
+                    blockId,
+                    rowId: rowData.id,
+                    columnId: column.id,
+                });
+
+                // Track current editing cell for conflict detection
+                currentEditingCell.current = {
+                    rowId: rowData.id,
+                    columnId: column.id,
+                };
+            }
+
             // Handle Links column click
             if (column?.accessor === '__links__' && rowData && props.onLinksColumnClick) {
                 console.log('[Links Column] Clicked:', {
@@ -2652,8 +2814,103 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             props.rowDetailPanel,
             props.onLinksColumnClick,
             localColumns,
+            blockId,
+            broadcastCursorMove,
         ],
     );
+
+    // Calculate highlight regions for cells being edited by other users
+    const highlightRegions = useMemo(() => {
+        if (!blockId) return [];
+
+        const regions: Array<{
+            color: string;
+            range: { x: number; y: number; width: number; height: number };
+            style?: 'solid' | 'dashed';
+        }> = [];
+
+        activeUsers.forEach((user) => {
+            if (user.userId === userId || !user.editingCell) return;
+            if (user.editingCell.blockId !== blockId) return;
+
+            const { rowId, columnId } = user.editingCell;
+
+            // Find row and column indices
+            const rowIndex = sortedData.findIndex((row) => row.id === rowId);
+            const colIndex = localColumns.findIndex((col) => col.id === columnId);
+
+            if (rowIndex >= 0 && colIndex >= 0) {
+                // Import getUserColor
+                const colors = [
+                    '#3b82f6', // blue
+                    '#10b981', // green
+                    '#f59e0b', // amber
+                    '#ef4444', // red
+                    '#8b5cf6', // purple
+                    '#ec4899', // pink
+                    '#06b6d4', // cyan
+                    '#f97316', // orange
+                ];
+                let hash = 0;
+                for (let i = 0; i < user.userId.length; i++) {
+                    hash = user.userId.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const userColor = colors[Math.abs(hash) % colors.length];
+
+                regions.push({
+                    color: userColor + '40', // Add transparency
+                    range: {
+                        x: colIndex,
+                        y: rowIndex,
+                        width: 1,
+                        height: 1,
+                    },
+                    style: 'solid',
+                });
+            }
+        });
+
+        return regions;
+    }, [activeUsers, blockId, userId, sortedData, localColumns]);
+
+    // Detect conflicts when editing same cell as another user
+    useEffect(() => {
+        if (!blockId || !currentEditingCell.current) return;
+
+        const { rowId, columnId } = currentEditingCell.current;
+        const conflicts: Array<{ userId: string; userName: string }> = [];
+
+        activeUsers.forEach((user) => {
+            if (user.userId === userId) return; // Skip self
+            if (!user.editingCell) return;
+            if (user.editingCell.blockId !== blockId) return;
+
+            // Check if editing same cell
+            if (
+                user.editingCell.rowId === rowId &&
+                user.editingCell.columnId === columnId
+            ) {
+                conflicts.push({
+                    userId: user.userId,
+                    userName: user.userName,
+                });
+            }
+        });
+
+        if (conflicts.length > 0) {
+            setConflictingUsers(conflicts);
+            setShowConflictWarning(true);
+
+            // Auto-dismiss after 5 seconds
+            const timeout = setTimeout(() => {
+                setShowConflictWarning(false);
+            }, 5000);
+
+            return () => clearTimeout(timeout);
+        } else {
+            setShowConflictWarning(false);
+        }
+    }, [activeUsers, blockId, userId]);
 
     // enhanced selection tracking
     useEffect(() => {
@@ -4777,6 +5034,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             onKeyDown={handleGridKeyDown}
                             onPaste={isEditMode ? handlePaste : undefined}
                             rows={sortedData.length}
+                            highlightRegions={highlightRegions}
                             rowHeight={(row) => {
                                 const rowData = sortedData[row];
                                 if (!rowData) return 43; // default height
@@ -5470,6 +5728,15 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     currentName={columnToRename?.currentName || ''}
                     onConfirm={handleColumnRename}
                 />
+
+                {/* Conflict Warning */}
+                {showConflictWarning && (
+                    <ConflictWarning
+                        conflictingUsers={conflictingUsers}
+                        type="cell"
+                        onDismiss={() => setShowConflictWarning(false)}
+                    />
+                )}
             </div>
         </div>
     );

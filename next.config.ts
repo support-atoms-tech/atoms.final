@@ -1,17 +1,26 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-    experimental: {
-        // Enable React compiler for improved performance
-        reactCompiler: true,
-    },
+    // Enable React compiler for improved performance
+    reactCompiler: true,
     images: {
-        domains: ['lh3.googleusercontent.com'],
+        remotePatterns: [
+            {
+                protocol: 'https',
+                hostname: 'lh3.googleusercontent.com',
+            },
+        ],
     },
-    eslint: {
-        // Temporarily ignore ESLint errors during builds
-        ignoreDuringBuilds: true,
-    },
+    ...(process.env.SKIP_LINT
+        ? {}
+        : {
+              eslint: {
+                  // Temporarily ignore ESLint errors during builds
+                  ignoreDuringBuilds: true,
+              },
+          }),
+    // Add empty turbopack config to silence the warning
+    turbopack: {},
     webpack: (config, { isServer }) => {
         // Handle xlsx dynamic import properly
         if (!isServer) {

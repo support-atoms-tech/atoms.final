@@ -851,7 +851,6 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
         },
         [
             requirementTree,
-            visibleTree,
             requirements,
             wouldCreateCycle,
             deleteRelationshipMutation,

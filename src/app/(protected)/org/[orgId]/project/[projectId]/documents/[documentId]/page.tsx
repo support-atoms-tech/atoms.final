@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
+import { ActiveUsersIndicator } from '@/components/custom/ActiveUsersIndicator';
 import { EditModeFloatingToggle } from '@/components/custom/BlockCanvas/components/EditModeToggle';
 import { AssignRequirementIdsModal } from '@/components/custom/BlockCanvas/components/EditableTable/components/AssignRequirementIdsModal';
 import {
@@ -348,8 +349,10 @@ export default function DocumentPage() {
     return (
         <LayoutView>
             <div className="space-y-4">
-                <div className="flex justify-end gap-2 mb-4 px-4">
-                    {/* TODO: Fix Assign REQ-IDs 
+                <div className="flex justify-between items-center gap-2 mb-4 px-4">
+                    <ActiveUsersIndicator />
+                    <div className="flex gap-2">
+                        {/* TODO: Fix Assign REQ-IDs 
                     <Button
                         variant="outline"
                         onClick={handleCheckRequirementIds}
@@ -364,20 +367,23 @@ export default function DocumentPage() {
                             'Assign REQ-IDs'
                         )}
                     </Button>*/}
-                    <Select
-                        value={tableType}
-                        onValueChange={(value) => setTableType(value as typeof tableType)}
-                    >
-                        <SelectTrigger className="w-[240px]">
-                            <Table className="h-4 w-4 mr-2" />
-                            <SelectValue placeholder="Select table type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="glide">Glide Table</SelectItem>
-                            <SelectItem value="default">Default Table</SelectItem>
-                            <SelectItem value="tanstack">TanStack Table</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        <Select
+                            value={tableType}
+                            onValueChange={(value) =>
+                                setTableType(value as typeof tableType)
+                            }
+                        >
+                            <SelectTrigger className="w-[240px]">
+                                <Table className="h-4 w-4 mr-2" />
+                                <SelectValue placeholder="Select table type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="glide">Glide Table</SelectItem>
+                                <SelectItem value="default">Default Table</SelectItem>
+                                <SelectItem value="tanstack">TanStack Table</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
                 {renderTable()}
             </div>

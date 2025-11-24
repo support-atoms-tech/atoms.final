@@ -58,6 +58,12 @@ export function BlockCanvas({
         [],
     );
 
+    const { reorderBlocks, setUseTanStackTables, setUseGlideTables, isEditMode } =
+        useDocumentStore();
+    const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
+    const [linePosition, setLinePosition] = useState<'top' | 'bottom' | ''>('');
+    const { userProfile } = useAuth();
+
     const {
         blocks: originalBlocks,
         loading,
@@ -70,13 +76,8 @@ export function BlockCanvas({
         documentId,
         _orgId: '',
         _projectId: '',
-        _userProfile: null,
+        _userProfile: userProfile,
     });
-    const { reorderBlocks, setUseTanStackTables, setUseGlideTables, isEditMode } =
-        useDocumentStore();
-    const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
-    const [linePosition, setLinePosition] = useState<'top' | 'bottom' | ''>('');
-    const { userProfile } = useAuth();
     const { currentOrganization } = useOrganization();
     const params = useParams();
     const {

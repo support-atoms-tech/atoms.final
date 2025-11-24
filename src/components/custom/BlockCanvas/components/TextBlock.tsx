@@ -9,14 +9,20 @@ import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { useParams } from 'next/navigation';
 import React from 'react';
 
 import { BlockProps } from '@/components/custom/BlockCanvas/types';
+import { useAuth } from '@/hooks/useAuth';
+import { useBroadcastTextUpdate } from '@/hooks/useBroadcastTextUpdate';
+import { getUserColor } from '@/lib/userColors';
 import { cn } from '@/lib/utils';
 import { useDocumentStore } from '@/store/document.store';
 import { Json } from '@/types/base/database.types';
 
+import { ConflictWarning } from './ConflictWarning';
 import { Toolbar } from './FormatToolbar';
+import { RemoteCursor } from './RemoteCursor';
 
 const customStyles = `
   .ProseMirror {
@@ -137,9 +143,104 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
     });
     const editorRef = React.useRef<HTMLDivElement>(null);
     const lastSavedContent = React.useRef(content?.text || '<p></p>');
+    const isRemoteUpdate = React.useRef(false);
+    const editorInstanceRef = React.useRef<ReturnType<typeof useEditor>>(null);
+    const lastCursorBroadcast = React.useRef({ from: 0, to: 0, timestamp: 0 });
+
+    // Remote cursors state - track other users' cursor positions
+    const [remoteCursors, setRemoteCursors] = React.useState<
+        Map<
+            string,
+            {
+                userId: string;
+                userName: string;
+                from: number;
+                to: number;
+                color: string;
+            }
+        >
+    >(new Map());
+
+    // Conflict detection state
+    const [conflictingUsers, setConflictingUsers] = React.useState<
+        Array<{ userId: string; userName: string }>
+    >([]);
+    const [showConflictWarning, setShowConflictWarning] = React.useState(false);
+    const myCurrentPosition = React.useRef<{ from: number; to: number }>({
+        from: 0,
+        to: 0,
+    });
 
     // Use the document store for edit mode state
     const { isEditMode } = useDocumentStore();
+
+    // Get user info and document ID for broadcasts
+    const { userProfile } = useAuth();
+    const userId = userProfile?.id;
+    const userName = userProfile?.full_name || 'Anonymous';
+    const params = useParams();
+    const documentId = params?.documentId as string;
+
+    // Handle remote text updates from other users
+    const handleRemoteUpdate = React.useCallback(
+        (data: { content: string; userId: string }) => {
+            const editor = editorInstanceRef.current;
+            if (!editor || editor.isFocused) {
+                // Don't apply if user is actively editing
+                return;
+            }
+
+            console.log('[TextBlock] 📨 Applying remote text update');
+            isRemoteUpdate.current = true;
+            editor.commands.setContent(data.content);
+            setLocalContent(data.content);
+            isRemoteUpdate.current = false;
+        },
+        [],
+    );
+
+    // Handle remote cursor updates from other users
+    const handleReceiveCursor = React.useCallback(
+        (data: { userId: string; userName: string; from: number; to: number }) => {
+            console.log('[TextBlock] 🖱️ Received cursor update:', data);
+            setRemoteCursors((prev) => {
+                const next = new Map(prev);
+                next.set(data.userId, {
+                    userId: data.userId,
+                    userName: data.userName,
+                    from: data.from,
+                    to: data.to,
+                    color: getUserColor(data.userId),
+                });
+                return next;
+            });
+
+            // Auto-remove cursor after 5 seconds of no updates
+            setTimeout(() => {
+                setRemoteCursors((prev) => {
+                    const next = new Map(prev);
+                    const cursor = next.get(data.userId);
+                    // Only remove if it's the same cursor position (no new updates)
+                    if (cursor && cursor.from === data.from && cursor.to === data.to) {
+                        next.delete(data.userId);
+                    }
+                    return next;
+                });
+            }, 5000);
+        },
+        [],
+    );
+
+    // Set up broadcast channel for real-time text updates
+    const { broadcastTextUpdate, broadcastCursorUpdate } = useBroadcastTextUpdate({
+        documentId,
+        blockId: block.id,
+        userId,
+        userName,
+        enabled: true,
+        onReceiveUpdate: handleRemoteUpdate,
+        onReceiveCursor: handleReceiveCursor,
+    });
 
     // Add click outside handler
     React.useEffect(() => {
@@ -156,6 +257,49 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
+
+    // Detect conflicts when editing near other users (within 50 characters)
+    React.useEffect(() => {
+        if (!isEditMode || remoteCursors.size === 0) {
+            setShowConflictWarning(false);
+            return;
+        }
+
+        const { from, to } = myCurrentPosition.current;
+        const conflicts: Array<{ userId: string; userName: string }> = [];
+        const PROXIMITY_THRESHOLD = 50; // characters
+
+        remoteCursors.forEach((cursor) => {
+            // Check if cursors are within proximity
+            const distance = Math.min(
+                Math.abs(cursor.from - from),
+                Math.abs(cursor.to - to),
+                Math.abs(cursor.from - to),
+                Math.abs(cursor.to - from),
+            );
+
+            if (distance < PROXIMITY_THRESHOLD) {
+                conflicts.push({
+                    userId: cursor.userId,
+                    userName: cursor.userName,
+                });
+            }
+        });
+
+        if (conflicts.length > 0) {
+            setConflictingUsers(conflicts);
+            setShowConflictWarning(true);
+
+            // Auto-dismiss after 5 seconds
+            const timeout = setTimeout(() => {
+                setShowConflictWarning(false);
+            }, 5000);
+
+            return () => clearTimeout(timeout);
+        } else {
+            setShowConflictWarning(false);
+        }
+    }, [remoteCursors, isEditMode]);
 
     const editor = useEditor({
         extensions: [
@@ -196,6 +340,23 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
             if (!isEditMode) return;
 
             const { from, to } = editor.state.selection;
+
+            // Track current position for conflict detection
+            myCurrentPosition.current = { from, to };
+
+            // Throttle cursor broadcasts (max 10 per second = 100ms)
+            const now = Date.now();
+            const lastBroadcast = lastCursorBroadcast.current;
+            const shouldBroadcast =
+                now - lastBroadcast.timestamp > 100 || // 100ms throttle
+                from !== lastBroadcast.from ||
+                to !== lastBroadcast.to;
+
+            if (broadcastCursorUpdate && shouldBroadcast) {
+                void broadcastCursorUpdate(from, to);
+                lastCursorBroadcast.current = { from, to, timestamp: now };
+            }
+
             if (from === to) {
                 setShowToolbar(false);
                 return;
@@ -236,6 +397,11 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
         },
         immediatelyRender: false, // Explicitly set to avoid SSR hydration mismatch
     });
+
+    // Update editor instance ref when editor changes
+    React.useEffect(() => {
+        editorInstanceRef.current = editor;
+    }, [editor]);
 
     // Update editor's editable state when isEditMode changes
     React.useEffect(() => {
@@ -295,6 +461,25 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
             editor.off('blur', handleBlur);
         };
     }, [editor, handleBlur]);
+
+    // Broadcast text changes to other users in real-time
+    React.useEffect(() => {
+        if (!editor || !broadcastTextUpdate || !isEditMode) return;
+
+        const handleUpdate = () => {
+            // Skip if this update came from a remote user
+            if (isRemoteUpdate.current) return;
+
+            const newContent = editor.getHTML();
+            console.log('[TextBlock] 📤 Broadcasting text update');
+            void broadcastTextUpdate(newContent);
+        };
+
+        editor.on('update', handleUpdate);
+        return () => {
+            editor.off('update', handleUpdate);
+        };
+    }, [editor, broadcastTextUpdate, isEditMode]);
 
     // Sync external content changes only when not in edit mode
     React.useEffect(() => {
@@ -357,7 +542,77 @@ export const TextBlock: React.FC<BlockProps> = ({ block, onUpdate }) => {
                         }
                     }}
                 />
+
+                {/* Render remote cursors from other users */}
+                {editor &&
+                    editorRef.current &&
+                    Array.from(remoteCursors.values()).map((cursor) => {
+                        try {
+                            // Calculate cursor position using TipTap view
+                            const view = editor.view;
+                            const editorRect = editorRef.current!.getBoundingClientRect();
+                            const fromCoords = view.coordsAtPos(cursor.from);
+
+                            // Calculate position relative to editor container
+                            const top = fromCoords.top - editorRect.top;
+                            const left = fromCoords.left - editorRect.left;
+
+                            // Calculate selection range if from !== to
+                            let selection:
+                                | {
+                                      top: number;
+                                      left: number;
+                                      width: number;
+                                      height: number;
+                                  }
+                                | undefined;
+
+                            if (cursor.from !== cursor.to) {
+                                const toCoords = view.coordsAtPos(cursor.to);
+                                const selTop = fromCoords.top - editorRect.top;
+                                const selLeft = fromCoords.left - editorRect.left;
+                                const selWidth = toCoords.left - fromCoords.left;
+                                const selHeight = Math.max(
+                                    toCoords.bottom - fromCoords.top,
+                                    20,
+                                );
+
+                                selection = {
+                                    top: selTop,
+                                    left: selLeft,
+                                    width: Math.max(selWidth, 0),
+                                    height: selHeight,
+                                };
+                            }
+
+                            return (
+                                <RemoteCursor
+                                    key={cursor.userId}
+                                    userId={cursor.userId}
+                                    userName={cursor.userName}
+                                    color={cursor.color}
+                                    top={top}
+                                    left={left}
+                                    height={20} // Standard cursor height
+                                    selection={selection}
+                                />
+                            );
+                        } catch (error) {
+                            // Cursor position might be invalid if document changed
+                            console.warn('Failed to render cursor:', error);
+                            return null;
+                        }
+                    })}
             </div>
+
+            {/* Conflict Warning */}
+            {showConflictWarning && (
+                <ConflictWarning
+                    conflictingUsers={conflictingUsers}
+                    type="text"
+                    onDismiss={() => setShowConflictWarning(false)}
+                />
+            )}
         </div>
     );
 };
