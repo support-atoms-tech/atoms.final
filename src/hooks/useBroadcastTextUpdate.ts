@@ -1,3 +1,4 @@
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
@@ -31,9 +32,7 @@ export const useBroadcastTextUpdate = ({
     onReceiveCursor,
 }: BroadcastTextUpdateOptions) => {
     const { supabase } = useAuthenticatedSupabase();
-    const channelRef = useRef<ReturnType<ReturnType<typeof supabase>['channel']> | null>(
-        null,
-    );
+    const channelRef = useRef<RealtimeChannel | null>(null);
     const onReceiveUpdateRef = useRef(onReceiveUpdate);
     const onReceiveCursorRef = useRef(onReceiveCursor);
 

@@ -8,6 +8,7 @@ import {
 import { synthesizeNaturalColumns } from '@/components/custom/BlockCanvas/utils/naturalFields';
 import {
     buildColumnMetadataPayload,
+    getCanonicalNaturalFieldName,
     getMetadataColumnsFromBlock,
     hasVirtualNativePlaceholders,
     mergeNaturalColumnsFromPlaceholders,
@@ -64,6 +65,45 @@ const setCachedDocumentOrg = (documentId: string, orgId: string | null | undefin
 
 const getCachedDocumentOrg = (documentId: string): string | undefined => {
     return DOCUMENT_ORG_CACHE.get(documentId);
+};
+
+const isVirtualColumnId = (columnId?: string | null) =>
+    typeof columnId === 'string' && columnId.startsWith('virtual-');
+
+const removeVirtualPlaceholdersForColumn = (
+    columns: Column[],
+    incomingColumn: Column,
+): Column[] => {
+    if (!Array.isArray(columns) || columns.length === 0) {
+        return columns;
+    }
+    const rawName =
+        (incomingColumn.property?.name ||
+            (incomingColumn as unknown as { name?: string }).name ||
+            '') ??
+        '';
+    const canonical = getCanonicalNaturalFieldName(
+        typeof rawName === 'string' ? rawName : '',
+    );
+    if (!canonical) {
+        return columns;
+    }
+
+    return columns.filter((col) => {
+        const id =
+            (col.id || (col as unknown as { columnId?: string }).columnId || null) ??
+            null;
+        if (!isVirtualColumnId(id)) {
+            return true;
+        }
+        const columnName =
+            (col.property?.name || (col as unknown as { name?: string }).name || '') ??
+            '';
+        const columnCanonical = getCanonicalNaturalFieldName(
+            typeof columnName === 'string' ? columnName : '',
+        );
+        return columnCanonical !== canonical;
+    });
 };
 
 // This interface is currently unused but kept for future use
@@ -328,20 +368,20 @@ export const useDocumentRealtime = ({
                 setError(null);
 
                 // Persist synthesized virtual columns into block metadata (best-effort, non-blocking)
+                // Use content from already-fetched blocks instead of making individual queries
                 if (synthesizedForPersist.length > 0) {
                     (async () => {
                         try {
+                            // Create a map of blockId -> block for quick lookup
+                            const blocksById = new Map(blocksData.map((b) => [b.id, b]));
+
                             for (const entry of synthesizedForPersist) {
                                 const { blockId, columns } = entry;
-                                // Read existing content
-                                const { data: blk, error: readErr } = await client
-                                    .from('blocks')
-                                    .select('content')
-                                    .eq('id', blockId)
-                                    .single();
-                                if (readErr) continue;
+                                // Use content from already-fetched block instead of querying again
+                                const block = blocksById.get(blockId);
+                                if (!block) continue;
 
-                                const content: unknown = blk?.content ?? {};
+                                const content: unknown = block.content ?? {};
                                 const isObj =
                                     typeof content === 'object' && content !== null;
                                 const current = (isObj ? content : {}) as {
@@ -353,6 +393,15 @@ export const useDocumentRealtime = ({
 
                                 const columnMetadata =
                                     buildColumnMetadataPayload(columns);
+                                const existingMetadata = Array.isArray(current.columns)
+                                    ? current.columns
+                                    : [];
+                                const hasMetadataDiff =
+                                    JSON.stringify(existingMetadata) !==
+                                    JSON.stringify(columnMetadata);
+                                if (!hasMetadataDiff) {
+                                    continue;
+                                }
 
                                 const updated = {
                                     ...current,
@@ -646,7 +695,25 @@ export const useDocumentRealtime = ({
                                 rows?: unknown[];
                                 tableKind?: string;
                             };
+                            const existingMetadata = Array.isArray(current.columns)
+                                ? (current.columns as {
+                                      columnId?: string;
+                                      name?: string;
+                                  }[])
+                                : [];
+                            const metadataHasRealColumn = existingMetadata.some(
+                                (entry) => !isVirtualColumnId(entry.columnId),
+                            );
+                            if (metadataHasRealColumn) {
+                                return;
+                            }
                             const columnMetadata = buildColumnMetadataPayload(virtual);
+                            const hasMetadataDiff =
+                                JSON.stringify(existingMetadata) !==
+                                JSON.stringify(columnMetadata);
+                            if (!hasMetadataDiff) {
+                                return;
+                            }
                             const updated = {
                                 ...current,
                                 tableKind: current.tableKind ?? 'requirements',
@@ -751,29 +818,19 @@ export const useDocumentRealtime = ({
                     const newCol = payload.new as Column | undefined;
                     const oldCol = payload.old as Column | undefined;
 
-                    // For INSERTs, enrich the column with its joined property via server API
-                    let enrichedNewCol: Column | undefined = newCol;
-                    if (payload.eventType === 'INSERT' && newCol?.id) {
-                        try {
-                            const res = await fetch(
-                                `/api/documents/${documentId}/columns?blockId=${newCol.block_id}`,
-                                { method: 'GET', cache: 'no-store' },
-                            );
-                            if (res.ok) {
-                                const payload = (await res.json()) as {
-                                    columns: unknown[];
-                                };
-                                const candidates = (payload.columns ||
-                                    []) as unknown as ColumnRowWithEmbeddedProperty[];
-                                const normalized = normalizeColumns(candidates);
-                                const found = normalized.find((c) => c.id === newCol.id);
-                                if (found) {
-                                    enrichedNewCol = found;
-                                }
-                            }
-                        } catch (e) {
-                            console.error('⚠️ Column subscription API enrich failed:', e);
-                        }
+                    // For INSERTs, use the column from payload directly
+                    // The property will be hydrated when needed, or we can fetch it individually
+                    // Avoid fetching all columns for the block - that's redundant
+                    const enrichedNewCol: Column | undefined = newCol;
+                    // Only fetch property if we don't have it in the payload
+                    if (
+                        payload.eventType === 'INSERT' &&
+                        newCol?.id &&
+                        !newCol.property_id
+                    ) {
+                        // If we need the property, fetch just this column's property, not all columns
+                        // For now, use the column as-is - property can be hydrated later if needed
+                        // This avoids the expensive API call to fetch all columns
                     }
 
                     setBlocks((prevBlocks) => {
@@ -793,13 +850,17 @@ export const useDocumentRealtime = ({
                                 (enrichedNewCol || newCol)
                             ) {
                                 const colToAdd = (enrichedNewCol || newCol) as Column;
+                                const baseColumns = removeVirtualPlaceholdersForColumn(
+                                    block.columns ?? [],
+                                    colToAdd,
+                                );
                                 // de-dupe by id to avoid double insertions from parallel sources
-                                const exists = (block.columns ?? []).some(
+                                const exists = baseColumns.some(
                                     (c) => c.id === colToAdd.id,
                                 );
                                 const nextColumns = exists
-                                    ? [...(block.columns ?? [])]
-                                    : [...(block.columns ?? []), colToAdd];
+                                    ? [...baseColumns]
+                                    : [...baseColumns, colToAdd];
                                 const sorted = nextColumns.sort(
                                     (a, b) => (a.position ?? 0) - (b.position ?? 0),
                                 );
@@ -901,9 +962,7 @@ export const useDocumentRealtime = ({
                     await presenceChannel.track({
                         user_id: _userProfile.id,
                         user_name:
-                            _userProfile.display_name ||
-                            _userProfile.email ||
-                            'Anonymous',
+                            _userProfile.full_name || _userProfile.email || 'Anonymous',
                         user_email: _userProfile.email,
                         online_at: new Date().toISOString(),
                         editing_cell: null,

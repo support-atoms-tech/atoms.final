@@ -74,6 +74,20 @@ const envSchema = z.object({
         .string()
         .transform((val) => val === 'true')
         .default('false'),
+
+    // Debug Flags (optional, development-only)
+    // These can be set via environment variables but are not required
+    // For centralized management, see debugConfig below
+    NEXT_PUBLIC_DEBUG_RLS: z
+        .string()
+        .transform((val) => val === 'true')
+        .optional()
+        .default('false'),
+    NEXT_PUBLIC_DEBUG_TABLE_COLUMNS: z
+        .string()
+        .transform((val) => val === 'true')
+        .optional()
+        .default('false'),
 });
 
 // Production-specific schema
@@ -158,6 +172,40 @@ export const isFeatureEnabled = {
     securityHeaders: () => env.NEXT_PUBLIC_SECURITY_HEADERS_ENABLED,
     requestLogging: () => env.ENABLE_REQUEST_LOGGING,
     debugLogging: () => env.ENABLE_DEBUG_LOGGING,
+};
+
+/**
+ * Centralized Debug Configuration
+ *
+ * Debug flags for development and troubleshooting.
+ * These can be enabled via environment variables (NEXT_PUBLIC_DEBUG_*)
+ * or by modifying the default values below.
+ *
+ * For team members: To enable debug logging, set the corresponding
+ * environment variable to 'true' in your .env.local file, or modify
+ * the default values in this configuration object.
+ *
+ * Note: These flags are automatically disabled in production builds
+ * to prevent accidental exposure of debug information.
+ */
+export const debugConfig = {
+    /**
+     * Enable detailed RLS (Row Level Security) query logging
+     * Helps diagnose permission issues with Supabase queries
+     */
+    debugRLSQueries: () => {
+        if (isProduction()) return false;
+        return env.NEXT_PUBLIC_DEBUG_RLS ?? false;
+    },
+
+    /**
+     * Enable detailed table column query logging
+     * Helps debug column creation, updates, and queries
+     */
+    debugTableColumns: () => {
+        if (isProduction()) return false;
+        return env.NEXT_PUBLIC_DEBUG_TABLE_COLUMNS ?? false;
+    },
 };
 
 /**

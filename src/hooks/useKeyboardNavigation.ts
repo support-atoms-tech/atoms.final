@@ -198,6 +198,11 @@ export function useKeyboardNavigation(
             // Handle custom shortcuts
             if (enableGlobalShortcuts) {
                 for (const shortcut of shortcuts) {
+                    // Skip if event.key or shortcut.key is undefined/null
+                    if (!event.key || !shortcut.key) {
+                        continue;
+                    }
+
                     const ctrlMatch = shortcut.ctrlKey ? event.ctrlKey : !event.ctrlKey;
                     const metaMatch = shortcut.metaKey ? event.metaKey : !event.metaKey;
                     const shiftMatch = shortcut.shiftKey

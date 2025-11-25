@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { ProjectRole } from '@/lib/auth/permissions';
 import { queryKeys } from '@/lib/constants/queryKeys';
+import { debugConfig } from '@/lib/utils/env-validation';
 import { Project } from '@/types/base/projects.types';
 
 const useSupabaseClientOrThrow = () => {
@@ -47,21 +48,37 @@ export function useCreateProject() {
             console.log('Creating project', input);
             const client = ensureSupabaseClient();
 
+            const insertPayload = {
+                name: input.name,
+                slug: input.slug,
+                description: input.description,
+                organization_id: input.organization_id,
+                visibility: input.visibility,
+                status: input.status,
+                metadata: input.metadata,
+                created_by: input.owned_by,
+                updated_by: input.owned_by,
+                owned_by: input.owned_by,
+            };
+
+            // Log exact query for RLS diagnosis
+            if (debugConfig.debugRLSQueries()) {
+                console.log('=== PROJECT INSERT QUERY DEBUG ===');
+                console.log(
+                    'Endpoint:',
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/projects?select=*`,
+                );
+                console.log('Method:', 'POST');
+                console.log('Payload:', JSON.stringify(insertPayload, null, 2));
+                console.log('User ID:', input.owned_by);
+                console.log('Organization ID:', input.organization_id);
+                console.log('===================================');
+            }
+
             // Create the project
             const { data: project, error: projectError } = await client
                 .from('projects')
-                .insert({
-                    name: input.name,
-                    slug: input.slug,
-                    description: input.description,
-                    organization_id: input.organization_id,
-                    visibility: input.visibility,
-                    status: input.status,
-                    metadata: input.metadata,
-                    created_by: input.owned_by,
-                    updated_by: input.owned_by,
-                    owned_by: input.owned_by,
-                })
+                .insert(insertPayload)
                 .select()
                 .single();
 
@@ -75,13 +92,32 @@ export function useCreateProject() {
             }
 
             // Add the creator as owner of the project in project_members
-            const { error: memberError } = await client.from('project_members').insert({
+            const memberInsertPayload = {
                 user_id: input.owned_by,
                 project_id: project.id,
-                role: 'owner',
+                role: 'owner' as ProjectRole,
                 org_id: input.organization_id,
-                status: 'active',
-            });
+                status: 'active' as const,
+            };
+
+            // Log exact query for RLS diagnosis
+            if (debugConfig.debugRLSQueries()) {
+                console.log('=== PROJECT MEMBER INSERT QUERY DEBUG ===');
+                console.log(
+                    'Endpoint:',
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/project_members?select=*`,
+                );
+                console.log('Method:', 'POST');
+                console.log('Payload:', JSON.stringify(memberInsertPayload, null, 2));
+                console.log('User ID:', input.owned_by);
+                console.log('Project ID:', project.id);
+                console.log('Organization ID:', input.organization_id);
+                console.log('==========================================');
+            }
+
+            const { error: memberError } = await client
+                .from('project_members')
+                .insert(memberInsertPayload);
 
             if (memberError) {
                 console.error('Failed to add creator as project member:', memberError);
@@ -280,9 +316,9 @@ export function useDuplicateProject() {
             const { error: memberError } = await client.from('project_members').insert({
                 user_id: userId,
                 project_id: newProject.id,
-                role: 'owner',
+                role: 'owner' as ProjectRole,
                 org_id: originalProject.organization_id,
-                status: 'active',
+                status: 'active' as const,
             });
 
             if (memberError) {

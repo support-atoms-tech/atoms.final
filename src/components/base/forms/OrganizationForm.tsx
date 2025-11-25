@@ -65,7 +65,7 @@ interface OrganizationFormProps {
 }
 
 export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
-    const { toast } = useToast();
+    const { toast, dismiss } = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { user } = useUser();
@@ -95,47 +95,15 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
 
         try {
             const supabase = getClientOrThrow();
-            // Ensure slug is unique
-            let uniqueSlug = values.slug;
-            let isUnique = false;
-            let attempt = 0;
-
-            while (!isUnique) {
-                const { data: existingOrg, error: slugError } = await supabase
-                    .from('organizations')
-                    .select('id')
-                    .eq('slug', uniqueSlug)
-                    .single();
-
-                if (slugError && slugError.code !== 'PGRST116') {
-                    throw slugError;
-                }
-
-                if (!existingOrg) {
-                    isUnique = true;
-                } else {
-                    attempt++;
-                    uniqueSlug = `${values.slug}-${attempt}`;
-                }
-            }
-
-            // If we had to modify the slug, stop and alert the user.
-            if (uniqueSlug !== values.slug) {
-                form.setValue('slug', uniqueSlug); // suggest unique slug
-                form.setError('slug', {
-                    type: 'manual',
-                    message: `Slug is already taken. Suggested: "${uniqueSlug}". You can use this or choose a new one.`,
-                });
-                setIsSubmitting(false);
-                return;
-            }
 
             // Create the organization
+            // Note: We skip slug uniqueness check and let the database unique constraint handle it
+            // This avoids RLS issues and simplifies the code
             const { data: orgData, error: orgError } = await supabase
                 .from('organizations')
                 .insert({
                     name: values.name,
-                    slug: uniqueSlug,
+                    slug: values.slug,
                     description: values.description || null,
                     created_by: user.id,
                     updated_by: user.id,
@@ -149,7 +117,23 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
                 .single();
 
             if (orgError || !orgData) {
-                //throw new Error(orgError?.message || 'Insert returned no data');
+                // Handle unique constraint violation on slug
+                if (
+                    orgError?.code === '23505' &&
+                    (orgError?.message?.includes('slug') ||
+                        orgError?.message?.includes('organizations_slug_key'))
+                ) {
+                    // Slug is taken, suggest an alternative
+                    const suggestedSlug = `${values.slug}-${Date.now().toString().slice(-4)}`;
+                    form.setValue('slug', suggestedSlug);
+                    form.setError('slug', {
+                        type: 'manual',
+                        message: `Slug "${values.slug}" is already taken. Suggested: "${suggestedSlug}". You can use this or choose a new one.`,
+                    });
+                    setIsSubmitting(false);
+                    return;
+                }
+
                 throw new Error(
                     `Failed to create org, Supabase insert error: '${orgError?.message || 'Insert returned no data'}`,
                 );
@@ -161,23 +145,20 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
                 userId: user.id,
             });
 
-            // Add the creator as an owner of the organization
-            const { error: memberError } = await supabase
-                .from('organization_members')
-                .insert({
-                    organization_id: orgData.id,
-                    user_id: user.id,
-                    role: 'owner',
-                    status: 'active',
-                });
-
-            if (memberError) throw memberError;
+            // Note: The database trigger 'auto_add_org_owner' automatically adds
+            // the creator as an owner member, so we don't need to insert manually.
+            // This prevents duplicate key conflicts and keeps RLS consistent.
 
             toast({
                 title: 'Success',
                 description: 'Organization created successfully!',
                 variant: 'default',
             });
+
+            // Auto-dismiss the toast after 3 seconds
+            setTimeout(() => {
+                dismiss(); // Dismiss all toasts (there's only one due to TOAST_LIMIT)
+            }, 3000);
 
             if (onSuccess) {
                 onSuccess();

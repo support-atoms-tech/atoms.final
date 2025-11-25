@@ -5,7 +5,7 @@ import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
 import { getDocumentDataServer } from '@/lib/db/server/documents.server';
 import { createSupabaseClientWithToken } from '@/lib/supabase/supabase-authkit';
 import { getSupabaseServiceRoleClient } from '@/lib/supabase/supabase-service-role';
-import { isFeatureEnabled } from '@/lib/utils/env-validation';
+import { debugConfig, isFeatureEnabled } from '@/lib/utils/env-validation';
 import { Json, TablesInsert } from '@/types/base/database.types';
 
 /**
@@ -507,6 +507,22 @@ export async function POST(
                 updated_by: profile.id,
             };
 
+            // Log exact query for RLS diagnosis
+            if (debugConfig.debugRLSQueries()) {
+                console.log('=== PROPERTY INSERT QUERY DEBUG ===');
+                console.log(
+                    'Endpoint:',
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/properties?select=*`,
+                );
+                console.log('Method:', 'POST');
+                console.log('Payload:', JSON.stringify(propertyInsert, null, 2));
+                console.log('User ID:', profile.id);
+                console.log('Organization ID:', organizationId);
+                console.log('Document ID:', documentId);
+                console.log('Project ID:', document.project_id);
+                console.log('==================================');
+            }
+
             const { data: property, error: propertyErr } = await supabase
                 .from('properties')
                 .insert(propertyInsert)
@@ -523,25 +539,45 @@ export async function POST(
             const userClient = accessToken
                 ? createSupabaseClientWithToken(accessToken)
                 : null;
+
+            const columnInsert = {
+                block_id: body.blockId,
+                property_id: property.id,
+                position,
+                width: 150,
+                is_hidden: false,
+                is_pinned: false,
+                default_value:
+                    typeof body.defaultValue === 'string' &&
+                    body.defaultValue.trim() === ''
+                        ? null
+                        : (body.defaultValue ?? null),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_by: profile.id,
+                updated_by: profile.id,
+            };
+
+            // Log exact query for RLS diagnosis
+            if (debugConfig.debugRLSQueries()) {
+                console.log('=== COLUMN INSERT QUERY DEBUG ===');
+                console.log(
+                    'Endpoint:',
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/columns?select=*`,
+                );
+                console.log('Method:', 'POST');
+                console.log('Payload:', JSON.stringify(columnInsert, null, 2));
+                console.log('User ID:', profile.id);
+                console.log('Block ID:', body.blockId);
+                console.log('Property ID:', property.id);
+                console.log('Using user-scoped client:', !!userClient);
+                console.log('Access Token present:', !!accessToken);
+                console.log('================================');
+            }
+
             const { data: column, error: columnErr } = await (userClient ?? supabase)
                 .from('columns')
-                .insert({
-                    block_id: body.blockId,
-                    property_id: property.id,
-                    position,
-                    width: 150,
-                    is_hidden: false,
-                    is_pinned: false,
-                    default_value:
-                        typeof body.defaultValue === 'string' &&
-                        body.defaultValue.trim() === ''
-                            ? null
-                            : (body.defaultValue ?? null),
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    created_by: profile.id,
-                    updated_by: profile.id,
-                })
+                .insert(columnInsert)
                 .select('*')
                 .single();
             if (columnErr) {
@@ -614,25 +650,48 @@ export async function POST(
             const userClient2 = accessToken
                 ? createSupabaseClientWithToken(accessToken)
                 : null;
+
+            const columnInsertFromProperty = {
+                block_id: body.blockId,
+                property_id: body.propertyId,
+                position,
+                width: 200,
+                is_hidden: false,
+                is_pinned: false,
+                default_value:
+                    typeof body.defaultValue === 'string' &&
+                    body.defaultValue.trim() === ''
+                        ? null
+                        : (body.defaultValue ?? null),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_by: profile.id,
+                updated_by: profile.id,
+            };
+
+            // Log exact query for RLS diagnosis
+            if (debugConfig.debugRLSQueries()) {
+                console.log('=== COLUMN FROM PROPERTY INSERT QUERY DEBUG ===');
+                console.log(
+                    'Endpoint:',
+                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/columns?select=*`,
+                );
+                console.log('Method:', 'POST');
+                console.log(
+                    'Payload:',
+                    JSON.stringify(columnInsertFromProperty, null, 2),
+                );
+                console.log('User ID:', profile.id);
+                console.log('Block ID:', body.blockId);
+                console.log('Property ID:', body.propertyId);
+                console.log('Using user-scoped client:', !!userClient2);
+                console.log('Access Token present:', !!accessToken);
+                console.log('===============================================');
+            }
+
             const { data: column, error: columnErr } = await (userClient2 ?? supabase)
                 .from('columns')
-                .insert({
-                    block_id: body.blockId,
-                    property_id: body.propertyId,
-                    position,
-                    width: 200,
-                    is_hidden: false,
-                    is_pinned: false,
-                    default_value:
-                        typeof body.defaultValue === 'string' &&
-                        body.defaultValue.trim() === ''
-                            ? null
-                            : (body.defaultValue ?? null),
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    created_by: profile.id,
-                    updated_by: profile.id,
-                })
+                .insert(columnInsertFromProperty)
                 .select('*')
                 .single();
             if (columnErr) {

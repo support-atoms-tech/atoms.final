@@ -675,6 +675,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                     defaultValue,
                     block.id,
                     userProfile.id,
+                    'TableBlock:addColumn:new',
                 );
                 // optimistically add the new column to local state for immediate ui feedback
                 if (result?.column) {
@@ -697,7 +698,8 @@ export const TableBlock: React.FC<BlockProps> = ({
                         return [...base, enrichedCol];
                     });
                 }
-                await refreshRequirements();
+                // Skip refreshRequirements - realtime subscription handles column updates
+                // await refreshRequirements();
             } catch (error) {
                 console.error('Error adding column:', error);
             }
@@ -705,7 +707,7 @@ export const TableBlock: React.FC<BlockProps> = ({
         [
             createPropertyAndColumn,
             block.id,
-            refreshRequirements,
+            // refreshRequirements, // Removed - realtime handles it
             userProfile?.id,
             block.columns,
         ],
@@ -721,6 +723,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                     defaultValue,
                     block.id,
                     userProfile.id,
+                    'TableBlock:addColumn:fromProperty',
                 );
                 if (result?.column) {
                     setOptimisticColumns((prev) => {
@@ -739,7 +742,8 @@ export const TableBlock: React.FC<BlockProps> = ({
                         return [...base, columnWithPosition];
                     });
                 }
-                await refreshRequirements();
+                // Skip refreshRequirements - realtime subscription handles column updates
+                // await refreshRequirements();
             } catch (error) {
                 console.error('Error adding column from property:', error);
             }
@@ -747,7 +751,7 @@ export const TableBlock: React.FC<BlockProps> = ({
         [
             createColumnFromProperty,
             block.id,
-            refreshRequirements,
+            // refreshRequirements, // Removed - realtime handles it
             userProfile?.id,
             block.columns,
         ],

@@ -10,6 +10,7 @@ import {
 import { Column, Property, PropertyType } from '@/components/custom/BlockCanvas/types';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
+import { debugConfig } from '@/lib/utils/env-validation';
 import { Database, Json } from '@/types/base/database.types';
 
 const columnTypeToPropertyType = (type: EditableColumnType): PropertyType => {
@@ -54,20 +55,40 @@ export const useColumnActions = ({
             defaultValue: string,
             blockId: string,
             _userId: string,
+            debugContext = 'unspecified',
         ) => {
+            const shouldLog =
+                debugConfig.debugRLSQueries() || debugConfig.debugTableColumns();
             try {
+                const requestBody = {
+                    mode: 'new',
+                    blockId,
+                    name,
+                    propertyType: columnTypeToPropertyType(type),
+                    propertyConfig,
+                    defaultValue,
+                };
+                // Log exact API request for RLS diagnosis or table-column debugging
+                if (shouldLog) {
+                    console.log('=== COLUMN CREATION API REQUEST DEBUG ===');
+                    console.log(
+                        'Endpoint:',
+                        `${typeof window !== 'undefined' ? window.location.origin : ''}/api/documents/${documentId}/columns`,
+                    );
+                    console.log('Method:', 'POST');
+                    console.log('Payload:', JSON.stringify(requestBody, null, 2));
+                    console.log('Document ID:', documentId);
+                    console.log('Block ID:', blockId);
+                    console.log('Organization ID:', orgId);
+                    console.log('Context:', debugContext);
+                    console.log('==========================================');
+                }
+
                 // Route through API to enforce membership and use service role
                 const res = await fetch(`/api/documents/${documentId}/columns`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        mode: 'new',
-                        blockId,
-                        name,
-                        propertyType: columnTypeToPropertyType(type),
-                        propertyConfig,
-                        defaultValue,
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
                 if (!res.ok) {
                     const text = await res.text();
@@ -97,7 +118,14 @@ export const useColumnActions = ({
 
                 return { property, column };
             } catch (error) {
-                console.error('Error in createPropertyAndColumn:', error);
+                if (shouldLog) {
+                    console.error(
+                        `[Columns][${debugContext}] Error in createPropertyAndColumn`,
+                        error,
+                    );
+                } else {
+                    console.error('Error in createPropertyAndColumn:', error);
+                }
                 throw error;
             }
         },
@@ -110,17 +138,39 @@ export const useColumnActions = ({
             defaultValue: string,
             blockId: string,
             _userId: string,
+            debugContext = 'unspecified',
         ) => {
+            const shouldLog =
+                debugConfig.debugRLSQueries() || debugConfig.debugTableColumns();
             try {
+                const requestBody = {
+                    mode: 'fromProperty',
+                    blockId,
+                    propertyId,
+                    defaultValue,
+                };
+
+                // Log exact API request for RLS diagnosis
+                if (shouldLog) {
+                    console.log('=== COLUMN FROM PROPERTY API REQUEST DEBUG ===');
+                    console.log(
+                        'Endpoint:',
+                        `${typeof window !== 'undefined' ? window.location.origin : ''}/api/documents/${documentId}/columns`,
+                    );
+                    console.log('Method:', 'POST');
+                    console.log('Payload:', JSON.stringify(requestBody, null, 2));
+                    console.log('Document ID:', documentId);
+                    console.log('Block ID:', blockId);
+                    console.log('Property ID:', propertyId);
+                    console.log('Organization ID:', orgId);
+                    console.log('Context:', debugContext);
+                    console.log('================================================');
+                }
+
                 const res = await fetch(`/api/documents/${documentId}/columns`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        mode: 'fromProperty',
-                        blockId,
-                        propertyId,
-                        defaultValue,
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
                 if (!res.ok) {
                     const text = await res.text();
@@ -150,7 +200,14 @@ export const useColumnActions = ({
 
                 return property ? { property, column } : { column };
             } catch (error) {
-                console.error('Error in createColumnFromProperty:', error);
+                if (shouldLog) {
+                    console.error(
+                        `[Columns][${debugContext}] Error in createColumnFromProperty`,
+                        error,
+                    );
+                } else {
+                    console.error('Error in createColumnFromProperty:', error);
+                }
                 throw error;
             }
         },

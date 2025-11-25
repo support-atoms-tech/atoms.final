@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
+import { dedupeColumnMetadataEntries } from '@/components/custom/BlockCanvas/utils/requirementsNativeColumns';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { Json } from '@/types/base/database.types';
@@ -87,12 +88,14 @@ export const useBlockMetadataActions = () => {
                     : {};
 
                 const currentContent: BlockTableMetadata = {
-                    columns: Array.isArray(
-                        (safeContent as Partial<BlockTableMetadata>).columns,
-                    )
-                        ? ((safeContent as Partial<BlockTableMetadata>)
-                              .columns as ColumnMetadata[])
-                        : [],
+                    columns: dedupeColumnMetadataEntries(
+                        Array.isArray(
+                            (safeContent as Partial<BlockTableMetadata>).columns,
+                        )
+                            ? ((safeContent as Partial<BlockTableMetadata>)
+                                  .columns as ColumnMetadata[])
+                            : [],
+                    ),
                     requirements: Array.isArray(
                         (safeContent as Partial<BlockTableMetadata>).requirements,
                     )
@@ -107,11 +110,16 @@ export const useBlockMetadataActions = () => {
                 };
 
                 // ensures renamed column names are not overwritten by stale data
+                const sanitizedPartialColumns =
+                    partialMetadata.columns !== undefined
+                        ? dedupeColumnMetadataEntries(partialMetadata.columns)
+                        : undefined;
+
                 const updatedContent: BlockTableMetadata = {
                     ...currentContent,
                     columns:
-                        partialMetadata.columns !== undefined
-                            ? partialMetadata.columns
+                        sanitizedPartialColumns !== undefined
+                            ? sanitizedPartialColumns
                             : currentContent.columns,
                     requirements:
                         partialMetadata.requirements !== undefined

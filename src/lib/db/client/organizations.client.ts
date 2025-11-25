@@ -148,18 +148,9 @@ export const ensurePersonalOrganization = async (
         throw createError;
     }
 
-    // Add the user as an owner of the organization
-    const { error: memberError } = await supabase.from('organization_members').insert({
-        organization_id: newOrg.id,
-        user_id: userId,
-        role: 'owner',
-        status: 'active',
-    });
-
-    if (memberError) {
-        console.error('Error adding user to personal organization:', memberError);
-        throw memberError;
-    }
+    // Note: The database trigger 'auto_add_org_owner' automatically adds
+    // the creator as an owner member, so we don't need to insert manually.
+    // This prevents duplicate key conflicts and keeps RLS consistent.
 
     return newOrg;
 };

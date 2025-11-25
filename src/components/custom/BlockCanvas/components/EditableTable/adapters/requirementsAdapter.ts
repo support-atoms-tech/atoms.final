@@ -14,8 +14,13 @@ export function createRequirementsAdapter(opts: {
     userId: string;
     userName: string;
 }): TableDataAdapter<DynamicRequirement> {
-    const { saveRequirement, deleteRequirement, refreshRequirements, userId, userName } =
-        opts;
+    const {
+        saveRequirement,
+        deleteRequirement,
+        refreshRequirements: _refreshRequirements, // kept for API compatibility
+        userId,
+        userName,
+    } = opts;
 
     return {
         async saveRow(
@@ -30,7 +35,11 @@ export function createRequirementsAdapter(opts: {
             await deleteRequirement(item, userId);
         },
         async postSaveRefresh() {
-            await refreshRequirements();
+            // Skip refresh - realtime subscriptions already handle requirement updates
+            // Calling refreshRequirements here causes duplicate fetches and data sync spam
+            // The realtime subscription in useDocumentRealtime will update the blocks state,
+            // which flows to GlideEditableTable automatically
+            // await refreshRequirements();
         },
     };
 }
