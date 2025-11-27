@@ -105,14 +105,46 @@ export const useRequirementActions = ({
         'priority',
     ]);
 
+    // valid values for Status / Priority
+    const STATUS_VALID_VALUES: readonly string[] = [
+        'draft',
+        'in_review',
+        'approved',
+        'rejected',
+        'archived',
+        'active',
+        'deleted',
+    ] as const;
+
+    const PRIORITY_VALID_VALUES: readonly string[] = [
+        'low',
+        'high',
+        'medium',
+        'critical',
+    ] as const;
+
+    type StatusOrPriorityKind = 'status' | 'priority';
+
+    // Validation helper
+    const isValidStatusOrPriority = (
+        kind: StatusOrPriorityKind,
+        raw: unknown,
+    ): boolean => {
+        const v = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+        const normalized = v.trim().toLowerCase();
+        if (!normalized) return true;
+
+        const allowed = kind === 'status' ? STATUS_VALID_VALUES : PRIORITY_VALID_VALUES;
+        return allowed.includes(normalized as unknown as string);
+    };
+
     // Helper function to create properties object from dynamic requirement
     const createPropertiesObjectFromDynamicReq = async (
         dynamicReq: DynamicRequirement,
     ) => {
         if (!properties) return { propertiesObj: {}, naturalFields: {} };
 
-        // Fetch block columns to get position information; if none exist (new requirements table),
-        // synthesize natural field "virtual" positions to avoid blocking saves.
+        // Fetch block columns to get position information
         const supabase = getClientOrThrow();
         const { data: blockColumns } = await supabase
             .from('columns')
@@ -126,7 +158,6 @@ export const useRequirementActions = ({
         // Process each property
         properties.forEach((prop) => {
             const value = dynamicReq[prop.name];
-            // Support both real and virtual columns: match by real property_id, then by property name
             const propNameLc = (prop.name || '').toLowerCase();
             const column =
                 blockColumns?.find((col) => col.property_id === prop.id) ||
@@ -138,7 +169,6 @@ export const useRequirementActions = ({
                             : ''
                     ).toLowerCase();
                     if (!cNameLc) return false;
-                    // Deduplicate case-insensitively against both UI names and DB keys
                     if (
                         c.id?.startsWith('virtual-') ||
                         c.property_id?.startsWith('virtual-')
@@ -158,8 +188,47 @@ export const useRequirementActions = ({
 
             // Check if this property maps to a natural field
             if (NATURAL_FIELD_KEYS.has(lowerCaseName)) {
+                // Validate Status/Priority before adding to naturalFields
+                const isStatusOrPriority =
+                    lowerCaseName === 'status' || lowerCaseName === 'priority';
+
+                if (isStatusOrPriority) {
+                    const kind = lowerCaseName as StatusOrPriorityKind;
+                    const stringValue = typeof value === 'string' ? value : '';
+                    const isValid = isValidStatusOrPriority(kind, stringValue);
+
+                    if (!isValid && stringValue) {
+                        // Find the column to get position/column_id
+                        const statusPriorityColumn = blockColumns?.find((col) => {
+                            const propName = (
+                                col as unknown as { property?: { name?: string } }
+                            )?.property?.name;
+                            return propName && propName.toLowerCase() === lowerCaseName;
+                        });
+
+                        propertiesObj[prop.name] = {
+                            key: prop.name,
+                            type: 'select',
+                            value: stringValue,
+                            position: statusPriorityColumn?.position ?? 0,
+                            column_id: statusPriorityColumn?.id,
+                            property_id: prop.id,
+                        };
+
+                        console.debug(
+                            `[FixAccessor-save-invalid] Removed invalid ${kind} from naturalFields; keeping in properties only`,
+                            {
+                                kind,
+                                value: stringValue,
+                                propName: prop.name,
+                            },
+                        );
+                        return;
+                    }
+                }
+
+                // Valid values add to naturalFields as normal
                 naturalFields[lowerCaseName] = typeof value === 'string' ? value : '';
-                // Do not duplicate natural fields inside JSON properties; DB owns these columns
                 return;
             }
 
@@ -176,8 +245,7 @@ export const useRequirementActions = ({
             }
         });
 
-        // Fix dynamic value capture: Check for keys in dynamicReq that might not be in properties array yet
-        // This handles newly created columns during paste that haven't been synced to the properties array
+        // handles newly created columns during paste that haven't been synced to the properties array
         const processedKeys = new Set(Object.keys(propertiesObj));
         const dynamicReqKeys = Object.keys(dynamicReq).filter(
             (key) =>
@@ -228,8 +296,6 @@ export const useRequirementActions = ({
                         val,
                     );
                 } else {
-                    // Column not found in DB yet, but we still want to save the value
-                    // This can happen if column was just created and hasn't synced yet
                     propertiesObj[key] = {
                         key,
                         type: 'text',
@@ -239,6 +305,53 @@ export const useRequirementActions = ({
                     console.debug(
                         `[fix][dynamic-values] Added dynamic column ${key} (column not in DB yet) with value:`,
                         val,
+                    );
+                }
+            }
+        }
+
+        // Handle Status/Priority invalid value overrides stored in properties
+        if (
+            dynamicReq.properties &&
+            typeof dynamicReq.properties === 'object' &&
+            !Array.isArray(dynamicReq.properties)
+        ) {
+            const reqProps = dynamicReq.properties as Record<string, unknown>;
+            for (const [key, propEntry] of Object.entries(reqProps)) {
+                const keyLc = key.toLowerCase();
+                if (keyLc !== 'status' && keyLc !== 'priority') continue;
+
+                if (
+                    propEntry &&
+                    typeof propEntry === 'object' &&
+                    'value' in propEntry &&
+                    'type' in propEntry
+                ) {
+                    const propObj = propEntry as {
+                        key?: string;
+                        type?: string;
+                        value?: unknown;
+                        position?: number;
+                    };
+                    // Find the column to get position/column_id
+                    const column = blockColumns?.find((col) => {
+                        const propName = (
+                            col as unknown as { property?: { name?: string } }
+                        )?.property?.name;
+                        return propName && propName.toLowerCase() === keyLc;
+                    });
+
+                    propertiesObj[key] = {
+                        key: propObj.key || key,
+                        type: propObj.type || 'select',
+                        value: propObj.value ?? '',
+                        position: propObj.position ?? column?.position ?? 0,
+                        column_id: column?.id,
+                        property_id: column?.property_id,
+                    };
+                    console.debug(
+                        `[fix][status-priority-override] Added ${key} override from properties:`,
+                        propertiesObj[key],
                     );
                 }
             }
@@ -260,7 +373,17 @@ export const useRequirementActions = ({
 
         return localRequirements
             .filter((req) => !deletedRowIdsRef.current.has(req.id)) // Filter out deleted
-            .map((req) => {
+            .map((req, index) => {
+                const isFirstRow = index === 0;
+                if (isFirstRow) {
+                    console.debug('[HYDRATE DB RAW]', {
+                        id: req.id,
+                        status: req.status,
+                        priority: req.priority,
+                        properties: req.properties,
+                    });
+                }
+
                 const dynamicReq: DynamicRequirement = {
                     id: req.id,
                     ai_analysis: req.ai_analysis as RequirementAiAnalysis,
@@ -268,7 +391,25 @@ export const useRequirementActions = ({
 
                 // Extract values from properties object
                 if (req.properties) {
+                    if (isFirstRow) {
+                        console.debug('[HYDRATE PROPS BEFORE MERGE]', {
+                            id: req.id,
+                            properties: req.properties,
+                            statusProp: (req.properties as Record<string, unknown>)?.[
+                                'status'
+                            ],
+                            priorityProp: (req.properties as Record<string, unknown>)?.[
+                                'priority'
+                            ],
+                        });
+                    }
+
                     Object.entries(req.properties).forEach(([key, prop]) => {
+                        const keyLc = key.toLowerCase();
+                        if (keyLc === 'status' || keyLc === 'priority') {
+                            return;
+                        }
+
                         if (
                             typeof prop === 'object' &&
                             prop !== null &&
@@ -302,11 +443,51 @@ export const useRequirementActions = ({
                     });
                 }
 
-                // Overlay DB top-level fields for natural properties so UI shows true values
                 if (properties && properties.length > 0) {
+                    if (isFirstRow) {
+                        console.debug('[HYDRATE ENUM COLUMNS]', {
+                            id: req.id,
+                            dbStatus: req.status,
+                            dbPriority: req.priority,
+                        });
+                    }
+
                     properties.forEach((prop) => {
                         const keyLc = prop.name.toLowerCase();
                         if (!NATURAL_FIELD_KEYS.has(keyLc)) return;
+
+                        if (keyLc === 'status' || keyLc === 'priority') {
+                            // Check both lowercase and capitalized keys in properties
+                            const props =
+                                req.properties && typeof req.properties === 'object'
+                                    ? (req.properties as Record<string, unknown>)
+                                    : null;
+                            const propsOverride = props
+                                ? props[keyLc] ||
+                                  props[keyLc === 'status' ? 'Status' : 'Priority']
+                                : null;
+
+                            if (
+                                propsOverride &&
+                                typeof propsOverride === 'object' &&
+                                'value' in propsOverride
+                            ) {
+                                const overrideValue = (
+                                    propsOverride as { value: unknown }
+                                ).value;
+                                if (
+                                    typeof overrideValue === 'string' ||
+                                    typeof overrideValue === 'number' ||
+                                    overrideValue === null
+                                ) {
+                                    dynamicReq[prop.name] = overrideValue as CellValue;
+                                    dynamicReq[keyLc] = overrideValue as CellValue;
+                                    return; // Skip DB overlay - properties is source of truth
+                                }
+                            }
+                            // If properties doesn't have a value, fall through to use DB enum below
+                        }
+
                         switch (keyLc) {
                             case 'name':
                                 dynamicReq[prop.name] = (req.name ??
@@ -324,14 +505,103 @@ export const useRequirementActions = ({
                                 // Use raw DB enum value to match select option values
                                 dynamicReq[prop.name] =
                                     req.status as unknown as string as unknown as CellValue;
+
+                                if (isFirstRow) {
+                                    console.debug('[MERGE] result', {
+                                        id: req.id,
+                                        field: 'status',
+                                        resultValue: req.status,
+                                        source: 'db_enum',
+                                    });
+                                }
                                 break;
                             case 'priority':
                                 // Use raw DB enum value to match select option values
                                 dynamicReq[prop.name] =
                                     req.priority as unknown as string as unknown as CellValue;
+
+                                if (isFirstRow) {
+                                    console.debug('[MERGE] result', {
+                                        id: req.id,
+                                        field: 'priority',
+                                        resultValue: req.priority,
+                                        source: 'db_enum',
+                                    });
+                                }
                                 break;
                         }
                     });
+                }
+
+                if (req.properties && typeof req.properties === 'object') {
+                    const props = req.properties as Record<string, unknown>;
+
+                    // Find the Status property definition to get the correct display key
+                    const statusPropDef = properties?.find(
+                        (p) => p.name.toLowerCase() === 'status',
+                    );
+                    const statusDisplayKey = statusPropDef?.name || 'status';
+
+                    // Find the Priority property definition to get the correct display key
+                    const priorityPropDef = properties?.find(
+                        (p) => p.name.toLowerCase() === 'priority',
+                    );
+                    const priorityDisplayKey = priorityPropDef?.name || 'priority';
+
+                    // look for both lowercase and capitalized keys in properties
+                    const statusProp =
+                        props['status'] || props['Status'] || props['STATUS'];
+                    if (
+                        statusProp &&
+                        typeof statusProp === 'object' &&
+                        'value' in statusProp
+                    ) {
+                        const statusValue = (statusProp as { value: unknown }).value;
+                        if (
+                            statusValue !== undefined &&
+                            statusValue !== null &&
+                            statusValue !== ''
+                        ) {
+                            dynamicReq[statusDisplayKey] = statusValue as CellValue;
+                            dynamicReq['status'] = statusValue as CellValue;
+                        }
+                    }
+
+                    // Check priority - look for both lowercase and capitalized keys in properties
+                    const priorityProp =
+                        props['priority'] || props['Priority'] || props['PRIORITY'];
+                    if (
+                        priorityProp &&
+                        typeof priorityProp === 'object' &&
+                        'value' in priorityProp
+                    ) {
+                        const priorityValue = (priorityProp as { value: unknown }).value;
+                        if (
+                            priorityValue !== undefined &&
+                            priorityValue !== null &&
+                            priorityValue !== ''
+                        ) {
+                            dynamicReq[priorityDisplayKey] = priorityValue as CellValue;
+                            dynamicReq['priority'] = priorityValue as CellValue;
+                        }
+                    }
+                }
+
+                if (isFirstRow) {
+                    console.debug(
+                        '[HYDRATE COMMITTED] final value that goes into local store',
+                        {
+                            id: req.id,
+                            finalStatus: dynamicReq['status'] || dynamicReq['Status'],
+                            finalPriority:
+                                dynamicReq['priority'] || dynamicReq['Priority'],
+                            allKeys: Object.keys(dynamicReq).filter(
+                                (k) =>
+                                    k.toLowerCase() === 'status' ||
+                                    k.toLowerCase() === 'priority',
+                            ),
+                        },
+                    );
                 }
 
                 return dynamicReq;
@@ -342,7 +612,6 @@ export const useRequirementActions = ({
     const _formatEnumValueForDisplay = (value: unknown): string => {
         if (!value || typeof value !== 'string') return '';
 
-        // Handle snake_case values (e.g., "in_progress" -> "In Progress")
         if (value.includes('_')) {
             return value
                 .split('_')
@@ -350,52 +619,26 @@ export const useRequirementActions = ({
                 .join(' ');
         }
 
-        // Handle simple values (e.g., "draft" -> "Draft")
         return value.charAt(0).toUpperCase() + value.slice(1);
     };
 
-    // Helper function to convert display values back to enum values
-    const _parseDisplayValueToEnum = (displayValue: string): ERequirementStatus => {
-        if (!displayValue) return RequirementStatus.draft;
-
-        // First, normalize the input by converting to lowercase and replacing spaces with underscores
-        const normalizedValue = displayValue.toLowerCase().replace(/\s+/g, '_');
-
-        // Map of common variations to correct enum values
-        const statusMap: Record<string, ERequirementStatus> = {
-            archive: RequirementStatus.archived,
-            archival: RequirementStatus.archived,
-            active: RequirementStatus.active,
-            archived: RequirementStatus.archived,
-            draft: RequirementStatus.draft,
-            deleted: RequirementStatus.deleted,
-            in_review: RequirementStatus.in_review,
-            review: RequirementStatus.in_review,
-            in_progress: RequirementStatus.in_progress,
-            progress: RequirementStatus.in_progress,
-            approved: RequirementStatus.approved,
-            rejected: RequirementStatus.rejected,
-        };
-
-        // Return the mapped value if it exists, otherwise return draft as default
-        return statusMap[normalizedValue] || RequirementStatus.draft;
+    // Minimal normalizers for status/priority when saving
+    const _normalizeStatusForSave = (
+        rawStatus: string | null | undefined,
+    ): string | null => {
+        if (rawStatus == null) return 'draft';
+        const trimmed = rawStatus.trim();
+        if (trimmed === '') return 'draft';
+        return rawStatus;
     };
 
-    // Helper function to convert display values back to priority enum values
-    const _parseDisplayValueToPriority = (displayValue: string): ERequirementPriority => {
-        if (!displayValue) return RequirementPriority.low as ERequirementPriority;
-
-        const normalizedValue = displayValue.toLowerCase().replace(/\s+/g, '_');
-        const priorityMap: Record<string, ERequirementPriority> = {
-            low: RequirementPriority.low as ERequirementPriority,
-            medium: RequirementPriority.medium as ERequirementPriority,
-            high: RequirementPriority.high as ERequirementPriority,
-            critical: RequirementPriority.critical as ERequirementPriority,
-        };
-        return (
-            priorityMap[normalizedValue] ||
-            (RequirementPriority.low as ERequirementPriority)
-        );
+    const _normalizePriorityForSave = (
+        rawPriority: string | null | undefined,
+    ): string | null => {
+        if (rawPriority == null) return 'low';
+        const trimmed = rawPriority.trim();
+        if (trimmed === '') return 'low';
+        return rawPriority;
     };
 
     const getLastPosition = async (): Promise<number> => {
@@ -434,6 +677,15 @@ export const useRequirementActions = ({
             userName,
             dynamicReq,
         });
+
+        if (!documentId) {
+            console.error('BLOCKED SAVE - missing documentId', {
+                documentId,
+                blockId,
+                dynamicReqId: dynamicReq.id,
+            });
+            throw new Error('Cannot save requirement: documentId is not available');
+        }
 
         try {
             const supabase = getClientOrThrow();
@@ -485,24 +737,189 @@ export const useRequirementActions = ({
                 createdBy: userName || 'Unknown',
             });
 
-            // Validate and normalize the status value if it exists
-            let status: ERequirementStatus | undefined;
-            if (naturalFields?.status) {
-                status = _parseDisplayValueToEnum(naturalFields.status);
+            // Normalize status/priority for save
+            const rawStatus = naturalFields?.status as string | null | undefined;
+            const rawPriority = naturalFields?.priority as string | null | undefined;
+            const normalizedStatus = _normalizeStatusForSave(rawStatus);
+            const normalizedPriority = _normalizePriorityForSave(rawPriority);
 
-                // Validate that the status is a valid enum value
-                if (!Object.values(RequirementStatus).includes(status)) {
-                    throw new Error(`Invalid status value: ${status}`);
+            let finalStatus: string | null | undefined = normalizedStatus;
+            let finalPriority: string | null | undefined = normalizedPriority;
+
+            if (normalizedStatus) {
+                const isValid = isValidStatusOrPriority('status', normalizedStatus);
+                if (!isValid) {
+                    console.debug(
+                        '[FixAccessor-save-invalid] Final guard: Removed invalid status from Supabase payload',
+                        {
+                            value: normalizedStatus,
+                        },
+                    );
+                    finalStatus = undefined; // Don't send to Supabase
+                    if (!propertiesObj.status) {
+                        propertiesObj.status = {
+                            key: 'status',
+                            type: 'select',
+                            value: normalizedStatus,
+                            position: 0,
+                        };
+                    }
                 }
             }
 
-            // Normalize priority if provided
-            let priorityEnum: ERequirementPriority | undefined;
-            if (naturalFields?.priority) {
-                priorityEnum = _parseDisplayValueToPriority(naturalFields.priority);
+            if (normalizedPriority) {
+                const isValid = isValidStatusOrPriority('priority', normalizedPriority);
+                if (!isValid) {
+                    console.debug(
+                        '[FixAccessor-save-invalid] Final guard: Removed invalid priority from Supabase payload',
+                        {
+                            value: normalizedPriority,
+                        },
+                    );
+                    finalPriority = undefined; // Don't send to Supabase
+                    if (!propertiesObj.priority) {
+                        propertiesObj.priority = {
+                            key: 'priority',
+                            type: 'select',
+                            value: normalizedPriority,
+                            position: 0,
+                        };
+                    }
+                }
             }
 
-            // Normalize and validate name (DB requires min length when trimmed)
+            if (naturalFields?.status) {
+                const statusValue = naturalFields.status;
+                const isValid = isValidStatusOrPriority('status', statusValue);
+                if (!isValid) {
+                    console.debug('FinalInvalidFix: PREVENTING invalid natural field', {
+                        field: 'status',
+                        value: statusValue,
+                    });
+                    delete naturalFields.status;
+                    // Ensure invalid value exists in propertiesObj
+                    if (!propertiesObj.status) {
+                        propertiesObj.status = {
+                            key: 'status',
+                            type: 'select',
+                            value: statusValue,
+                            position: 0,
+                        };
+                        console.debug(
+                            'FinalInvalidFix: MOVING invalid value into properties only',
+                            {
+                                field: 'status',
+                                value: statusValue,
+                            },
+                        );
+                    }
+                    finalStatus = undefined;
+                }
+            }
+
+            if (naturalFields?.priority) {
+                const priorityValue = naturalFields.priority;
+                const isValid = isValidStatusOrPriority('priority', priorityValue);
+                if (!isValid) {
+                    console.debug('FinalInvalidFix: PREVENTING invalid natural field', {
+                        field: 'priority',
+                        value: priorityValue,
+                    });
+                    // Remove from naturalFields completely
+                    delete naturalFields.priority;
+                    // Ensure invalid value exists in propertiesObj
+                    if (!propertiesObj.priority) {
+                        propertiesObj.priority = {
+                            key: 'priority',
+                            type: 'select',
+                            value: priorityValue,
+                            position: 0,
+                        };
+                        console.debug(
+                            'FinalInvalidFix: MOVING invalid value into properties only',
+                            {
+                                field: 'priority',
+                                value: priorityValue,
+                            },
+                        );
+                    }
+                    finalPriority = undefined;
+                }
+            }
+
+            try {
+                const rawStatus = naturalFields.status ?? naturalFields.Status;
+                const rawPriority = naturalFields.priority ?? naturalFields.Priority;
+
+                const isStatusValid = isValidStatusOrPriority('status', rawStatus);
+                const isPriorityValid = isValidStatusOrPriority('priority', rawPriority);
+
+                // STATUS invalid → move to properties only
+                if (rawStatus && !isStatusValid) {
+                    console.debug('FinalInvalidFix: PREVENTING invalid natural status', {
+                        rawStatus,
+                    });
+                    delete naturalFields.status;
+                    delete naturalFields.Status;
+                    // Ensure finalStatus is undefined so it won't be included in baseData
+                    finalStatus = undefined;
+
+                    if (!propertiesObj.status) {
+                        propertiesObj.status = {
+                            key: 'status',
+                            type: 'text',
+                            value: rawStatus,
+                            position: 0,
+                        };
+                        console.debug(
+                            'FinalInvalidFix: MOVING invalid status into properties',
+                            { rawStatus },
+                        );
+                    }
+                }
+
+                // PRIORITY invalid → move to properties only
+                if (rawPriority && !isPriorityValid) {
+                    console.debug(
+                        'FinalInvalidFix: PREVENTING invalid natural priority',
+                        { rawPriority },
+                    );
+                    delete naturalFields.priority;
+                    delete naturalFields.Priority;
+                    // Ensure finalPriority is undefined so it won't be included in baseData
+                    finalPriority = undefined;
+
+                    if (!propertiesObj.priority) {
+                        propertiesObj.priority = {
+                            key: 'priority',
+                            type: 'text',
+                            value: rawPriority,
+                            position: 0,
+                        };
+                        console.debug(
+                            'FinalInvalidFix: MOVING invalid priority into properties',
+                            { rawPriority },
+                        );
+                    }
+                }
+            } catch (err) {
+                console.error('FinalInvalidFix: ERROR running final guard', err);
+            }
+
+            if (!isNew) {
+                if (finalStatus === undefined) {
+                    console.debug('FinalInvalidFix: FORCING NULL status for updated row');
+                    (naturalFields as unknown as Record<string, unknown>).status = null;
+                }
+                if (finalPriority === undefined) {
+                    console.debug(
+                        'FinalInvalidFix: FORCING NULL priority for updated row',
+                    );
+                    (naturalFields as unknown as Record<string, unknown>).priority = null;
+                }
+            }
+
+            // Normalize and validate name
             const normalizedName = (naturalFields?.name || '').trim();
             const safeName =
                 normalizedName.length >= 2 ? normalizedName : 'New Requirement';
@@ -511,18 +928,67 @@ export const useRequirementActions = ({
                 ai_analysis: analysis_history,
                 block_id: blockId,
                 document_id: documentId,
-                properties: propertiesObj as unknown as Json, // Keep additional per-column values in JSON
+                properties: propertiesObj as unknown as Json,
                 updated_by: userId,
-                // Allow description/external_id/status/priority when provided
                 ...(naturalFields?.description && {
                     description: naturalFields.description,
                 }),
                 ...(naturalFields?.external_id && {
                     external_id: naturalFields.external_id,
                 }),
-                ...(status && { status }),
-                ...(priorityEnum && { priority: priorityEnum }),
+                // Only include status/priority if they are valid
+                // For updated rows with invalid values, include null to overwrite stored defaults
+                ...(finalStatus !== undefined && {
+                    status: finalStatus as unknown as string,
+                }),
+                ...(finalPriority !== undefined && {
+                    priority: finalPriority as unknown as string,
+                }),
+                ...(!isNew &&
+                    naturalFields.status === null && {
+                        status: null as unknown as string,
+                    }),
+                ...(!isNew &&
+                    naturalFields.priority === null && {
+                        priority: null as unknown as string,
+                    }),
             } as Partial<Requirement>;
+
+            // Confirm clean payload
+            if (baseData.status || baseData.priority) {
+                const statusValid = baseData.status
+                    ? isValidStatusOrPriority('status', baseData.status)
+                    : true;
+                const priorityValid = baseData.priority
+                    ? isValidStatusOrPriority('priority', baseData.priority)
+                    : true;
+                if (!statusValid || !priorityValid) {
+                    console.error(
+                        'FinalInvalidFix: ERROR - Invalid value detected in baseData!',
+                        {
+                            status: baseData.status,
+                            statusValid,
+                            priority: baseData.priority,
+                            priorityValid,
+                        },
+                    );
+                } else {
+                    console.debug('FinalInvalidFix: CONFIRMED clean payload', {
+                        hasStatus: !!baseData.status,
+                        hasPriority: !!baseData.priority,
+                        statusInProperties: !!propertiesObj.status,
+                        priorityInProperties: !!propertiesObj.priority,
+                    });
+                }
+            } else {
+                console.debug(
+                    'FinalInvalidFix: CONFIRMED clean payload (no status/priority in baseData)',
+                    {
+                        statusInProperties: !!propertiesObj.status,
+                        priorityInProperties: !!propertiesObj.priority,
+                    },
+                );
+            }
 
             let savedRequirement: Requirement;
             if (isNew) {
@@ -532,6 +998,39 @@ export const useRequirementActions = ({
                 const position = await getLastPosition();
                 console.log('✅ STEP 5c: Got position:', position);
 
+                let organizationId: string | null = null;
+                try {
+                    if (!documentId) {
+                        throw new Error(
+                            'documentId is required to resolve organizationId',
+                        );
+                    }
+                    const resp = await fetch(`/api/documents/${documentId}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                    });
+                    if (!resp.ok) {
+                        throw new Error(
+                            `Failed to fetch document: ${resp.status} ${resp.statusText}`,
+                        );
+                    }
+                    const payload = (await resp.json()) as {
+                        organizationId?: string | null;
+                    };
+                    organizationId = payload.organizationId ?? null;
+                } catch (error) {
+                    console.error('Error resolving organization_id:', error);
+                    throw new Error(
+                        `Failed to resolve organization_id from document context: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                }
+
+                if (!organizationId) {
+                    throw new Error(
+                        'Failed to resolve organization_id from document context: organizationId is null',
+                    );
+                }
+
                 // Generate auto requirement ID if not provided
                 let externalId = naturalFields?.external_id;
                 if (
@@ -540,55 +1039,16 @@ export const useRequirementActions = ({
                     externalId === 'GENERATING...'
                 ) {
                     try {
-                        // Resolve organizationId via API route instead of client-side join
-                        const resp = await fetch(`/api/documents/${documentId}`, {
-                            method: 'GET',
-                            cache: 'no-store',
-                        });
-                        if (resp.ok) {
-                            const payload = (await resp.json()) as {
-                                organizationId?: string | null;
-                            };
-                            const organizationId = payload.organizationId ?? null;
-                            if (organizationId) {
-                                externalId = await generateNextRequirementId(
-                                    supabase,
-                                    organizationId,
-                                );
-                            }
-                        }
+                        externalId = await generateNextRequirementId(
+                            supabase,
+                            organizationId,
+                        );
                     } catch (error) {
                         console.error('Error generating requirement ID:', error);
-                    }
-
-                    // Fallback if auto-generation fails
-                    if (!externalId) {
+                        // Fallback if auto-generation fails
                         const timestamp = Date.now().toString().slice(-6);
                         externalId = `REQ-${timestamp}`;
                     }
-                }
-
-                // Resolve organization_id from document context
-                let organizationId: string | null = null;
-                try {
-                    const resp = await fetch(`/api/documents/${documentId}`, {
-                        method: 'GET',
-                        cache: 'no-store',
-                    });
-                    if (resp.ok) {
-                        const payload = (await resp.json()) as {
-                            organizationId?: string | null;
-                        };
-                        organizationId = payload.organizationId ?? null;
-                    }
-                } catch (error) {
-                    console.error('Error resolving organization_id:', error);
-                }
-
-                if (!organizationId) {
-                    throw new Error(
-                        'Failed to resolve organization_id from document context',
-                    );
                 }
 
                 const newRequirementData = {
@@ -685,10 +1145,28 @@ export const useRequirementActions = ({
             }
 
             return savedRequirement;
-            // Note: removed unreachable console.log below
-            // console.log('🎉 STEP 5: saveRequirement completed successfully');
         } catch (error) {
-            console.error('❌ STEP 5: Error saving requirement:', error);
+            // Improved error logging with full details
+            const errorDetails: Record<string, unknown> = {
+                message: error instanceof Error ? error.message : String(error),
+                name: error instanceof Error ? error.name : typeof error,
+                stack: error instanceof Error ? error.stack : undefined,
+            };
+
+            // If it's a Supabase/Postgres error, include code and details
+            if (error && typeof error === 'object' && 'code' in error) {
+                errorDetails.code = (error as Record<string, unknown>).code;
+                errorDetails.details = (error as Record<string, unknown>).details;
+                errorDetails.hint = (error as Record<string, unknown>).hint;
+            }
+
+            console.error(
+                '[save_debug][post_paste] ❌ STEP 5: Error saving requirement:',
+                {
+                    ...errorDetails,
+                    rawError: error,
+                },
+            );
             throw error;
         }
     };

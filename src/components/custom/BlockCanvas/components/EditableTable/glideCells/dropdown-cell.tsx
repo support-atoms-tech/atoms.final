@@ -28,6 +28,8 @@ interface DropdownCellProps {
     readonly kind: 'dropdown-cell' | 'dropdown-cell-fixed';
     readonly value: string | undefined | null;
     readonly allowedValues: readonly DropdownOption[];
+    readonly isStatusPriorityInvalid?: boolean;
+    readonly rawValue?: string;
 }
 
 export type DropdownCell = CustomCell<DropdownCellProps>;
@@ -206,17 +208,23 @@ const renderer: CustomRenderer<DropdownCell> = {
     },
     draw: (args, cell) => {
         const { ctx, theme, rect } = args;
-        const { value } = cell.data;
+        const { value, isStatusPriorityInvalid, rawValue } = cell.data;
         const foundOption = cell.data.allowedValues.find((opt) => {
             if (typeof opt === 'string' || opt === null || opt === undefined) {
                 return opt === value;
             }
             return (opt as { value: string }).value === value;
         });
-        const displayText =
+        let displayText =
             typeof foundOption === 'string'
                 ? (foundOption as string)
                 : ((foundOption as any)?.label ?? '');
+
+        // For invalid Status/Priority selects, always show the raw stored value
+        if (isStatusPriorityInvalid && !displayText) {
+            displayText = (rawValue ?? (value as string) ?? '') || '';
+        }
+
         if (displayText) {
             (ctx as CanvasRenderingContext2D).fillStyle = (theme as any).textDark;
             (ctx as CanvasRenderingContext2D).fillText(
@@ -224,6 +232,28 @@ const renderer: CustomRenderer<DropdownCell> = {
                 rect.x + (theme as any).cellHorizontalPadding,
                 rect.y + rect.height / 2 + getMiddleCenterBias(ctx as any, theme as any),
             );
+        }
+
+        // Persistent red triangle indicator for invalid Status/Priority cells
+        if (isStatusPriorityInvalid) {
+            const triSize = Math.min(rect.width, rect.height) * 0.3;
+            const size = Math.min(triSize, 8);
+            (ctx as CanvasRenderingContext2D).fillStyle = '#ef4444'; // Tailwind red-500
+            (ctx as CanvasRenderingContext2D).beginPath();
+            (ctx as CanvasRenderingContext2D).moveTo(
+                rect.x + rect.width,
+                rect.y + rect.height,
+            );
+            (ctx as CanvasRenderingContext2D).lineTo(
+                rect.x + rect.width - size,
+                rect.y + rect.height,
+            );
+            (ctx as CanvasRenderingContext2D).lineTo(
+                rect.x + rect.width,
+                rect.y + rect.height - size,
+            );
+            (ctx as CanvasRenderingContext2D).closePath();
+            (ctx as CanvasRenderingContext2D).fill();
         }
         return true;
     },

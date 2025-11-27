@@ -69,6 +69,168 @@ const isSystemColumn = (columnHeader: string): boolean => {
     return SYSTEM_COLUMNS.includes(columnHeader.toLowerCase());
 };
 
+// valid values for Status / Priority select columns
+const STATUS_VALID_VALUES: readonly string[] = [
+    'draft',
+    'in_review',
+    'approved',
+    'rejected',
+    'archived',
+    'active',
+    'deleted',
+];
+
+const PRIORITY_VALID_VALUES: readonly string[] = ['low', 'high', 'medium', 'critical'];
+
+type StatusOrPriorityKind = 'status' | 'priority';
+
+const normalizeColumnKey = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    return value.trim().toLowerCase();
+};
+
+const detectStatusOrPriorityColumn = <T extends BaseRow>(
+    column: EditableColumn<T> | undefined,
+): StatusOrPriorityKind | null => {
+    if (!column) return null;
+
+    const keys: string[] = [];
+    keys.push(normalizeColumnKey(column.header));
+    keys.push(normalizeColumnKey(String(column.accessor)));
+
+    for (const key of keys) {
+        const stripped = key.replace(/_/g, '');
+        if (stripped === 'status') return 'status';
+        if (stripped === 'priority') return 'priority';
+    }
+    return null;
+};
+
+const isValidStatusOrPriorityStrict = (
+    kind: StatusOrPriorityKind,
+    raw: unknown,
+): boolean => {
+    if (raw == null) return false;
+    const v = typeof raw === 'string' ? raw : String(raw);
+    if (!v) return false;
+
+    const allowed = kind === 'status' ? STATUS_VALID_VALUES : PRIORITY_VALID_VALUES;
+    return allowed.includes(v as any);
+};
+
+// Legacy function kept for compatibility
+const isValidStatusOrPriority = (kind: StatusOrPriorityKind, raw: unknown): boolean => {
+    const v = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+    const normalized = v.trim().toLowerCase();
+    if (!normalized) return true;
+
+    const allowed = kind === 'status' ? STATUS_VALID_VALUES : PRIORITY_VALID_VALUES;
+    return allowed.includes(normalized);
+};
+
+// Helper to detect the Links column
+const isLinksColumn = <T extends BaseRow>(column: EditableColumn<T>): boolean => {
+    if (!column) return false;
+
+    const identifiers: string[] = [];
+
+    const pushIdentifier = (value: unknown) => {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed.length > 0) {
+                identifiers.push(trimmed.toLowerCase());
+            }
+        }
+    };
+
+    // Known fields on EditableColumn
+    pushIdentifier(column.id);
+    pushIdentifier(column.header);
+    pushIdentifier(String(column.accessor));
+    pushIdentifier(column.propertyId);
+
+    const maybeAnyColumn = column as any;
+    pushIdentifier(maybeAnyColumn.name);
+    pushIdentifier(maybeAnyColumn.title);
+    pushIdentifier(maybeAnyColumn.originalKey);
+    pushIdentifier(maybeAnyColumn.propertyKey);
+    pushIdentifier(maybeAnyColumn.key);
+
+    for (const id of identifiers) {
+        const stripped = id.replace(/_/g, '');
+
+        if (
+            id === 'links' ||
+            id === '__links__' ||
+            id === '__system_links__' ||
+            id.includes('links') ||
+            id.includes('trace') ||
+            id.includes('relationship') ||
+            stripped === 'links'
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+// Find the next non-Links column index starting at startIndex
+const findNextNonLinksColumn = <T extends BaseRow>(
+    startIndex: number,
+    columns: Array<EditableColumn<T>>,
+): number | null => {
+    if (!Array.isArray(columns) || columns.length === 0) return null;
+
+    for (let i = startIndex; i < columns.length; i++) {
+        const col = columns[i];
+        if (!col) continue;
+        if (!isLinksColumn(col)) {
+            return i;
+        }
+    }
+
+    return null;
+};
+
+const isExpectedResultColumn = <T extends BaseRow>(
+    column: EditableColumn<T>,
+): boolean => {
+    if (!column) return false;
+
+    const identifiers: string[] = [];
+
+    const pushIdentifier = (value: unknown) => {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed.length > 0) {
+                identifiers.push(trimmed.toLowerCase());
+            }
+        }
+    };
+
+    pushIdentifier(column.id);
+    pushIdentifier(column.header);
+    pushIdentifier(String(column.accessor));
+    pushIdentifier(column.propertyId);
+
+    const maybeAnyColumn = column as any;
+    pushIdentifier(maybeAnyColumn.name);
+    pushIdentifier(maybeAnyColumn.title);
+    pushIdentifier(maybeAnyColumn.originalKey);
+    pushIdentifier(maybeAnyColumn.propertyKey);
+    pushIdentifier(maybeAnyColumn.key);
+
+    for (const id of identifiers) {
+        const stripped = id.replace(/_/g, '');
+        if (stripped === 'expectedresult') {
+            return true;
+        }
+    }
+
+    return false;
+};
+
 export function GlideEditableTable<T extends BaseRow = BaseRow>(
     props: GlideTableProps<T>,
 ) {
@@ -94,6 +256,16 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
     const [selection, setSelection] = useState<GridSelection | undefined>(undefined);
     const selectionRef = useRef<GridSelection | undefined>(undefined);
+
+    // Track dynamic columns created during paste that are pending server/metadata sync
+    const dynamicColumnsPendingSyncRef = useRef<Set<string>>(new Set());
+
+    // Track post-paste stabilization period to prevent structural sync from removing dynamic columns
+    const [isPostPasteStabilizing, setIsPostPasteStabilizing] = useState(false);
+    const postPasteStabilizationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Track the last paste operation that created dynamic columns to guard structural sync
+    const lastDynamicPasteOperationRef = useRef<string | null>(null);
 
     type PasteState = {
         isPasting: boolean;
@@ -142,6 +314,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             if (blockId) {
                 pasteStateMapRef.current.delete(blockId);
             }
+            // Cleanup post-paste stabilization timeout
+            if (postPasteStabilizationTimeoutRef.current) {
+                clearTimeout(postPasteStabilizationTimeoutRef.current);
+                postPasteStabilizationTimeoutRef.current = null;
+            }
         };
     }, [blockId]);
 
@@ -159,6 +336,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     const isSavingRef = useRef(false);
     const deletedRowIdsRef = useRef<Set<string>>(new Set());
     const deletedColumnIdsRef = useRef<Set<string>>(new Set());
+
+    // Track which invalid Status/Priority cells have already been logged on render
+    const invalidRenderLoggedCellsRef = useRef<Set<string>>(new Set());
 
     const { profile } = useUser();
     const userId = profile?.id;
@@ -193,7 +373,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
     const refreshAfterSave = useCallback(
         async (skipIfPasting: boolean = false) => {
-            // Prevent premature refresh during paste operations
+            // Prevent refresh during paste operations
             if (skipIfPasting) {
                 const pasteState = getPasteState();
                 if (pasteState.isPasting || pasteState.pasteOperationActive) {
@@ -294,6 +474,21 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             return;
         }
 
+        const pasteState = getPasteState();
+        console.debug('[post_paste_save] handleSaveAll called', {
+            isPasting: pasteState.isPasting,
+            pasteOperationActive: pasteState.pasteOperationActive,
+            isPostPasteStabilizing,
+            editingDataSize: Object.keys(editingDataRef.current).length,
+        });
+
+        if (pasteState.isPasting || pasteState.pasteOperationActive) {
+            console.debug(
+                '[post_paste_save] Skipping handleSaveAll - paste operation in progress',
+            );
+            return;
+        }
+
         isSavingRef.current = true;
 
         try {
@@ -333,7 +528,24 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             await new Promise((r) => setTimeout(r, 250));
             setEditingData({});
         } catch (error) {
-            console.error('[handleSaveAll] Error:', error);
+            // Improved error logging
+            const errorDetails: any = {
+                message: error instanceof Error ? error.message : String(error),
+                name: error instanceof Error ? error.name : typeof error,
+                stack: error instanceof Error ? error.stack : undefined,
+            };
+
+            if (error && typeof error === 'object' && 'code' in error) {
+                errorDetails.code = (error as any).code;
+                errorDetails.details = (error as any).details;
+                errorDetails.hint = (error as any).hint;
+            }
+
+            console.error('[post_paste_save][handleSaveAll] Error:', {
+                ...errorDetails,
+                rawError: error,
+                isPostPasteStabilizing,
+            });
         } finally {
             isSavingRef.current = false;
         }
@@ -379,7 +591,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     const documentId = params?.documentId || '';
 
     if (!orgId) {
-        console.error('Project ID is missing from the URL.');
+        console.error('Org ID is missing from the URL.');
     }
 
     if (!projectId) {
@@ -387,7 +599,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     }
 
     if (!documentId) {
-        console.error('Project ID is missing from the URL.');
+        console.error('Doc ID is missing from the URL.');
     }
 
     // Real-time broadcast for concurrent editing (always enabled to receive updates)
@@ -637,7 +849,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     useEffect(() => {
         if (!blockId || pendingCellUpdates.size === 0) return;
 
-        console.log('[GlideEditableTable] 🔄 Processing pending cell updates:', {
+        console.log('[GlideEditableTable] Processing pending cell updates:', {
             blockId,
             updatesCount: pendingCellUpdates.size,
             updates: Array.from(pendingCellUpdates.values()),
@@ -651,7 +863,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 // Only apply updates for this block
                 if (update.blockId !== blockId) {
                     console.log(
-                        '[GlideEditableTable] ⏭️ Skipping update for different block:',
+                        '[GlideEditableTable] Skipping update for different block:',
                         {
                             updateBlockId: update.blockId,
                             currentBlockId: blockId,
@@ -662,7 +874,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
                 const rowIndex = updatedData.findIndex((row) => row.id === update.rowId);
                 if (rowIndex === -1) {
-                    console.log('[GlideEditableTable] ⚠️ Row not found:', update.rowId);
+                    console.log('[GlideEditableTable] Row not found:', update.rowId);
                     return;
                 }
 
@@ -672,7 +884,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 );
                 if (!column) {
                     console.log(
-                        '[GlideEditableTable] ⚠️ Column not found:',
+                        '[GlideEditableTable] Column not found:',
                         update.columnId,
                     );
                     return;
@@ -681,7 +893,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 // Apply the update
                 const currentValue = updatedData[rowIndex][column.accessor];
                 if (currentValue !== update.value) {
-                    console.log('[GlideEditableTable] ✨ Applying cell update to UI:', {
+                    console.log('[GlideEditableTable] Applying cell update to UI:', {
                         rowId: update.rowId,
                         column: column.accessor,
                         oldValue: currentValue,
@@ -696,7 +908,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             });
 
             if (hasChanges) {
-                console.log('[GlideEditableTable] ✅ UI updated with remote changes');
+                console.log('[GlideEditableTable] UI updated with remote changes');
             }
 
             return hasChanges ? updatedData : prevData;
@@ -705,26 +917,34 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
     const [localData, setLocalData] = useState<T[]>(() => [...data]);
 
+    // Ref to track localData for immediate updates (bypassing React state batching)
+    const localDataRef = useRef<T[]>(localData);
+    useEffect(() => {
+        localDataRef.current = localData;
+    }, [localData]);
+
     const [colSizes, setColSizes] = useState<Partial<Record<keyof T, number>>>({});
 
-    const columnDefs: GridColumn[] = useMemo(
-        () =>
-            localColumns.map((col, idx) => ({
-                title: col.title,
-                width: colSizes[col.accessor] || col.width || 120,
-                hasMenu: true,
-                menuIcon: 'dots',
-                trailingRowOptions:
-                    idx === 0
-                        ? {
-                              hint: 'Add Row',
-                              addIcon: 'plus',
-                              targetColumn: 0,
-                          }
-                        : undefined,
-            })),
-        [localColumns, colSizes],
-    );
+    const columnDefs: GridColumn[] = useMemo(() => {
+        const visibleColumns = localColumns.filter(
+            (col) => !isExpectedResultColumn(col as unknown as EditableColumn<BaseRow>),
+        );
+
+        return visibleColumns.map((col, idx) => ({
+            title: col.title,
+            width: colSizes[col.accessor] || col.width || 120,
+            hasMenu: true,
+            menuIcon: 'dots',
+            trailingRowOptions:
+                idx === 0
+                    ? {
+                          hint: 'Add Row',
+                          addIcon: 'plus',
+                          targetColumn: 0,
+                      }
+                    : undefined,
+        }));
+    }, [localColumns, colSizes]);
 
     const sortedData = useMemo(() => {
         return [...localData]
@@ -987,29 +1207,117 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         }
     }, [columns, data]);
 
-    // Create a stable reference for column IDs and positions to detect changes
-    const columnSignature = useMemo(() => {
-        return columns
-            .map((c) => `${c.id}:${c.position ?? 0}`)
-            .sort()
-            .join(',');
-    }, [columns]);
-
     useEffect(() => {
         // Use a ref to get the current localColumns without including it in dependencies
         const currentLocalColumns = localColumnsRef.current;
+
+        // 2. Strengthen structural sync guard - check stabilization mode first
+        if (isPostPasteStabilizing) {
+            // 3. Ensure stabilization clears ONLY when props catch up
+            const incomingFiltered = columns.filter(
+                (col) =>
+                    !isExpectedResultColumn(col as unknown as EditableColumn<BaseRow>),
+            );
+            const currentLocalCount = currentLocalColumns.length;
+            const incomingCount = incomingFiltered.length;
+
+            if (incomingCount >= currentLocalCount && isPostPasteStabilizing) {
+                // Columns have caught up, clear stabilization
+                console.debug(
+                    '[post_paste_sync] Clearing stabilization — props caught up',
+                    {
+                        incomingCount,
+                        localCount: currentLocalCount,
+                    },
+                );
+                if (postPasteStabilizationTimeoutRef.current) {
+                    clearTimeout(postPasteStabilizationTimeoutRef.current);
+                    postPasteStabilizationTimeoutRef.current = null;
+                }
+                setIsPostPasteStabilizing(false);
+                // Continue with normal sync now that props have caught up
+            } else {
+                // Props haven't caught up yet, skip sync entirely
+                console.debug(
+                    '[DYNAMIC-COLS] Skipping structural sync during stabilization',
+                    {
+                        incomingCount,
+                        localCount: currentLocalCount,
+                    },
+                );
+                return; // Prevents any sync or removal from happening
+            }
+        }
+
+        // Additional guard for paste operations
+        const pasteState = getPasteState();
+        if (pasteState.isPasting || pasteState.pasteOperationActive) {
+            console.debug(
+                '[DYNAMIC-COLS] Skipping structural sync during paste operation',
+                {
+                    isPasting: pasteState.isPasting,
+                    pasteOperationActive: pasteState.pasteOperationActive,
+                },
+            );
+            return; // Prevents columns from being overwritten
+        }
+
         if (localColumns.length === 0 && columns.length > 0) {
-            const normalized = columns.map((col) => {
+            const filteredIncoming = columns.filter(
+                (col) =>
+                    !isExpectedResultColumn(col as unknown as EditableColumn<BaseRow>),
+            );
+
+            const normalized = filteredIncoming.map((col) => {
+                const accessorStr = String(col.accessor);
+                if (
+                    accessorStr.startsWith('column_') ||
+                    accessorStr.startsWith('temp-')
+                ) {
+                    return col;
+                }
+
                 // Check if metadata has a renamed header for this column
                 const metadataCol = tableMetadata?.columns?.find(
                     (mc) => mc.columnId === col.id,
                 );
                 const headerToUse = ((metadataCol as any)?.name || col.header) as string;
 
+                // Ensure Status/Priority accessors are lowercase to match DB fields
+                let accessorToUse = col.accessor;
+                const sysKind = detectStatusOrPriorityColumn(
+                    col as unknown as EditableColumn<BaseRow>,
+                );
+                if (sysKind === 'status') {
+                    accessorToUse = 'status' as keyof T;
+                } else if (sysKind === 'priority') {
+                    accessorToUse = 'priority' as keyof T;
+                }
+
+                if (sysKind) {
+                    try {
+                        console.log('FixAccessor', {
+                            header: headerToUse,
+                            accessor: String(accessorToUse),
+                        });
+                    } catch {
+                        // swallow any debug errors
+                    }
+                }
+
+                console.debug('DEBUG-COL-SCAN', {
+                    header: headerToUse,
+                    accessor: String(accessorToUse),
+                    columnId: col.id,
+                    name: (col as any).name,
+                    position: col.position,
+                });
+
                 return {
                     ...col,
                     header: headerToUse, // Use metadata header if available
                     title: headerToUse,
+                    accessor: accessorToUse,
                 };
             });
             const sorted = [...normalized].sort(
@@ -1019,11 +1327,110 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             return;
         }
 
-        const localIds = new Set(currentLocalColumns.map((c) => c.id));
-        const incomingIds = new Set(columns.map((c) => c.id));
+        const incomingFiltered = columns.filter(
+            (col) => !isExpectedResultColumn(col as unknown as EditableColumn<BaseRow>),
+        );
+        // Normalize Status/Priority accessors to lowercase for incoming columns
+        const incomingNormalized = incomingFiltered.map((col) => {
+            const accessorStr = String(col.accessor);
+            if (accessorStr.startsWith('column_') || accessorStr.startsWith('temp-')) {
+                return col;
+            }
 
-        const hasNewColumns = [...incomingIds].some((id) => !localIds.has(id));
-        const hasRemovedColumns = [...localIds].some((id) => !incomingIds.has(id));
+            let accessorToUse = col.accessor;
+            const sysKind = detectStatusOrPriorityColumn(
+                col as unknown as EditableColumn<BaseRow>,
+            );
+            if (sysKind === 'status') {
+                accessorToUse = 'status' as keyof T;
+            } else if (sysKind === 'priority') {
+                accessorToUse = 'priority' as keyof T;
+            }
+
+            if (sysKind) {
+                try {
+                    console.log('FixAccessor', {
+                        header: col.header,
+                        accessor: String(accessorToUse),
+                    });
+                } catch {
+                    // swallow any debug errors
+                }
+            }
+
+            return {
+                ...col,
+                accessor: accessorToUse,
+            };
+        });
+
+        const localIds = new Set(currentLocalColumns.map((c) => c.id));
+        const incomingIds = new Set(incomingNormalized.map((c) => c.id));
+
+        // Clear any dynamic columns that have been confirmed by incoming props
+        if (dynamicColumnsPendingSyncRef.current.size > 0) {
+            const pending = dynamicColumnsPendingSyncRef.current;
+            const toClear: string[] = [];
+            pending.forEach((id) => {
+                if (incomingIds.has(id)) {
+                    toClear.push(id);
+                }
+            });
+            if (toClear.length > 0) {
+                toClear.forEach((id) => pending.delete(id));
+            }
+
+            // If all dynamic columns are now confirmed, clear the dynamic paste operation tracking
+            if (pending.size === 0 && lastDynamicPasteOperationRef.current !== null) {
+                console.debug(
+                    '[structural_sync_guard] All dynamic columns confirmed, clearing dynamic paste operation tracking',
+                );
+                lastDynamicPasteOperationRef.current = null;
+            }
+        }
+
+        const rawHasNewColumns = [...incomingIds].some((id) => !localIds.has(id));
+        const rawRemovedLocalIds = [...localIds].filter((id) => !incomingIds.has(id));
+
+        const effectiveRemovedLocalIds =
+            dynamicColumnsPendingSyncRef.current.size > 0
+                ? rawRemovedLocalIds.filter(
+                      (id) => !dynamicColumnsPendingSyncRef.current.has(id),
+                  )
+                : rawRemovedLocalIds;
+
+        const hasNewColumns = rawHasNewColumns;
+
+        const pasteStateForRemoval = getPasteState();
+        const hasJustCreatedDynamicColumns =
+            lastDynamicPasteOperationRef.current !== null;
+        const shouldSkipRemovalDueToDynamicPaste =
+            hasJustCreatedDynamicColumns &&
+            incomingFiltered.length < currentLocalColumns.length &&
+            dynamicColumnsPendingSyncRef.current.size > 0;
+
+        const hasRemovedColumns =
+            !pasteStateForRemoval.isPasting &&
+            !pasteStateForRemoval.pasteOperationActive &&
+            !isPostPasteStabilizing &&
+            !shouldSkipRemovalDueToDynamicPaste &&
+            incomingFiltered.length < currentLocalColumns.length &&
+            currentLocalColumns.some(
+                (localCol) =>
+                    !incomingNormalized.some((incoming) => incoming.id === localCol.id),
+            );
+
+        if (shouldSkipRemovalDueToDynamicPaste) {
+            console.debug(
+                '[structural_sync_guard] Skipping column removal - dynamic columns just created, waiting for parent props update',
+                {
+                    localCount: currentLocalColumns.length,
+                    incomingCount: incomingFiltered.length,
+                    pendingDynamicColumns: dynamicColumnsPendingSyncRef.current.size,
+                    lastDynamicPasteOperation: lastDynamicPasteOperationRef.current,
+                },
+            );
+        }
 
         if (hasNewColumns || hasRemovedColumns) {
             console.log(
@@ -1032,13 +1439,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     hasNewColumns,
                     hasRemovedColumns,
                     localCount: currentLocalColumns.length,
-                    incomingCount: columns.length,
+                    incomingCount: incomingFiltered.length,
                 },
             );
 
-            // Map local columns by ID for comparison
-            const localColumnsMap = new Map(localColumns.map((c) => [c.id, c]));
-            const incomingColumnsMap = new Map(columns.map((c) => [c.id, c]));
+            const incomingColumnsMap = new Map(incomingNormalized.map((c) => [c.id, c]));
 
             // Check for renamed columns
             const renamedColumns: Array<{
@@ -1067,7 +1472,12 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }
             });
 
-            const normalized = columns.map((col) => {
+            const filteredIncoming = columns.filter(
+                (col) =>
+                    !isExpectedResultColumn(col as unknown as EditableColumn<BaseRow>),
+            );
+
+            const normalized = filteredIncoming.map((col) => {
                 const localCol = localColumns.find((lc) => lc.id === col.id);
                 const metadataCol = tableMetadata?.columns?.find(
                     (mc) => mc.columnId === col.id,
@@ -1132,10 +1542,27 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }
             });
 
-            setLocalColumns(sorted as typeof localColumns);
+            // Prevent resetting columns if dynamic ones were just created during paste or stabilization
+            const pasteStateForReset = getPasteState();
+            if (
+                !pasteStateForReset.isPasting &&
+                !pasteStateForReset.pasteOperationActive &&
+                !isPostPasteStabilizing
+            ) {
+                setLocalColumns(sorted as typeof localColumns);
+                localColumnsRef.current = sorted as typeof localColumnsRef.current;
+            } else {
+                console.debug(
+                    '[DYNAMIC-COLS] Prevent overwrite of dynamic columns during paste/post-paste stabilization',
+                    {
+                        isPasting: pasteStateForReset.isPasting,
+                        pasteOperationActive: pasteStateForReset.pasteOperationActive,
+                        isPostPasteStabilizing,
+                    },
+                );
+            }
         }
-        // }, [columnSignature, columns]);
-    }, [columns.length, tableMetadata]);
+    }, [columns.length, tableMetadata, isPostPasteStabilizing, getPasteState]);
 
     const isReorderingRef = useRef(false);
 
@@ -1168,7 +1595,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     return prev;
                 }
 
-                // Quick check: if arrays are same length and same IDs in same order, check for actual data changes
+                // if arrays are same length and same IDs in same order, check for actual data changes
                 const sameLength = data.length === prev.length;
                 const sameIds =
                     sameLength &&
@@ -1177,8 +1604,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         return localRow && row.id === localRow.id;
                     });
 
-                // If same IDs, do deep comparison to see if any requirement data actually changed
-                // This prevents sync spam when only block metadata changes (not requirements)
+                // This prevents sync spam when only block metadata changes
                 if (sameIds && sameLength) {
                     const hasDataChanges = data.some((row, index) => {
                         const localRow = prev[index];
@@ -1200,11 +1626,55 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
                 const pendingEdits = editingDataRef.current || {};
                 const hasPendingEdits = Object.keys(pendingEdits).length > 0;
-                const mergedFromServerOrder = data.map((row) =>
-                    pendingEdits[row.id]
-                        ? ({ ...row, ...(pendingEdits[row.id] as Partial<T>) } as T)
-                        : row,
-                );
+                const mergedFromServerOrder = data.map((row) => {
+                    // prevent invalid Status/Priority values from being written to natural fields
+                    const sanitizedRow = { ...row };
+
+                    for (const kind of ['status', 'priority'] as const) {
+                        const naturalKey = kind;
+                        const naturalValue = (sanitizedRow as any)[naturalKey];
+
+                        const propsValue =
+                            (sanitizedRow as any).properties?.[kind]?.value ??
+                            naturalValue ??
+                            null;
+
+                        const isValid = isValidStatusOrPriority(kind, propsValue);
+
+                        if (!isValid && propsValue) {
+                            // Remove invalid value from natural field
+                            if ((sanitizedRow as any)[naturalKey] !== undefined) {
+                                delete (sanitizedRow as any)[naturalKey];
+                            }
+
+                            // Ensure invalid value is stored only in properties
+                            if (!sanitizedRow.properties) {
+                                (sanitizedRow as any).properties = {};
+                            }
+                            const props = sanitizedRow.properties as Record<string, any>;
+                            props[kind] = {
+                                key: kind,
+                                type: 'select',
+                                value: propsValue,
+                                position: 0,
+                            };
+
+                            console.debug('[FixAccessor-block-invalid]', {
+                                kind,
+                                accessor: naturalKey,
+                                value: propsValue,
+                            });
+                        }
+                    }
+
+                    // Apply pending edits after sanitization
+                    return pendingEdits[sanitizedRow.id]
+                        ? ({
+                              ...sanitizedRow,
+                              ...(pendingEdits[sanitizedRow.id] as Partial<T>),
+                          } as T)
+                        : sanitizedRow;
+                });
 
                 const sameIdSet = (() => {
                     if (data.length !== prev.length) return false;
@@ -1486,8 +1956,69 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     } as GridCell;
                 }
                 case 'select': {
-                    const stringValue = typeof value === 'string' ? value : '';
+                    const kind = detectStatusOrPriorityColumn(
+                        column as EditableColumn<T>,
+                    );
+                    let stringValue = typeof value === 'string' ? value : '';
                     const options = columnOptions;
+
+                    // For Status/Priority: check if DB value is valid, if not check properties
+                    if (kind != null) {
+                        const dbValueValid = isValidStatusOrPriority(kind, stringValue);
+                        if (!dbValueValid) {
+                            // Check properties for invalid value override
+                            const props =
+                                (rowData as any).properties &&
+                                typeof (rowData as any).properties === 'object'
+                                    ? ((rowData as any).properties as Record<
+                                          string,
+                                          unknown
+                                      >)
+                                    : null;
+                            if (props && props[kind]) {
+                                const propEntry = props[kind] as
+                                    | { value?: unknown }
+                                    | null
+                                    | undefined;
+                                if (
+                                    propEntry &&
+                                    typeof propEntry === 'object' &&
+                                    'value' in propEntry
+                                ) {
+                                    const propValue = propEntry.value;
+                                    if (typeof propValue === 'string' && propValue) {
+                                        stringValue = propValue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    const isInvalid =
+                        kind != null && !isValidStatusOrPriority(kind, stringValue);
+
+                    if (isInvalid) {
+                        const key = `${kind}:${String(column.accessor)}:${rowData.id}:${
+                            stringValue ?? ''
+                        }`;
+                        if (!invalidRenderLoggedCellsRef.current.has(key)) {
+                            invalidRenderLoggedCellsRef.current.add(key);
+                            try {
+                                console.log(
+                                    'InvalidInputs: render invalid Status/Priority cell',
+                                    {
+                                        kind,
+                                        header: column.header,
+                                        accessor: String(column.accessor),
+                                        rowId: rowData.id,
+                                        value: stringValue,
+                                    },
+                                );
+                            } catch {
+                                // swallow any debug errors
+                            }
+                        }
+                    }
 
                     return {
                         kind: GridCellKind.Custom,
@@ -1497,6 +2028,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             kind: 'dropdown-cell',
                             value: stringValue,
                             allowedValues: options,
+                            // flags only used by dropdown renderer for visual indicator
+                            isStatusPriorityInvalid: isInvalid || undefined,
+                            rawValue: stringValue,
                         },
                     } as GridCell;
                 }
@@ -1583,9 +2117,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             // Ignore edits during paste for this table instance
             const pasteState = getPasteState();
             if (pasteState.isPasting) {
-                console.debug(
-                    `[onCellEdited] Ignoring during paste for table ${blockId || 'default'}`,
-                );
                 return;
             }
 
@@ -1616,14 +2147,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 const newValueStr = newValue.data;
                 const originalValue = rowData?.[accessor];
                 if ((originalValue ?? '').toString() === (newValueStr ?? '')) return;
-
-                console.debug('[onCellEdited] Text cell update', {
-                    rowIndex,
-                    rowId,
-                    accessor: String(accessor),
-                    old: originalValue,
-                    new: newValueStr,
-                });
 
                 // Broadcast cell update immediately for real-time collaboration
                 if (blockId && column.id) {
@@ -1665,12 +2188,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             // Handle built-in Number cells
             else if (newValue.kind === GridCellKind.Number) {
                 const numVal = (newValue as any).data as number | null;
-                console.debug('[onCellEdited] Number cell update', {
-                    rowIndex,
-                    rowId,
-                    accessor: String(accessor),
-                    value: numVal,
-                });
 
                 // Broadcast cell update immediately for real-time collaboration
                 if (blockId && column.id) {
@@ -1698,12 +2215,134 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 const kind = data?.kind as string | undefined;
                 if (kind === 'dropdown-cell' || kind === 'dropdown-cell-fixed') {
                     const displayValue = (data?.value ?? '').toString();
-                    console.debug('[onCellEdited] Dropdown cell update', {
-                        rowIndex,
-                        rowId,
-                        accessor: String(accessor),
-                        value: displayValue,
-                    });
+
+                    // For Status/Priority: route to real column or properties based on validity
+                    const sysKind = detectStatusOrPriorityColumn(
+                        column as EditableColumn<T>,
+                    );
+                    const realAccessor =
+                        sysKind != null
+                            ? String(accessor).toLowerCase()
+                            : String(accessor);
+
+                    if (sysKind != null) {
+                        // Use strict exact-match validation for dropdown selections
+                        const allowed =
+                            sysKind === 'status'
+                                ? STATUS_VALID_VALUES
+                                : PRIORITY_VALID_VALUES;
+                        const isExactMatch =
+                            displayValue && allowed.includes(displayValue as any);
+                        const previousRaw = rowData?.[realAccessor as keyof T];
+                        const wasValid =
+                            previousRaw && allowed.includes(previousRaw as any);
+
+                        // Log when invalid value becomes valid or when dropdown selection happens
+                        if (isExactMatch) {
+                            if (!wasValid) {
+                                console.log(
+                                    `[Dropdown] Corrected invalid ${sysKind} to valid: "${displayValue}"`,
+                                );
+                            } else {
+                                console.log(
+                                    `[Dropdown] Selected valid ${sysKind}: "${displayValue}"`,
+                                );
+                            }
+                        } else if (displayValue) {
+                            console.log(
+                                `[Dropdown] Invalid ${sysKind} value entered: "${displayValue}"`,
+                            );
+                        }
+
+                        // Compute updated row first
+                        const currentRow = sortedData.find((r) => r.id === rowId);
+                        if (!currentRow) return;
+
+                        const updated = { ...currentRow } as T;
+                        if (isExactMatch && displayValue) {
+                            // Valid exact match: convert to lowercase before saving
+                            const lowercasedValue = String(displayValue)
+                                .trim()
+                                .toLowerCase();
+                            // Valid value: write to real column AND to properties (JSONB is source of truth)
+                            (updated as any)[realAccessor] = lowercasedValue;
+
+                            // Also save to properties so JSONB is always the source of truth
+                            if (
+                                !(updated as any).properties ||
+                                typeof (updated as any).properties !== 'object'
+                            ) {
+                                (updated as any).properties = {};
+                            }
+                            const props = (updated as any).properties as Record<
+                                string,
+                                unknown
+                            >;
+                            props[sysKind] = {
+                                key: sysKind,
+                                type: 'select',
+                                value: lowercasedValue,
+                                position: column.position ?? 0,
+                            };
+                        } else if (displayValue) {
+                            // Invalid value: store in properties, don't touch real column
+                            if (
+                                !(updated as any).properties ||
+                                typeof (updated as any).properties !== 'object'
+                            ) {
+                                (updated as any).properties = {};
+                            }
+                            const props = (updated as any).properties as Record<
+                                string,
+                                unknown
+                            >;
+                            props[sysKind] = {
+                                key: sysKind,
+                                type: 'select',
+                                value: displayValue,
+                                position: column.position ?? 0,
+                            };
+                        }
+
+                        // Update local data with the computed updated row
+                        setLocalData((prev) =>
+                            prev.map((r) => (r.id === rowId ? updated : r)),
+                        );
+
+                        // Update editing buffer with the value (for display purposes)
+                        // Use lowercased value if valid, raw value if invalid
+                        const valueForEditing =
+                            isExactMatch && displayValue
+                                ? String(displayValue).trim().toLowerCase()
+                                : displayValue;
+                        setEditingData((prev) => ({
+                            ...prev,
+                            [rowId]: {
+                                ...(prev[rowId] ?? {}),
+                                [realAccessor]: valueForEditing,
+                            },
+                        }));
+
+                        // Trigger save for Status/Priority dropdown changes
+                        if (onSave) {
+                            const isNew =
+                                !updated.id || updated.id.toString().startsWith('temp-');
+                            void saveRow(updated, isNew, { blockId });
+                        }
+                    } else {
+                        // Non Status/Priority: normal behavior
+                        setLocalData((prev) =>
+                            prev.map((r) =>
+                                r.id === rowId
+                                    ? ({ ...r, [accessor]: displayValue } as T)
+                                    : r,
+                            ),
+                        );
+                        setEditingData((prev) => ({
+                            ...prev,
+                            [rowId]: { ...(prev[rowId] ?? {}), [accessor]: displayValue },
+                        }));
+                    }
 
                     // Broadcast cell update immediately for real-time collaboration
                     if (blockId && column.id) {
@@ -1714,28 +2353,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             value: displayValue,
                         });
                     }
-
-                    setLocalData((prev) =>
-                        prev.map((r) =>
-                            r.id === rowId
-                                ? ({ ...r, [accessor]: displayValue } as T)
-                                : r,
-                        ),
-                    );
-                    setEditingData((prev) => ({
-                        ...prev,
-                        [rowId]: { ...(prev[rowId] ?? {}), [accessor]: displayValue },
-                    }));
                 } else if (kind === 'multi-select-cell') {
                     const values: string[] = Array.isArray(data?.values)
                         ? (data.values as string[])
                         : [];
-                    console.debug('[onCellEdited] Multi-select cell update', {
-                        rowIndex,
-                        rowId,
-                        accessor: String(accessor),
-                        values,
-                    });
 
                     // Broadcast cell update immediately for real-time collaboration
                     if (blockId && column.id) {
@@ -2980,7 +3601,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             gridRef.current?.focus();
 
             const startCell: Item = target;
-            const startCol = Math.max(0, startCell[0]);
+            const rawStartCol = Math.max(0, startCell[0]);
             const startRow = Math.max(0, startCell[1]);
 
             // Convert cells array to clipboardRows format
@@ -3004,38 +3625,88 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             // declare at function scope for access in finally block
             let newRowsToCreate: T[] = [];
 
+            // We'll resolve the actual paste start column after we have the current columns
+            const currentData = [...sortedData];
+            const currentColumns = [...localColumnsRef.current];
+
+            // Debug column list before any paste processing
+            try {
+                const colAccessors = currentColumns.map((c) => String(c.accessor));
+                console.log('DEBUG-PASTE-COLLIST:', {
+                    operationId,
+                    accessors: colAccessors,
+                });
+            } catch {
+                // swallow any debug errors
+            }
+
+            const startColFinal = findNextNonLinksColumn(rawStartCol, currentColumns);
+            if (startColFinal === null) {
+                console.info(
+                    `[${operationId}] Paste aborted: no non-Links column found to the right of start index ${rawStartCol}`,
+                );
+                pasteState.isPasting = false;
+                pasteState.pasteOperationActive = false;
+                return false;
+            }
+
+            // Helper to compute paste target columns (skipping Links) based on clipboard width
+            const getPasteTargetColumns = (
+                columns: EditableColumn<T>[],
+                startColIndex: number,
+                clipboardWidth: number,
+            ): Array<{ column: EditableColumn<T>; columnIndex: number }> => {
+                const targets: Array<{ column: EditableColumn<T>; columnIndex: number }> =
+                    [];
+
+                for (
+                    let colIndex = startColIndex;
+                    colIndex < columns.length && targets.length < clipboardWidth;
+                    colIndex++
+                ) {
+                    const col = columns[colIndex];
+                    if (!col) continue;
+                    if (isLinksColumn(col)) {
+                        // Skip Links columns entirely
+                        continue;
+                    }
+                    targets.push({ column: col, columnIndex: colIndex });
+                }
+
+                return targets;
+            };
+
             // Store coordinates for reference (but don't clear selection yet)
-            pasteStartCol = startCol;
+            pasteStartCol = startColFinal;
             pasteStartRow = startRow;
             clipboardRowsForRestore = validClipboardRows;
             pasteEndCol =
                 validClipboardRows.length > 0
-                    ? startCol + Math.max(...validClipboardRows.map((r) => r.length)) - 1
-                    : startCol;
+                    ? startColFinal +
+                      Math.max(...validClipboardRows.map((r) => r.length)) -
+                      1
+                    : startColFinal;
             pasteEndRow = startRow + Math.max(0, validClipboardRows.length - 1);
 
             try {
                 // Store coordinates for reference (but don't clear selection yet)
-                pasteStartCol = startCol;
+                pasteStartCol = startColFinal;
                 pasteStartRow = startRow;
                 clipboardRowsForRestore = validClipboardRows;
                 pasteEndCol =
                     validClipboardRows.length > 0
-                        ? startCol +
+                        ? startColFinal +
                           Math.max(...validClipboardRows.map((r) => r.length)) -
                           1
-                        : startCol;
+                        : startColFinal;
                 pasteEndRow = startRow + Math.max(0, validClipboardRows.length - 1);
-
-                const currentData = [...sortedData];
-                const currentColumns = [...localColumnsRef.current];
 
                 // Calculate maximum columns needed from pasted data
                 const maxPastedColumns = Math.max(
                     0,
                     ...validClipboardRows.map((row) => row.length),
                 );
-                const maxTargetColumnIndex = startCol + maxPastedColumns - 1;
+                const maxTargetColumnIndex = startColFinal + maxPastedColumns - 1;
                 const columnsNeeded = maxTargetColumnIndex + 1;
 
                 // Dynamically create missing columns if pasted data exceeds existing columns
@@ -3056,7 +3727,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                 operationId,
                                 existingColumnCount,
                                 columnsNeeded,
-                                startColumn: startCol,
+                                startColumn: startColFinal,
                                 maxPastedColumns,
                             },
                         );
@@ -3108,6 +3779,31 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     }
                 }
 
+                // Debug dynamic column planning before placeholder insertion
+                try {
+                    console.log('DEBUG-PASTE-DYNAMIC:', {
+                        operationId,
+                        placeholderCount: newColumnsToCreate.length,
+                        newColumnsToCreate,
+                        finalColumnsLength:
+                            currentColumns.length + newColumnsToCreate.length,
+                    });
+
+                    // Track this operation as creating dynamic columns for structural sync guard
+                    if (newColumnsToCreate.length > 0) {
+                        lastDynamicPasteOperationRef.current = operationId;
+                        console.debug(
+                            '[structural_sync_guard] Marking paste operation as dynamic column creator',
+                            {
+                                operationId,
+                                dynamicColumnCount: newColumnsToCreate.length,
+                            },
+                        );
+                    }
+                } catch {
+                    // swallow any debug errors
+                }
+
                 // Process cell data after columns are confirmed in database
                 // Initialize results array - will be populated by async column creation
                 let columnCreationResults: Array<{
@@ -3123,6 +3819,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 const tempIdToTempAccessor = new Map<string, string>();
 
                 if (newColumnsToCreate.length > 0 && blockId) {
+                    // STEP 1: Add debug log for dynamic column creation
+                    console.debug('[dynamic_columns] creating new dynamic columns:', {
+                        operationId,
+                        count: newColumnsToCreate.length,
+                        columns: newColumnsToCreate.map((c) => ({
+                            name: c.name,
+                            position: c.position,
+                            tempId: c.tempId,
+                        })),
+                    });
+
                     // Create placeholder columns synchronously for immediate UI display
                     const placeholderColumns = newColumnsToCreate.map(
                         ({ name, position, tempId }) => ({
@@ -3140,6 +3847,15 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     currentColumns.push(...placeholderColumns);
                     currentColumns.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
+                    // Track newly created dynamic columns as pending sync so column
+                    // synchronization logic doesn't treat them as removed before
+                    // metadata/props catch up.
+                    placeholderColumns.forEach((col) => {
+                        if (col.id) {
+                            dynamicColumnsPendingSyncRef.current.add(col.id);
+                        }
+                    });
+
                     // Update localColumns state immediately so UI shows new columns
                     setLocalColumns((prev) => {
                         const updated = [...prev, ...placeholderColumns];
@@ -3151,6 +3867,19 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     // Update ref immediately
                     localColumnsRef.current =
                         currentColumns as typeof localColumnsRef.current;
+
+                    // 1. Add early stabilization trigger - enter stabilization mode immediately
+                    setIsPostPasteStabilizing(true);
+                    console.debug('[post_paste_sync] Entering stabilization early', {
+                        operationId,
+                        dynamicColumnCount: placeholderColumns.length,
+                        totalColumnCount: localColumnsRef.current.length,
+                    });
+
+                    // TASK 2: Immediately force grid update to show dynamic columns
+                    if (gridRef.current) {
+                        gridRef.current.updateCells([]);
+                    }
 
                     console.debug(`[${operationId}] Placeholder columns created:`, {
                         count: placeholderColumns.length,
@@ -3302,13 +4031,23 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                 },
                             );
 
-                            // ensures all columns exist in the database before we save any row data
+                            // STEP 1: ensures all columns exist in the database before we save any row data
                             console.debug(
                                 `[paste_sync][${operationId}] Waiting for ${columnCreationPromises.length} column creation promises to complete...`,
                             );
                             await Promise.all(columnCreationPromises);
                             console.debug(
                                 `[paste_sync][${operationId}] All column creation promises resolved. Processing results...`,
+                            );
+
+                            // STEP 2: Add debug log after column creation
+                            console.debug(
+                                '[dynamic_columns] saved new columns to Supabase:',
+                                {
+                                    operationId,
+                                    count: columnCreationPromises.length,
+                                    successful: columnCreationPromises.length,
+                                },
                             );
 
                             // Now process the results
@@ -3353,6 +4092,20 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                 }
                             }
 
+                            // STEP 3: Add debug log after all columns are created and updated
+                            const successfulColumnCount = results.filter(
+                                (r) => r.success && 'columnId' in r && !!r.columnId,
+                            ).length;
+                            console.debug(
+                                '[dynamic_columns] updated local columns after paste:',
+                                {
+                                    operationId,
+                                    totalColumns: localColumnsRef.current.length,
+                                    newColumns: successfulColumnCount,
+                                    columnIds: successfulColumnIds,
+                                },
+                            );
+
                             // Short pause to allow DB eventual consistency (if any)
                             console.debug(
                                 `[paste_sync][${operationId}] Adding 100ms delay to ensure columns are registered in backend...`,
@@ -3361,6 +4114,25 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             console.debug(
                                 `[paste_sync][${operationId}] Delay complete, columns should be ready for row data save`,
                             );
+
+                            // STEP 2: Trigger refresh of columns from Supabase via onPostSave
+                            // This ensures parent columns prop updates with new columns
+                            try {
+                                if (onPostSave) {
+                                    console.debug(
+                                        `[paste_sync][${operationId}] Triggering onPostSave to refresh columns from Supabase`,
+                                    );
+                                    await onPostSave();
+                                    console.debug(
+                                        `[paste_sync][${operationId}] onPostSave completed, columns should be refreshed`,
+                                    );
+                                }
+                            } catch (refreshError) {
+                                console.warn(
+                                    `[paste_sync][${operationId}] onPostSave refresh failed (non-fatal):`,
+                                    refreshError,
+                                );
+                            }
 
                             // Log current authoritative columns via props (after await)
                             console.debug(
@@ -3447,6 +4219,27 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }> = [];
                 const editingUpdates: Record<string, Partial<T>> = {};
 
+                // Compute target columns for paste, skipping Links columns entirely
+                const pasteTargetColumns = getPasteTargetColumns(
+                    currentColumns,
+                    startColFinal,
+                    maxPastedColumns,
+                );
+
+                // Debug final paste target columns once per paste
+                try {
+                    console.log('DEBUG-PASTE-TARGET-COLS:', {
+                        operationId,
+                        targets: pasteTargetColumns.map((t) => ({
+                            index: t.columnIndex,
+                            header: t.column.header,
+                            accessor: String(t.column.accessor),
+                        })),
+                    });
+                } catch {
+                    // swallow any debug errors
+                }
+
                 // Build mapping from tempId to temp accessor for immediate use
                 // used to track which columns are dynamic during cell processing
                 const tempIdToAccessor = new Map<string, string>();
@@ -3464,6 +4257,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 const currentPositions = currentData.map((d) => d.position ?? 0);
                 let maxPosition =
                     currentPositions.length > 0 ? Math.max(...currentPositions) : 0;
+
+                // Ensure select-field debug logs only once per paste
+                let selectDebugLogged = false;
 
                 for (
                     let clipboardRowIndex = 0;
@@ -3486,9 +4282,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         isNewRow = true;
                         maxPosition++;
 
-                        // create base row w all column defaults
+                        // create base row w all column defaults, excluding Links and id
                         const newRowData = currentColumns.reduce((acc, col) => {
                             if (col.accessor === 'id') return acc;
+                            if (isLinksColumn(col as EditableColumn<T>)) return acc;
                             acc[col.accessor as keyof T] = '' as any;
                             return acc;
                         }, {} as Partial<T>);
@@ -3510,23 +4307,23 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     // Process each cell in the clipboard row
                     for (
                         let cellIndex = 0;
-                        cellIndex < clipboardCells.length;
+                        cellIndex < clipboardCells.length &&
+                        cellIndex < pasteTargetColumns.length;
                         cellIndex++
                     ) {
-                        // Calculate target column index relative to start cell
-                        const targetColIndex = startCol + cellIndex;
-                        const targetColumn = currentColumns[targetColIndex];
-                        // Cell values are already trimmed during parsing
-                        const cellValue = clipboardCells[cellIndex] ?? '';
-
-                        // Guard against undefined column access - create placeholder if needed
-                        if (!targetColumn) {
-                            console.warn(
-                                `[${operationId}] Column at index ${targetColIndex} not found for cell [${clipboardRowIndex}, ${cellIndex}]. ` +
-                                    `Current columns: ${currentColumns.length}, needed: ${columnsNeeded}, startCol: ${startCol}`,
-                            );
+                        const targetInfo = pasteTargetColumns[cellIndex];
+                        if (!targetInfo) {
                             continue;
                         }
+                        const { column: targetColumn, columnIndex: targetColIndex } =
+                            targetInfo;
+
+                        if (!targetColumn || isLinksColumn(targetColumn)) {
+                            // Skip Links column entirely during paste
+                            continue;
+                        }
+                        // Cell values are already trimmed during parsing
+                        const cellValue = clipboardCells[cellIndex] ?? '';
 
                         const trimmedValue = cellValue;
                         const currentValue = (
@@ -3540,6 +4337,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
                         // Handle different column types with proper validation
                         let processedValue: any = trimmedValue;
+                        // For select cells, we will derive a lowercase accessor for Status/Priority
+                        // and use it only on the write path (rowData/editingUpdates).
+                        let realAccessorForSelect: string | null = null;
 
                         switch (targetColumn.type) {
                             case 'multi_select': {
@@ -3592,11 +4392,39 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         : rawParts;
                                 break;
                             }
-                            case 'select':
-                                if (
+                            case 'select': {
+                                const kind =
+                                    detectStatusOrPriorityColumn(
+                                        targetColumn as EditableColumn<T>,
+                                    ) ?? null;
+
+                                // For Status/Priority during paste: use strict exact-match validation
+                                if (kind != null) {
+                                    // For Status/Priority, use strict exact-match validation
+                                    // Check if trimmedValue matches exactly (case-sensitive) against allowed values
+                                    const allowed =
+                                        kind === 'status'
+                                            ? STATUS_VALID_VALUES
+                                            : PRIORITY_VALID_VALUES;
+                                    const isExactMatch =
+                                        trimmedValue &&
+                                        allowed.includes(trimmedValue as any);
+
+                                    if (isExactMatch) {
+                                        // Valid exact match: convert to lowercase for storage
+                                        processedValue = trimmedValue.toLowerCase();
+                                    } else {
+                                        // Not an exact match: preserve raw value for invalid handling
+                                        processedValue = trimmedValue;
+                                    }
+
+                                    // Break out early - skip the rest of select validation logic
+                                    // The value will be stored in properties or natural field below
+                                } else if (
                                     Array.isArray(targetColumn.options) &&
                                     targetColumn.options.length > 0
                                 ) {
+                                    // Non Status/Priority selects: apply normal validation
                                     const validOptions = targetColumn.options.map(
                                         (opt) => {
                                             if (typeof opt === 'string') return opt;
@@ -3610,18 +4438,163 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             return String(opt);
                                         },
                                     );
-                                    if (
-                                        trimmedValue &&
-                                        validOptions.includes(trimmedValue)
-                                    ) {
-                                        processedValue = trimmedValue;
+
+                                    if (trimmedValue) {
+                                        const lowered = trimmedValue.toLowerCase();
+                                        const loweredOptions = validOptions.map((v) =>
+                                            v.toLowerCase(),
+                                        );
+                                        const matchIndex =
+                                            loweredOptions.indexOf(lowered);
+
+                                        if (matchIndex !== -1) {
+                                            // Preserve original option label casing
+                                            processedValue = validOptions[matchIndex];
+                                        } else {
+                                            // Non Status/Priority selects keep original behavior:
+                                            // invalid values fall back to empty string
+                                            processedValue = '';
+                                        }
                                     } else {
                                         processedValue = '';
                                     }
                                 } else {
+                                    // No options defined; store raw value
                                     processedValue = trimmedValue;
                                 }
+
+                                // For Status/Priority: route to correct storage based on strict validation
+                                if (kind != null) {
+                                    const realAccessor = String(
+                                        targetColumn.accessor,
+                                    ).toLowerCase();
+                                    realAccessorForSelect = realAccessor;
+
+                                    // Check if processedValue is a valid exact match (already lowercased if valid)
+                                    const allowed =
+                                        kind === 'status'
+                                            ? STATUS_VALID_VALUES
+                                            : PRIORITY_VALID_VALUES;
+                                    const isExactMatch =
+                                        processedValue &&
+                                        allowed.includes(processedValue as any);
+
+                                    if (isExactMatch && processedValue) {
+                                        // Valid exact match: processedValue is already lowercase
+                                        // Save to natural field AND to properties (JSONB is source of truth)
+                                        (targetRow as any)[realAccessor] = processedValue;
+
+                                        // Also save to properties so JSONB is always the source of truth
+                                        if (
+                                            !(targetRow as any).properties ||
+                                            typeof (targetRow as any).properties !==
+                                                'object'
+                                        ) {
+                                            (targetRow as any).properties = {};
+                                        }
+                                        const props = (targetRow as any)
+                                            .properties as Record<string, unknown>;
+                                        props[kind] = {
+                                            key: kind,
+                                            type: 'select',
+                                            value: processedValue,
+                                            position: targetColumn.position ?? 0,
+                                        };
+
+                                        // Log valid value accepted
+                                        console.log(
+                                            `[ValidSelect] Accepted valid ${kind}: "${processedValue}"`,
+                                        );
+                                    } else if (processedValue) {
+                                        // Invalid value: log and store in properties
+                                        console.log(
+                                            `[InvalidSelect] Detected invalid ${kind}: "${processedValue}"`,
+                                        );
+                                        // Invalid value: store ONLY in properties, NEVER in natural field
+                                        // Initialize properties if needed
+                                        if (
+                                            !(targetRow as any).properties ||
+                                            typeof (targetRow as any).properties !==
+                                                'object'
+                                        ) {
+                                            (targetRow as any).properties = {};
+                                        }
+                                        const props = (targetRow as any)
+                                            .properties as Record<string, unknown>;
+                                        props[kind] = {
+                                            key: kind,
+                                            type: 'select',
+                                            value: processedValue,
+                                            position: targetColumn.position ?? 0,
+                                        };
+                                        // CRITICAL: Do NOT write to natural field (row.status/row.priority) for invalid values
+                                        // This prevents 22P02 Postgres enum errors
+                                        // Explicitly ensure the natural field is NOT set for invalid values
+                                        if (
+                                            (targetRow as any)[realAccessor] !== undefined
+                                        ) {
+                                            delete (targetRow as any)[realAccessor];
+                                        }
+
+                                        // TASK 1: Immediately update localData to show invalid value instantly
+                                        setLocalData((prevData) => {
+                                            const rowIndex = prevData.findIndex(
+                                                (r) => r.id === targetRow.id,
+                                            );
+                                            if (rowIndex !== -1) {
+                                                const updatedData = [...prevData];
+                                                updatedData[rowIndex] = {
+                                                    ...prevData[rowIndex],
+                                                    properties: {
+                                                        ...(prevData[rowIndex]
+                                                            .properties as object),
+                                                        [kind]: props[kind],
+                                                    },
+                                                };
+                                                // Update ref immediately
+                                                localDataRef.current = updatedData;
+                                                // Trigger immediate grid redraw
+                                                setTimeout(() => {
+                                                    if (gridRef.current) {
+                                                        gridRef.current.updateCells([]);
+                                                    }
+                                                }, 0);
+                                                return updatedData;
+                                            }
+                                            return prevData;
+                                        });
+                                    }
+
+                                    try {
+                                        console.debug('FixPasteAccessor', {
+                                            header: targetColumn.header,
+                                            incomingAccessor: targetColumn.accessor,
+                                            realAccessor,
+                                            isExactMatch,
+                                            storedInProperties:
+                                                !isExactMatch && !!processedValue,
+                                        });
+                                    } catch {
+                                        // swallow any debug errors
+                                    }
+                                }
+
+                                if (!selectDebugLogged) {
+                                    try {
+                                        console.log('DEBUG-PASTE-SELECT:', {
+                                            operationId,
+                                            header: targetColumn.header,
+                                            accessor: String(targetColumn.accessor),
+                                            trimmedValue,
+                                            processedValue,
+                                        });
+                                    } catch {
+                                        // swallow any debug errors
+                                    }
+                                    selectDebugLogged = true;
+                                }
                                 break;
+                            }
                             case 'text':
                             default:
                                 processedValue = trimmedValue;
@@ -3657,7 +4630,33 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             });
                         } else {
                             // Standard column - update row immediately
-                            (targetRow as any)[targetColumn.accessor] = processedValue;
+                            // BUT: For invalid Status/Priority, we already wrote to properties above,
+                            // so skip writing to the real column here
+                            const kind =
+                                detectStatusOrPriorityColumn(
+                                    targetColumn as EditableColumn<T>,
+                                ) ?? null;
+                            const shouldSkipRealColumn =
+                                kind != null &&
+                                processedValue &&
+                                !isValidStatusOrPriority(kind, processedValue);
+
+                            if (!shouldSkipRealColumn) {
+                                const accessorKey =
+                                    realAccessorForSelect ??
+                                    String(targetColumn.accessor);
+                                (targetRow as any)[accessorKey] = processedValue;
+                            } else {
+                                // Double-check: ensure invalid Status/Priority values are NOT in natural field
+                                if (kind != null) {
+                                    const realAccessor = String(
+                                        targetColumn.accessor,
+                                    ).toLowerCase();
+                                    if ((targetRow as any)[realAccessor] !== undefined) {
+                                        delete (targetRow as any)[realAccessor];
+                                    }
+                                }
+                            }
                         }
                         rowHasChanges = true;
                     }
@@ -3697,10 +4696,60 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             cellIndex < clipboardCells.length;
                             cellIndex++
                         ) {
-                            const targetColIndex = startCol + cellIndex;
-                            const targetColumn = currentColumns[targetColIndex];
-                            if (targetColumn) {
-                                const accessor = String(targetColumn.accessor);
+                            if (cellIndex >= pasteTargetColumns.length) {
+                                break;
+                            }
+                            const targetInfo = pasteTargetColumns[cellIndex];
+                            if (!targetInfo) continue;
+                            const { column: targetColumn } = targetInfo;
+                            if (!targetColumn || isLinksColumn(targetColumn)) continue;
+
+                            const kind =
+                                detectStatusOrPriorityColumn(
+                                    targetColumn as EditableColumn<T>,
+                                ) ?? null;
+                            const accessor =
+                                kind != null
+                                    ? String(targetColumn.accessor).toLowerCase()
+                                    : String(targetColumn.accessor);
+
+                            // For Status/Priority: ensure invalid values are read from properties, not natural field
+                            if (kind != null) {
+                                const rawValue = (targetRow as any)[accessor];
+                                const isValid = isValidStatusOrPriority(kind, rawValue);
+
+                                if (!isValid && rawValue) {
+                                    // Invalid value: read from properties instead of natural field
+                                    const props = (targetRow as any).properties as
+                                        | Record<string, any>
+                                        | undefined;
+                                    const propValue = props?.[kind]?.value;
+
+                                    if (propValue !== undefined) {
+                                        // Use value from properties, ensure natural field is not in changes
+                                        (changes as any)[accessor] = undefined;
+                                        // Don't include invalid values in editingUpdates natural field
+                                        console.debug(
+                                            '[FixAccessor-block-invalid] Blocking invalid value from editingUpdates natural field',
+                                            {
+                                                kind,
+                                                header: targetColumn.header,
+                                                rawValue,
+                                                propValue,
+                                            },
+                                        );
+                                        continue; // Skip adding to changes
+                                    } else {
+                                        // No properties override, ensure natural field is cleared
+                                        (changes as any)[accessor] = undefined;
+                                        continue;
+                                    }
+                                } else {
+                                    // Valid value: use from natural field
+                                    (changes as any)[accessor] = rawValue;
+                                }
+                            } else {
+                                // Non Status/Priority: use normal value
                                 (changes as any)[accessor] = (targetRow as any)[accessor];
                             }
                         }
@@ -3724,7 +4773,46 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     updatedRows.forEach((updatedRow, rowId) => {
                         const index = updatedData.findIndex((row) => row.id === rowId);
                         if (index !== -1) {
-                            updatedData[index] = { ...updatedRow };
+                            // FixAccessor guard: ensure invalid Status/Priority values are not in natural fields
+                            const sanitizedRow = { ...updatedRow };
+                            for (const kind of ['status', 'priority'] as const) {
+                                const accessor = kind;
+                                const rawValue = (sanitizedRow as any)[accessor];
+                                if (rawValue !== undefined) {
+                                    const isValid = isValidStatusOrPriority(
+                                        kind,
+                                        rawValue,
+                                    );
+                                    if (!isValid) {
+                                        // Invalid value: remove from natural field, ensure it's only in properties
+                                        delete (sanitizedRow as any)[accessor];
+                                        if (!sanitizedRow.properties) {
+                                            (sanitizedRow as any).properties = {};
+                                        }
+                                        const props = sanitizedRow.properties as Record<
+                                            string,
+                                            any
+                                        >;
+                                        if (!props[kind]) {
+                                            props[kind] = {
+                                                key: kind,
+                                                type: 'select',
+                                                value: rawValue,
+                                                position: 0,
+                                            };
+                                        }
+                                        console.debug(
+                                            '[FixAccessor-block-invalid] Removed invalid value from natural field in setLocalData',
+                                            {
+                                                kind,
+                                                rowId,
+                                                rawValue,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            updatedData[index] = sanitizedRow;
                         } else {
                             console.warn(
                                 `[${operationId}] Row ${rowId} not found in localData for update`,
@@ -3736,7 +4824,46 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     rowsWithDynamicColumns.forEach(({ row }, rowId) => {
                         const index = updatedData.findIndex((r) => r.id === rowId);
                         if (index !== -1) {
-                            const dynamicKeys = Object.keys(row).filter((key) =>
+                            // FixAccessor guard: ensure invalid Status/Priority values are not in natural fields
+                            const sanitizedRow = { ...row };
+                            for (const kind of ['status', 'priority'] as const) {
+                                const accessor = kind;
+                                const rawValue = (sanitizedRow as any)[accessor];
+                                if (rawValue !== undefined) {
+                                    const isValid = isValidStatusOrPriority(
+                                        kind,
+                                        rawValue,
+                                    );
+                                    if (!isValid) {
+                                        // Invalid value: remove from natural field, ensure it's only in properties
+                                        delete (sanitizedRow as any)[accessor];
+                                        if (!sanitizedRow.properties) {
+                                            (sanitizedRow as any).properties = {};
+                                        }
+                                        const props = sanitizedRow.properties as Record<
+                                            string,
+                                            any
+                                        >;
+                                        if (!props[kind]) {
+                                            props[kind] = {
+                                                key: kind,
+                                                type: 'select',
+                                                value: rawValue,
+                                                position: 0,
+                                            };
+                                        }
+                                        console.debug(
+                                            '[FixAccessor-block-invalid] Removed invalid value from natural field in setLocalData (dynamic)',
+                                            {
+                                                kind,
+                                                rowId,
+                                                rawValue,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            const dynamicKeys = Object.keys(sanitizedRow).filter((key) =>
                                 newColumnsToCreate.some((col) => {
                                     const tempAccessor = col.name
                                         .toLowerCase()
@@ -3750,11 +4877,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                     dynamicKeys,
                                     dynamicKeys.map((k) => ({
                                         key: k,
-                                        value: (row as any)[k],
+                                        value: (sanitizedRow as any)[k],
                                     })),
                                 );
                             }
-                            updatedData[index] = { ...row };
+                            updatedData[index] = sanitizedRow;
                         } else {
                             console.warn(
                                 `[${operationId}] Row ${rowId} not found in localData for dynamic update`,
@@ -3765,7 +4892,46 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     // Append new rows with standard columns only
                     newRowsToCreate.forEach((newRow) => {
                         if (!updatedData.some((row) => row.id === newRow.id)) {
-                            updatedData.push({ ...newRow });
+                            // FixAccessor guard: ensure invalid Status/Priority values are not in natural fields
+                            const sanitizedRow = { ...newRow };
+                            for (const kind of ['status', 'priority'] as const) {
+                                const accessor = kind;
+                                const rawValue = (sanitizedRow as any)[accessor];
+                                if (rawValue !== undefined) {
+                                    const isValid = isValidStatusOrPriority(
+                                        kind,
+                                        rawValue,
+                                    );
+                                    if (!isValid) {
+                                        // Invalid value: remove from natural field, ensure it's only in properties
+                                        delete (sanitizedRow as any)[accessor];
+                                        if (!sanitizedRow.properties) {
+                                            (sanitizedRow as any).properties = {};
+                                        }
+                                        const props = sanitizedRow.properties as Record<
+                                            string,
+                                            any
+                                        >;
+                                        if (!props[kind]) {
+                                            props[kind] = {
+                                                key: kind,
+                                                type: 'select',
+                                                value: rawValue,
+                                                position: 0,
+                                            };
+                                        }
+                                        console.debug(
+                                            '[FixAccessor-block-invalid] Removed invalid value from natural field in setLocalData (new row)',
+                                            {
+                                                kind,
+                                                rowId: sanitizedRow.id,
+                                                rawValue,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            updatedData.push(sanitizedRow);
                         } else {
                             console.warn(
                                 `[${operationId}] New row ${newRow.id} already exists in localData`,
@@ -3776,7 +4942,46 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     // Append new rows with dynamic columns
                     newRowsWithDynamicColumns.forEach(({ row }) => {
                         if (!updatedData.some((r) => r.id === row.id)) {
-                            const dynamicKeys = Object.keys(row).filter((key) =>
+                            // FixAccessor guard: ensure invalid Status/Priority values are not in natural fields
+                            const sanitizedRow = { ...row };
+                            for (const kind of ['status', 'priority'] as const) {
+                                const accessor = kind;
+                                const rawValue = (sanitizedRow as any)[accessor];
+                                if (rawValue !== undefined) {
+                                    const isValid = isValidStatusOrPriority(
+                                        kind,
+                                        rawValue,
+                                    );
+                                    if (!isValid) {
+                                        // Invalid value: remove from natural field, ensure it's only in properties
+                                        delete (sanitizedRow as any)[accessor];
+                                        if (!sanitizedRow.properties) {
+                                            (sanitizedRow as any).properties = {};
+                                        }
+                                        const props = sanitizedRow.properties as Record<
+                                            string,
+                                            any
+                                        >;
+                                        if (!props[kind]) {
+                                            props[kind] = {
+                                                key: kind,
+                                                type: 'select',
+                                                value: rawValue,
+                                                position: 0,
+                                            };
+                                        }
+                                        console.debug(
+                                            '[FixAccessor-block-invalid] Removed invalid value from natural field in setLocalData (new dynamic row)',
+                                            {
+                                                kind,
+                                                rowId: sanitizedRow.id,
+                                                rawValue,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            const dynamicKeys = Object.keys(sanitizedRow).filter((key) =>
                                 newColumnsToCreate.some((col) => {
                                     const tempAccessor = col.name
                                         .toLowerCase()
@@ -3786,15 +4991,15 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             );
                             if (dynamicKeys.length > 0) {
                                 console.debug(
-                                    `[${operationId}] New row ${row.id} has dynamic column data:`,
+                                    `[${operationId}] New row ${sanitizedRow.id} has dynamic column data:`,
                                     dynamicKeys,
                                     dynamicKeys.map((k) => ({
                                         key: k,
-                                        value: (row as any)[k],
+                                        value: (sanitizedRow as any)[k],
                                     })),
                                 );
                             }
-                            updatedData.push({ ...row });
+                            updatedData.push(sanitizedRow);
                         } else {
                             console.warn(
                                 `[${operationId}] New row ${row.id} already exists in localData`,
@@ -3852,6 +5057,21 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 });
 
                 if (Object.keys(editingUpdates).length > 0) {
+                    try {
+                        const editingUpdateAccessorsByRow = Object.fromEntries(
+                            Object.entries(editingUpdates).map(([rowId, changes]) => [
+                                rowId,
+                                Object.keys(changes || {}),
+                            ]),
+                        );
+                        console.log('DEBUG-PASTE-EDITING-UPDATES:', {
+                            operationId,
+                            rows: editingUpdateAccessorsByRow,
+                        });
+                    } catch {
+                        // swallow any debug errors
+                    }
+
                     setEditingData((prev) => ({
                         ...prev,
                         ...editingUpdates,
@@ -3892,9 +5112,65 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     columns: CompactSelection.empty(),
                 });
 
+                // --- FIX: Prevent Fast Refresh during paste ---
+                if (typeof window !== 'undefined') {
+                    (window as any).__PASTE_IN_PROGRESS__ = true;
+                }
+
                 // Start immediate save sequence
+                console.log(`[Paste] Start: ${validClipboardRows.length} rows`);
                 (async () => {
                     try {
+                        // --- FIX: Ensure document context is ready before saves ---
+                        if (!blockId) {
+                            throw new Error('blockId is required for paste save');
+                        }
+
+                        // Wait for document context to be available
+                        // Note: documentId should come from props or parent context
+                        // For now, we validate blockId is available (documentId is handled in saveRequirement)
+                        const ensureDocumentContextReady = async (): Promise<void> => {
+                            // Verify blockId is valid (not undefined string)
+                            if (
+                                !blockId ||
+                                blockId === 'undefined' ||
+                                blockId === 'null'
+                            ) {
+                                throw new Error(`Invalid blockId: ${blockId}`);
+                            }
+                            // Small delay to ensure context is stable
+                            await new Promise((resolve) => setTimeout(resolve, 50));
+                        };
+
+                        // Wait for columns to be in sync
+                        const ensureColumnsInSync = async (
+                            localCols: typeof localColumnsRef.current,
+                            propsCols: typeof columns,
+                        ): Promise<void> => {
+                            const maxWait = 2000; // 2 seconds max
+                            const start = Date.now();
+                            while (Date.now() - start < maxWait) {
+                                const localCount = localCols.length;
+                                const propsCount = propsCols.filter(
+                                    (col) =>
+                                        !isExpectedResultColumn(
+                                            col as unknown as EditableColumn<BaseRow>,
+                                        ),
+                                ).length;
+                                if (localCount === propsCount && localCount > 0) {
+                                    return; // Columns are in sync
+                                }
+                                await new Promise((resolve) => setTimeout(resolve, 50));
+                            }
+                            console.warn(
+                                '[paste_sync] Columns did not sync within timeout, proceeding anyway',
+                            );
+                        };
+
+                        await ensureDocumentContextReady();
+                        await ensureColumnsInSync(localColumnsRef.current, columns);
+                        await new Promise((resolve) => setTimeout(resolve, 150));
+
                         await waitForSupabaseClient();
 
                         const BATCH_SIZE = 20;
@@ -4035,64 +5311,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             });
 
                             // Log complete mapping with clear structure
+                            // Build mapping entries for remapping (no verbose logging)
                             const mappingEntries = Array.from(
                                 tempAccessorToRealAccessorMap.entries(),
                             );
-                            console.log(
-                                `[mapping_pairs][${operationId}] ========================================`,
-                            );
-                            console.log(
-                                `[mapping_pairs][${operationId}] COMPLETE MAPPING (${mappingEntries.length} pairs):`,
-                            );
-
-                            const renamedColumnsInMapping = mappingEntries.filter(
-                                ([temp, real]) =>
-                                    renamedColumnAccessors.has(real) ||
-                                    renamedColumnHeaders.has(real),
-                            );
-
-                            if (renamedColumnsInMapping.length > 0) {
-                                console.warn(
-                                    `[mapping_debug][${operationId}] Renamed columns found in final mapping:`,
-                                    renamedColumnsInMapping.map(([temp, real]) => ({
-                                        tempAccessor: temp,
-                                        realAccessor: real,
-                                        isRenamed: true,
-                                    })),
-                                );
-                            }
-
-                            // Check if renamed column is being interpreted as new dynamic column
-                            const renamedColumnsAsNewDynamic =
-                                renamedColumnsInLocal.filter((col) => {
-                                    const colAccessor = String(col.accessor);
-                                    return mappingEntries.some(
-                                        ([temp, real]) =>
-                                            real === colAccessor &&
-                                            temp.startsWith('temp-'),
-                                    );
-                                });
-
-                            if (renamedColumnsAsNewDynamic.length > 0) {
-                                console.warn(
-                                    `[mapping_debug][${operationId}]  WARNING: Renamed columns may be interpreted as new dynamic columns:`,
-                                    renamedColumnsAsNewDynamic.map((c) => ({
-                                        id: c.id,
-                                        header: c.header,
-                                        accessor: c.accessor,
-                                    })),
-                                );
-                            }
-
-                            mappingEntries.forEach(([temp, real], idx) => {
-                                const isRenamed =
-                                    renamedColumnAccessors.has(real) ||
-                                    renamedColumnHeaders.has(real);
-                                const logPrefix = isRenamed ? '[RENAMED]' : '  ';
-                                console.log(
-                                    `[mapping_pairs][${operationId}] ${logPrefix} ${idx + 1}. "${temp}" → "${real}"`,
-                                );
-                            });
 
                             const expectedTempAccessors = Array.from(
                                 tempIdToTempAccessor.values(),
@@ -4605,38 +5827,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         }
 
                         // Log first row in rowsToUse to verify it has real accessors
-                        if (rowsToUse.length > 0 && hasDynamicColumns) {
-                            const firstRowToSave = rowsToUse[0];
-                            const firstRowKeys = Object.keys(firstRowToSave);
-                            const firstRowTempKeys = firstRowKeys.filter(
-                                (key) =>
-                                    tempAccessorToRealAccessorMap.has(key) &&
-                                    tempAccessorToRealAccessorMap.get(key) !== key,
-                            );
-                            const firstRowRealKeys = firstRowKeys.filter((key) => {
-                                const mappedReal = Array.from(
-                                    tempAccessorToRealAccessorMap.values(),
-                                );
-                                return mappedReal.includes(key);
-                            });
-                            console.log(
-                                `[save_debug][${operationId}] FIRST ROW TO SAVE (id=${firstRowToSave.id}):`,
-                                {
-                                    allKeys: firstRowKeys,
-                                    tempKeys: firstRowTempKeys,
-                                    realKeys: firstRowRealKeys,
-                                    realKeyValues: firstRowRealKeys.map((k) => ({
-                                        key: k,
-                                        value: (firstRowToSave as any)[k],
-                                    })),
-                                },
-                            );
-                        }
-
                         // Process all rows that need saving
-                        console.log(
-                            `[save_debug][${operationId}] Processing ${rowIdsToSave.size} row IDs for save collection...`,
-                        );
                         Array.from(rowIdsToSave).forEach((rowId, index) => {
                             const row = rowsToUse.find((r) => r.id === rowId);
                             if (!row) {
@@ -4655,67 +5846,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         tempAccessorToRealAccessorMap.get(key) !== key,
                                 );
 
-                                // Log first row in detail
-                                if (index === 0) {
-                                    if (tempKeys.length > 0) {
-                                        console.error(
-                                            `[save_debug][${operationId}] TEMP KEYS:`,
-                                            tempKeys,
-                                        );
-                                        tempKeys.forEach((tempKey) => {
-                                            const mappedReal =
-                                                tempAccessorToRealAccessorMap.get(
-                                                    tempKey,
-                                                );
-                                            const hasRealKey = rowKeys.includes(
-                                                mappedReal || '',
-                                            );
-                                            console.error(
-                                                `[save_debug][${operationId}]   "${tempKey}" → "${mappedReal}" (real key exists: ${hasRealKey})`,
-                                            );
-                                        });
-                                    } else {
-                                        console.log(
-                                            `[save_debug][${operationId}] NO TEMP KEYS - row is ready for save`,
-                                        );
-                                    }
-
-                                    // Show real keys that should be present
-                                    const expectedRealKeys = Array.from(
-                                        tempAccessorToRealAccessorMap.values(),
-                                    );
-                                    const presentRealKeys = rowKeys.filter((k) =>
-                                        expectedRealKeys.includes(k),
-                                    );
-                                    console.log(
-                                        `[save_debug][${operationId}] Expected real keys: ${expectedRealKeys.length}, Present: ${presentRealKeys.length}`,
-                                    );
-                                    if (presentRealKeys.length > 0) {
-                                        console.log(
-                                            `[save_debug][${operationId}] Real keys present:`,
-                                            presentRealKeys,
-                                        );
-                                    }
-                                }
-
                                 if (tempKeys.length > 0) {
                                     console.error(
                                         `[save_debug][${operationId}] Row ${rowId} still has temp accessors at save time:`,
                                         tempKeys,
-                                    );
-                                    console.error(
-                                        `[save_debug][${operationId}] Row keys:`,
-                                        rowKeys,
-                                    );
-                                    console.error(
-                                        `[save_debug][${operationId}] Available mappings:`,
-                                        Array.from(
-                                            tempAccessorToRealAccessorMap.entries(),
-                                        ),
-                                    );
-                                    console.error(
-                                        `[save_debug][${operationId}] Row object:`,
-                                        row,
                                     );
                                     return;
                                 }
@@ -4731,10 +5865,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             allRowsToSave.push({ row, isNew, id: rowId });
                         });
 
-                        console.log(
-                            `[save_debug][${operationId}] Collected ${allRowsToSave.length} rows ready for save (out of ${rowIdsToSave.size} requested)`,
-                        );
-
                         if (allRowsToSave.length === 0) {
                             console.warn(
                                 `[paste_sync][${operationId}] No valid rows to save after processing, completing paste operation`,
@@ -4743,34 +5873,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             pasteState.pasteOperationActive = false;
                             return;
                         }
-
-                        console.debug(
-                            `[paste_sync][${operationId}] localData snapshot (first 10):`,
-                            localData.slice(0, 10).map((r) => ({
-                                id: r.id,
-                                position: r.position,
-                                keys: Object.keys(r).slice(0, 20),
-                            })),
-                        );
-
-                        console.debug(
-                            '[paste_sync][TIMING]',
-                            'columns available before row save:',
-                            columns.map((c) => ({
-                                id: c.id,
-                                accessor: c.accessor,
-                                header: c.header,
-                            })),
-                        );
-                        console.debug(
-                            '[paste_sync][TIMING]',
-                            'localColumnsRef:',
-                            localColumnsRef.current.map((c) => ({
-                                id: c.id,
-                                accessor: c.accessor,
-                                header: c.header,
-                            })),
-                        );
 
                         // Save all rows immediately with await
                         const t1 = Date.now();
@@ -4829,13 +5931,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             }
                                         }
 
-                                        console.debug(
-                                            `[paste_sync][${operationId}] saving row id=${id} isNew=${isNew} payloadKeys=${payloadKeys.join(',')}`,
-                                        );
-                                        console.debug(
-                                            `[paste_sync][${operationId}] saveRequirement payload`,
-                                            row,
-                                        );
                                         const savePromise = saveRow(row, isNew, {
                                             blockId,
                                             skipRefresh: true,
@@ -4843,10 +5938,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         pasteState.savePromises.set(id, savePromise);
                                         await savePromise;
                                         pasteState.savePromises.delete(id);
-                                        const saveDuration = Date.now() - saveStart;
-                                        console.debug(
-                                            `[paste_sync][${operationId}] saved row id=${id} duration=${saveDuration}ms`,
-                                        );
                                     } catch (err) {
                                         pasteState.savePromises.delete(id);
                                         console.error(
@@ -4901,6 +5992,24 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             );
                         }
 
+                        // --- FIX: Only refresh AFTER all saves succeed ---
+                        // Verify all saves completed successfully before refresh
+                        const allSavesSucceeded =
+                            allRowsToSave.length > 0 &&
+                            Array.from(pasteState.savePromises.values()).length === 0;
+
+                        if (!allSavesSucceeded) {
+                            console.error(
+                                `[paste_sync][${operationId}] Not all saves completed, skipping refresh`,
+                                {
+                                    expectedRows: allRowsToSave.length,
+                                    remainingPromises: Array.from(
+                                        pasteState.savePromises.values(),
+                                    ).length,
+                                },
+                            );
+                        }
+
                         // Clear paste flags BEFORE refresh to allow refresh to proceed
                         pasteState.isPasting = false;
                         pasteState.pasteOperationActive = false;
@@ -4908,20 +6017,93 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             `[paste_sync][${operationId}] Paste flags cleared, allowing refresh`,
                         );
 
-                        // Call onPostSave() after all rows are saved and flags are cleared
-                        const postStart = Date.now();
-                        try {
-                            await refreshAfterSave(false);
-                            const postDuration = Date.now() - postStart;
-                            console.debug(
-                                `[paste_sync][${operationId}] onPostSave done (duration=${postDuration}ms)`,
-                            );
-                        } catch (error) {
-                            const postDuration = Date.now() - postStart;
-                            console.error(
-                                `[paste_sync][${operationId}] onPostSave() failed (duration=${postDuration}ms):`,
-                                error,
-                            );
+                        // Call onPostSave() ONLY if all saves succeeded
+                        if (allSavesSucceeded) {
+                            const postStart = Date.now();
+                            try {
+                                await refreshAfterSave(false);
+                                const postDuration = Date.now() - postStart;
+                                console.debug(
+                                    `[paste_sync][${operationId}] onPostSave done (duration=${postDuration}ms)`,
+                                );
+
+                                // Step 2: Set post-paste stabilization flag after successful refresh
+                                const localColumnCount = localColumnsRef.current.length;
+                                console.debug(
+                                    `[post_paste_sync][${operationId}] Setting isPostPasteStabilizing=true (localColumns=${localColumnCount})`,
+                                );
+                                setIsPostPasteStabilizing(true);
+
+                                // Clear any existing timeout
+                                if (postPasteStabilizationTimeoutRef.current) {
+                                    clearTimeout(
+                                        postPasteStabilizationTimeoutRef.current,
+                                    );
+                                }
+
+                                // Set timeout to clear stabilization after columns props catch up
+                                postPasteStabilizationTimeoutRef.current = setTimeout(
+                                    () => {
+                                        const currentLocalCount =
+                                            localColumnsRef.current.length;
+                                        const currentIncomingCount = columns.length;
+
+                                        // Only clear if incoming columns have caught up
+                                        if (currentIncomingCount >= currentLocalCount) {
+                                            console.debug(
+                                                `[post_paste_sync][${operationId}] Clearing isPostPasteStabilizing (incoming=${currentIncomingCount} >= local=${currentLocalCount})`,
+                                            );
+                                            setIsPostPasteStabilizing(false);
+                                        } else {
+                                            console.debug(
+                                                `[post_paste_sync][${operationId}] Delaying stabilization clear (incoming=${currentIncomingCount} < local=${currentLocalCount})`,
+                                            );
+                                            // Try again in 200ms
+                                            postPasteStabilizationTimeoutRef.current =
+                                                setTimeout(() => {
+                                                    const finalLocalCount =
+                                                        localColumnsRef.current.length;
+                                                    const finalIncomingCount =
+                                                        columns.length;
+                                                    if (
+                                                        finalIncomingCount >=
+                                                        finalLocalCount
+                                                    ) {
+                                                        console.debug(
+                                                            `[post_paste_sync][${operationId}] Clearing isPostPasteStabilizing after delay (incoming=${finalIncomingCount} >= local=${finalLocalCount})`,
+                                                        );
+                                                        setIsPostPasteStabilizing(false);
+                                                    } else {
+                                                        console.debug(
+                                                            `[post_paste_sync][${operationId}] Force clearing isPostPasteStabilizing after timeout (incoming=${finalIncomingCount} < local=${finalLocalCount})`,
+                                                        );
+                                                        setIsPostPasteStabilizing(false);
+                                                    }
+                                                }, 200);
+                                        }
+                                    },
+                                    300,
+                                );
+                            } catch (error) {
+                                const postDuration = Date.now() - postStart;
+                                console.error(
+                                    `[paste_sync][${operationId}] onPostSave() failed (duration=${postDuration}ms):`,
+                                    error,
+                                );
+                                // Still set stabilization flag even on error to prevent column removal
+                                setIsPostPasteStabilizing(true);
+                                if (postPasteStabilizationTimeoutRef.current) {
+                                    clearTimeout(
+                                        postPasteStabilizationTimeoutRef.current,
+                                    );
+                                }
+                                postPasteStabilizationTimeoutRef.current = setTimeout(
+                                    () => {
+                                        setIsPostPasteStabilizing(false);
+                                    },
+                                    500,
+                                );
+                            }
                         }
 
                         // final cleanup
@@ -4933,6 +6115,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         // Clear flags even on error to prevent stuck state
                         pasteState.isPasting = false;
                         pasteState.pasteOperationActive = false;
+                    } finally {
+                        // --- FIX: Clear paste flag to allow Fast Refresh ---
+                        if (typeof window !== 'undefined') {
+                            (window as any).__PASTE_IN_PROGRESS__ = false;
+                        }
                     }
                 })();
             } catch (error) {
@@ -4949,6 +6136,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 // Clear flags on error
                 pasteState.isPasting = false;
                 pasteState.pasteOperationActive = false;
+                // --- FIX: Clear paste flag on error ---
+                if (typeof window !== 'undefined') {
+                    (window as any).__PASTE_IN_PROGRESS__ = false;
+                }
             } finally {
                 // track pasted rows for deduplication for THIS table instance
                 newRowsToCreate.forEach((row) => {
