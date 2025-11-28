@@ -72,14 +72,16 @@ const addToRemoveQueue = (toastId: string) => {
 
 export const reducer = (state: State, action: Action): State => {
     switch (action.type) {
-        case 'ADD_TOAST':
+        case 'ADD_TOAST': {
+            const id = genId();
+            const newToast = { id, ...action.toast };
+            // Automatically dismiss the toast after TOAST_REMOVE_DELAY
+            addToRemoveQueue(id);
             return {
                 ...state,
-                toasts: [{ id: genId(), ...action.toast }, ...state.toasts].slice(
-                    0,
-                    TOAST_LIMIT,
-                ),
+                toasts: [newToast, ...state.toasts].slice(0, TOAST_LIMIT),
             };
+        }
 
         case 'UPDATE_TOAST':
             return {
@@ -92,26 +94,37 @@ export const reducer = (state: State, action: Action): State => {
         case 'DISMISS_TOAST': {
             const { toastId } = action;
 
-            // ! Side effects ! - This could be extracted into a dismissToast() action,
-            // but I'll keep it here for simplicity
+            // Clear existing timeout and immediately remove the toast
             if (toastId) {
-                addToRemoveQueue(toastId);
+                const timeout = toastTimeouts.get(toastId);
+                if (timeout) {
+                    clearTimeout(timeout);
+                    toastTimeouts.delete(toastId);
+                }
+                // Immediately dispatch REMOVE_TOAST
+                setTimeout(() => {
+                    dispatch({
+                        type: 'REMOVE_TOAST',
+                        toastId: toastId,
+                    });
+                }, 0);
             } else {
                 state.toasts.forEach((toast) => {
-                    addToRemoveQueue(toast.id);
+                    const timeout = toastTimeouts.get(toast.id);
+                    if (timeout) {
+                        clearTimeout(timeout);
+                        toastTimeouts.delete(toast.id);
+                    }
+                    setTimeout(() => {
+                        dispatch({
+                            type: 'REMOVE_TOAST',
+                            toastId: toast.id,
+                        });
+                    }, 0);
                 });
             }
 
-            return {
-                ...state,
-                toasts: state.toasts.map((t) =>
-                    t.id === toastId || toastId === undefined
-                        ? {
-                              ...t,
-                          }
-                        : t,
-                ),
-            };
+            return state;
         }
         case 'REMOVE_TOAST':
             if (action.toastId === undefined) {

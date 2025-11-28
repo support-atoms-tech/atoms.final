@@ -813,10 +813,12 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
 
             // Check if this exact relationship already exists
             if (draggedNode && draggedNode.parent_id === targetId) {
-                alert(
-                    'ℹ️ This relationship already exists!\n\n' +
+                toast({
+                    title: 'This relationship already exists',
+                    description:
                         'This requirement is already a child of the target parent.',
-                );
+                    variant: 'default',
+                });
                 return;
             }
 
@@ -844,11 +846,12 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
                     error instanceof Error ? error.message : 'Unknown error';
 
                 if (errorMessage.includes('Relationship already exists')) {
-                    alert(
-                        '⚠️ This relationship already exists!\n\n' +
-                            'These requirements are already connected.\n' +
-                            'Try dragging to a different requirement.',
-                    );
+                    toast({
+                        title: 'This relationship already exists',
+                        description:
+                            'These requirements are already connected. Try dragging to a different requirement.',
+                        variant: 'default',
+                    });
                 } else if (errorMessage.includes('Circular reference')) {
                     alert(
                         '⚠️ Cannot create circular reference!\n\n' +
@@ -865,6 +868,7 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
             wouldCreateCycle,
             deleteRelationshipMutation,
             createRelationshipMutation,
+            toast,
         ],
     );
 
