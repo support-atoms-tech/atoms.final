@@ -9,8 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useCreateOrgInvitation } from '@/hooks/mutations/useOrgInvitationMutations';
 import { useOrgInvitationsByOrgId } from '@/hooks/queries/useOrganization';
-import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
-import { getOrganizationMembers } from '@/lib/db/client';
 import { useUser } from '@/lib/providers/user.provider';
 import { Tables } from '@/types/base/database.types';
 import { InvitationStatus } from '@/types/base/enums.types';
@@ -23,10 +21,8 @@ interface OrgInvitationsProps {
 
 export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
     const [inviteEmail, setInviteEmail] = useState('');
-    const [, setUserExists] = useState<boolean | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null); // Track error messages
     const { user } = useUser();
-    const { supabase, error: authError } = useAuthenticatedSupabase();
     const { mutateAsync: createInvitation, isPending } = useCreateOrgInvitation();
     const {
         data: allInvitations,
@@ -52,11 +48,6 @@ export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
             return;
         }
 
-        if (!supabase) {
-            setErrorMessage(authError ?? 'Authentication not ready. Please try again.');
-            return;
-        }
-
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(inviteEmail.trim())) {
             setErrorMessage('Please enter a valid email address.');
@@ -69,62 +60,7 @@ export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
         }
 
         try {
-            // Check if the user is already a member of the organization
-            const members = await getOrganizationMembers(supabase, orgId);
-            const isAlreadyMember = members.some(
-                (member) => member.email === inviteEmail.trim(),
-            );
-
-            if (isAlreadyMember) {
-                setErrorMessage('This user is already a member of the organization.');
-                return;
-            }
-
-            // Check if the email exists in the profiles table
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('email', inviteEmail.trim())
-                .single();
-
-            if (profileError) {
-                if (profileError.code === 'PGRST116') {
-                    setErrorMessage(
-                        'This email does not belong to any user. Please ask the user to sign up first.',
-                    );
-                    setUserExists(false); // User does not exist
-                    return;
-                }
-                console.error('Error checking email in profiles:', profileError);
-                throw profileError;
-            }
-
-            setUserExists(true); // User exists
-
-            // Check for duplicate invitations
-            const { data: duplicateInvitations, error: duplicateError } = await supabase
-                .from('organization_invitations')
-                .select('*')
-                .eq('email', inviteEmail.trim())
-                .eq('organization_id', orgId)
-                .eq('status', InvitationStatus.pending);
-
-            if (duplicateError) {
-                console.error(
-                    'Error checking for duplicate invitations:',
-                    duplicateError,
-                );
-                throw duplicateError;
-            }
-
-            if (duplicateInvitations && duplicateInvitations.length > 0) {
-                setErrorMessage(
-                    'An invitation has already been sent to this email for this organization.',
-                );
-                return;
-            }
-
-            // Create the invitation
+            // Create the invitation (API route handles all validation)
             await createInvitation(
                 {
                     email: inviteEmail.trim(),
@@ -138,18 +74,25 @@ export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
                     onSuccess: () => {
                         setInviteEmail('');
                         setErrorMessage(null); // Reset error message
-                        setUserExists(null); // Reset user existence state
                         refetch(); // Refresh outgoing invitations
                     },
                     onError: (error) => {
                         console.error('Error sending invitation:', error);
-                        setErrorMessage('Failed to send invitation.');
+                        setErrorMessage(
+                            error instanceof Error
+                                ? error.message
+                                : 'Failed to send invitation.',
+                        );
                     },
                 },
             );
         } catch (error) {
             console.error('Error handling invitation:', error);
-            setErrorMessage('Failed to process the invitation.');
+            setErrorMessage(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to process the invitation.',
+            );
         }
     };
 
@@ -159,30 +102,33 @@ export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
             return;
         }
 
-        if (!supabase) {
-            setErrorMessage(authError ?? 'Authentication not ready. Please try again.');
-            return;
-        }
-
         try {
-            const { error } = await supabase
-                .from('organization_invitations')
-                .update({
-                    status: InvitationStatus.revoked,
-                    updated_by: user.id,
-                })
-                .eq('id', invitationId);
+            const response = await fetch(
+                `/api/organizations/${orgId}/invitations/${invitationId}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        status: InvitationStatus.revoked,
+                    }),
+                    cache: 'no-store',
+                },
+            );
 
-            if (error) {
-                console.error('Error revoking invitation:', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to revoke invitation');
             }
 
             setErrorMessage(null); // Clear error message on success
             refetch(); // Refresh the list of outgoing invitations
         } catch (error) {
             console.error('Error revoking invitation:', error);
-            setErrorMessage('Failed to revoke invitation.');
+            setErrorMessage(
+                error instanceof Error ? error.message : 'Failed to revoke invitation.',
+            );
         }
     };
 
@@ -204,7 +150,6 @@ export default function OrgInvitations({ orgId }: OrgInvitationsProps) {
                                     onChange={(e) => {
                                         setInviteEmail(e.target.value);
                                         setErrorMessage(null); // Reset error message on input change
-                                        setUserExists(null); // Reset user existence state on input change
                                     }}
                                 />
                                 <Button onClick={handleInvite} disabled={isPending}>

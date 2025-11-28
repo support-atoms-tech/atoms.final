@@ -1,9 +1,10 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowBigDownIcon, Filter, Plus, Users } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,14 +22,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { OrgMemberAutocomplete } from '@/components/ui/orgMemberAutocomplete';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import {
     PROJECT_ROLE_ARRAY,
     ProjectRole,
     hasProjectPermission,
 } from '@/lib/auth/permissions';
-import { getProjectMembers } from '@/lib/db/client/projects.client';
 import { useUser } from '@/lib/providers/user.provider';
 
 interface ProjectMembersProps {
@@ -51,17 +51,17 @@ const getRoleColor = (role: ProjectRole) => {
 export default function ProjectMembers({ projectId }: ProjectMembersProps) {
     const params = useParams<{ orgId: string }>();
     const { user } = useUser();
+    const { toast, dismiss } = useToast();
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [emailInput, setEmailInput] = useState('');
     const [roleInput, setRoleInput] = useState<ProjectRole>('viewer');
     const [roleFilters, setRoleFilters] = useState<ProjectRole[]>([]);
 
-    const {
-        supabase,
-        isLoading: authLoading,
-        error: authError,
-    } = useAuthenticatedSupabase();
+    const { supabase, isLoading: authLoading } = useAuthenticatedSupabase();
+
+    const queryClient = useQueryClient();
+    const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
     const {
         data: members = [],
@@ -69,13 +69,64 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
         refetch,
     } = useQuery({
         queryKey: ['project-members', projectId],
-        queryFn: () =>
-            supabase ? getProjectMembers(supabase, projectId) : Promise.resolve([]),
-        enabled: !!projectId && !!supabase && !authLoading,
+        queryFn: async () => {
+            if (!projectId) return [];
+            const response = await fetch(`/api/projects/${projectId}/members`, {
+                method: 'GET',
+                cache: 'no-store',
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch project members');
+            }
+            const data = await response.json();
+            return data.members || [];
+        },
+        enabled: !!projectId && !authLoading,
     });
 
-    const userRole = (members.find((member) => member.id === user?.id)?.role ||
-        null) as ProjectRole | null;
+    // Subscribe to realtime changes for project members
+    useEffect(() => {
+        if (!supabase || !projectId || authLoading) {
+            return;
+        }
+
+        const channel = supabase
+            .channel(`project-members:${projectId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'project_members',
+                    filter: `project_id=eq.${projectId}`,
+                },
+                (payload) => {
+                    console.log(
+                        '[ProjectMembers] Realtime change detected:',
+                        payload.eventType,
+                        payload,
+                    );
+                    // Invalidate and refetch when any change occurs (INSERT, UPDATE, DELETE)
+                    queryClient.invalidateQueries({
+                        queryKey: ['project-members', projectId],
+                    });
+                },
+            )
+            .subscribe((status) => {
+                console.log('[ProjectMembers] Realtime subscription status:', status);
+            });
+
+        subscriptionRef.current = channel;
+
+        return () => {
+            channel.unsubscribe();
+            subscriptionRef.current = null;
+        };
+    }, [supabase, projectId, authLoading, queryClient]);
+
+    const userRole = (members.find(
+        (member: { id: string; role: string }) => member.id === user?.id,
+    )?.role || null) as ProjectRole | null;
 
     const sortedMembers = [...members].sort((a, b) => {
         if (a.role === 'owner') return -1;
@@ -96,73 +147,121 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
 
     const handleRemoveMember = async (memberId: string) => {
         if (!hasProjectPermission(userRole, 'removeMember')) {
-            setErrorMessage('You do not have permission to remove members.');
+            toast({
+                title: 'Error',
+                description: 'You do not have permission to remove members.',
+                variant: 'destructive',
+            });
             return;
         }
 
         if (!user?.id) {
-            setErrorMessage('User not authenticated.');
-            return;
-        }
-
-        if (!supabase) {
-            setErrorMessage(authError ?? 'Supabase client not available');
+            toast({
+                title: 'Error',
+                description: 'User not authenticated.',
+                variant: 'destructive',
+            });
             return;
         }
 
         try {
-            const { error } = await supabase
-                .from('project_members')
-                .delete()
-                .eq('project_id', projectId)
-                .eq('user_id', memberId);
+            const response = await fetch(
+                `/api/projects/${projectId}/members/${memberId}`,
+                {
+                    method: 'DELETE',
+                    cache: 'no-store',
+                },
+            );
 
-            if (error) {
-                console.error('Error removing member:', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to remove member');
             }
+
+            toast({
+                title: 'Success',
+                description: 'Member removed successfully!',
+                variant: 'default',
+            });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
 
             setErrorMessage(null); // Clear error message on success
             refetch();
         } catch (error) {
             console.error('Error removing member:', error);
-            setErrorMessage('Failed to remove member.');
+            toast({
+                title: 'Error',
+                description:
+                    error instanceof Error ? error.message : 'Failed to remove member.',
+                variant: 'destructive',
+            });
         }
     };
 
     const handleChangeRole = async (memberId: string, selectedRole: ProjectRole) => {
         if (!hasProjectPermission(userRole, 'changeRole')) {
-            setErrorMessage('You do not have permission to change roles.');
+            toast({
+                title: 'Error',
+                description: 'You do not have permission to change roles.',
+                variant: 'destructive',
+            });
             return;
         }
 
         if (!memberId || !selectedRole) {
-            setErrorMessage('Invalid operation. Please select a role.');
-            return;
-        }
-
-        if (!supabase) {
-            setErrorMessage(authError ?? 'Supabase client not available');
+            toast({
+                title: 'Error',
+                description: 'Invalid operation. Please select a role.',
+                variant: 'destructive',
+            });
             return;
         }
 
         try {
-            const { error } = await supabase
-                .from('project_members')
-                .update({ role: selectedRole })
-                .eq('project_id', projectId)
-                .eq('user_id', memberId);
+            const response = await fetch(
+                `/api/projects/${projectId}/members/${memberId}/role`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ role: selectedRole }),
+                    cache: 'no-store',
+                },
+            );
 
-            if (error) {
-                console.error('Error updating project member role:', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update role');
             }
+
+            toast({
+                title: 'Success',
+                description: `Role updated to ${selectedRole} successfully!`,
+                variant: 'default',
+            });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
 
             setErrorMessage(null); // Clear error message on success
             refetch();
         } catch (error) {
             console.error('Error changing role:', error);
-            setErrorMessage('Failed to change role. Please try again.');
+            toast({
+                title: 'Error',
+                description:
+                    error instanceof Error
+                        ? error.message
+                        : 'Failed to change role. Please try again.',
+                variant: 'destructive',
+            });
         }
     };
 
@@ -181,87 +280,30 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
             return;
         }
 
-        if (!supabase) {
-            setErrorMessage(authError ?? 'Supabase client not available');
-            return;
-        }
-
         try {
-            // Check if the email exists in the profiles table
-            const { data: member, error: profileError } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('email', memberEmail.trim())
-                .single();
-
-            if (profileError) {
-                if (profileError.code === 'PGRST116') {
-                    setErrorMessage(
-                        'This email does not belong to any user. Please ask the user to sign up first.',
-                    );
-                    return;
-                }
-                console.error('Error checking email in profiles:', profileError);
-                throw profileError;
-            }
-
-            const {
-                data: existingMember,
-                error: checkError,
-                status,
-            } = await supabase
-                .from('project_members')
-                .select('id')
-                .eq('user_id', member?.id || '')
-                .eq('project_id', projectId)
-                .single();
-
-            if (checkError && status !== 406) {
-                console.error('Error checking project membership:', checkError);
-                throw checkError;
-            }
-
-            if (existingMember) {
-                setErrorMessage('User is already a part of this project.');
-                return;
-            }
-
-            const {
-                data: existingOrgMember,
-                error: checkOrgError,
-                status: orgStatus,
-            } = await supabase
-                .from('organization_members')
-                .select('id')
-                .eq('user_id', member?.id || '')
-                .eq('organization_id', params?.orgId || '')
-                .single();
-
-            if (checkOrgError && orgStatus !== 406) {
-                console.error('Error checking organization membership:', checkError);
-                throw checkError;
-            }
-
-            if (!existingOrgMember) {
-                setErrorMessage('User is not a part of this organization.');
-                return;
-            }
-
-            const { error } = await supabase
-                .from('project_members')
-                .insert({
-                    user_id: member?.id || '',
-                    project_id: projectId,
+            const response = await fetch(`/api/projects/${projectId}/members`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: memberEmail.trim(),
                     role: selectedRole,
-                    org_id: params?.orgId || '',
-                    status: 'active',
-                })
-                .select()
-                .single();
+                    orgId: params?.orgId || '',
+                }),
+                cache: 'no-store',
+            });
 
-            if (error) {
-                console.error('Failed to assign user to project', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                const errorMessage = errorData.error || 'Failed to add member to project';
+                setErrorMessage(errorMessage);
+                toast({
+                    title: 'Error',
+                    description: errorMessage,
+                    variant: 'destructive',
+                });
+                return;
             }
 
             toast({
@@ -269,11 +311,26 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
                 description: 'User assigned to project successfully!',
                 variant: 'default',
             });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
+
             setErrorMessage(null);
             refetch();
         } catch (error) {
             console.error('Error assigning user to project:', error);
-            setErrorMessage('Failed to assign user to project.');
+            const errorMessage =
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to assign user to project.';
+            setErrorMessage(errorMessage);
+            toast({
+                title: 'Error',
+                description: errorMessage,
+                variant: 'destructive',
+            });
         } finally {
             setEmailInput('');
         }
@@ -299,6 +356,8 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
                             orgId={params?.orgId || ''}
                             value={emailInput}
                             onChange={setEmailInput}
+                            currentUserId={user?.id}
+                            existingMemberIds={members.map((m: { id: string }) => m.id)}
                         />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -347,9 +406,11 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
                                     key={role}
                                     onSelect={(e) => e.preventDefault()} // Prevent menu from closing
                                     onClick={() => {
-                                        setRoleFilters((prev) =>
+                                        setRoleFilters((prev: ProjectRole[]) =>
                                             prev.includes(role as ProjectRole)
-                                                ? prev.filter((r) => r !== role)
+                                                ? prev.filter(
+                                                      (r: ProjectRole) => r !== role,
+                                                  )
                                                 : [...prev, role as ProjectRole],
                                         );
                                     }}

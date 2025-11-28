@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { cn } from '@/lib/utils';
 import { Profile } from '@/types/base/profiles.types';
 
@@ -12,80 +11,80 @@ interface AutocompleteInputProps {
     orgId: string;
     value: string;
     onChange: (value: string) => void;
+    currentUserId?: string;
+    existingMemberIds?: string[];
 }
 
 export function OrgMemberAutocomplete({
     orgId,
     value,
     onChange,
+    currentUserId,
+    existingMemberIds = [],
 }: AutocompleteInputProps) {
     const [open, setOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const [orgMembers, setOrgMembers] = useState<Profile[]>([]);
-    const {
-        isLoading: authLoading,
-        error: authError,
-        getClientOrThrow,
-    } = useAuthenticatedSupabase();
 
     useEffect(() => {
-        if (authLoading) {
-            return;
-        }
-
-        if (authError) {
-            console.error('Failed to initialize Supabase client:', authError);
+        if (!orgId) {
             return;
         }
 
         const fetchMembers = async () => {
-            const client = getClientOrThrow();
-            const { data, error } = await client
-                .from('organization_members')
-                .select('user_id')
-                .eq('organization_id', orgId || '');
+            try {
+                const response = await fetch(`/api/organizations/${orgId}/members`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                });
 
-            if (!data || error) {
-                console.error(error);
-                return;
+                if (!response.ok) {
+                    throw new Error('Failed to fetch organization members');
+                }
+
+                const data = await response.json();
+                setOrgMembers(data.members || []);
+            } catch (error) {
+                console.error('Error fetching organization members:', error);
+                setOrgMembers([]);
             }
-            const orgMembersIds = data.map((member) => member.user_id);
-            console.log('orgMembersIds', orgMembersIds);
-
-            const { data: orgMembers, error: profileError } = await client
-                .from('profiles')
-                .select('*')
-                .in('id', orgMembersIds);
-
-            if (!orgMembers || profileError) {
-                console.error(error);
-                return;
-            }
-
-            setOrgMembers(orgMembers);
-            console.log('orgMembers', orgMembers);
         };
 
         fetchMembers();
-    }, [authError, authLoading, getClientOrThrow, orgId]);
+    }, [orgId]);
 
     const filteredMembers = useMemo(() => {
         if (!orgMembers) {
             return;
         }
+
+        // Filter out current user and existing members
+        const availableMembers = orgMembers.filter((profile) => {
+            // Exclude current user
+            if (currentUserId && profile.id === currentUserId) {
+                return false;
+            }
+            // Exclude existing project members
+            if (existingMemberIds && existingMemberIds.includes(profile.id)) {
+                return false;
+            }
+            return true;
+        });
+
         const searchValue = value.toLowerCase().trim();
         if (!searchValue) {
-            return orgMembers;
+            return availableMembers;
         }
 
-        const filteredMembers = orgMembers.filter(
+        // Apply search filter
+        const filteredMembers = availableMembers.filter(
             (profile) =>
                 profile.full_name?.toLowerCase().startsWith(searchValue) ||
                 profile.email?.toLowerCase().startsWith(searchValue),
         );
 
         return filteredMembers;
-    }, [orgMembers, value]);
+    }, [orgMembers, value, currentUserId, existingMemberIds]);
 
     const handleSelect = (value: string) => {
         onChange(value);

@@ -105,7 +105,8 @@ export async function POST(
         const { data: projects, error: projectsError } = await supabase
             .from('projects')
             .select('id')
-            .eq('organization_id', invitation.organization_id);
+            .eq('organization_id', invitation.organization_id)
+            .eq('is_deleted', false);
 
         if (projectsError) {
             console.error('Error fetching organization projects:', projectsError);
@@ -113,26 +114,82 @@ export async function POST(
             // The user can still be added manually later
         }
 
-        // Add user to all projects with 'viewer' role
+        let projectsAdded = 0;
+
+        // Add user to all projects with 'viewer' role, or reactivate inactive memberships
         if (projects && projects.length > 0) {
-            const projectMemberInserts = projects.map((project) => ({
-                project_id: project.id,
-                user_id: profile.id, // Use Supabase UUID
-                role: 'viewer' as const,
-                status: 'active' as const,
-                last_active_at: new Date().toISOString(),
-            }));
+            const projectIds = projects.map((p) => p.id);
 
-            const { error: projectMemberError } = await supabase
+            // Check for existing (active or inactive) project memberships
+            const { data: existingMemberships, error: existingError } = await supabase
                 .from('project_members')
-                .insert(projectMemberInserts);
+                .select('id, project_id, status, role')
+                .in('project_id', projectIds)
+                .eq('user_id', profile.id);
 
-            if (projectMemberError) {
-                console.error('Error adding project members:', projectMemberError);
-                // Don't fail the entire request - org membership is still valid
-                // Projects can be accessed if added manually later
+            if (existingError) {
+                console.error(
+                    'Error checking existing project memberships:',
+                    existingError,
+                );
+                // Continue with insert logic as fallback
+            }
+
+            const existingProjectIds = new Set(
+                (existingMemberships || []).map((pm) => pm.project_id),
+            );
+            const inactiveMemberships = (existingMemberships || []).filter(
+                (pm) => pm.status === 'inactive',
+            );
+
+            // Reactivate inactive memberships
+            for (const inactive of inactiveMemberships) {
+                const { error: reactivateError } = await supabase
+                    .from('project_members')
+                    .update({ status: 'active' })
+                    .eq('id', inactive.id);
+
+                if (reactivateError) {
+                    console.error(
+                        `Error reactivating project membership ${inactive.id}:`,
+                        reactivateError,
+                    );
+                    // Continue with other memberships
+                } else {
+                    projectsAdded++;
+                }
+            }
+
+            // Add user to projects where they don't have a membership (active or inactive)
+            const projectsToAdd = projects.filter(
+                (project) => !existingProjectIds.has(project.id),
+            );
+
+            if (projectsToAdd.length > 0) {
+                const projectMemberInserts = projectsToAdd.map((project) => ({
+                    project_id: project.id,
+                    user_id: profile.id, // Use Supabase UUID
+                    role: 'viewer' as const,
+                    status: 'active' as const,
+                    org_id: invitation.organization_id,
+                    last_active_at: new Date().toISOString(),
+                }));
+
+                const { error: projectMemberError } = await supabase
+                    .from('project_members')
+                    .insert(projectMemberInserts);
+
+                if (projectMemberError) {
+                    console.error('Error adding project members:', projectMemberError);
+                    // Don't fail the entire request - org membership is still valid
+                    // Projects can be accessed if added manually later
+                } else {
+                    projectsAdded += projectMemberInserts.length;
+                }
             }
         }
+
+        const projectsCount = projectsAdded;
 
         // Update invitation status to accepted
         const { error: updateError } = await supabase
@@ -164,7 +221,7 @@ export async function POST(
         return NextResponse.json({
             success: true,
             organization_id: invitation.organization_id,
-            projects_added: projects?.length || 0,
+            projects_added: projectsCount,
         });
     } catch (error) {
         console.error('Error accepting invitation:', error);

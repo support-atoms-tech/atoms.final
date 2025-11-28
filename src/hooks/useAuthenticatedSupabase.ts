@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { debugConfig } from '@/lib/utils/env-validation';
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { Database } from '@/types/base/database.types';
@@ -216,6 +217,37 @@ export function useAuthenticatedSupabase() {
 
                     // Custom fetch wrapper to attach latest token and retry once on 401/403
                     const customFetch: typeof fetch = async (input, init) => {
+                        // Check debug flag both from config and directly from env (fallback)
+                        const shouldLogFromConfig = debugConfig.debugRLSQueries();
+                        const shouldLogFromEnv =
+                            typeof window !== 'undefined' &&
+                            process.env.NEXT_PUBLIC_DEBUG_RLS === 'true';
+                        const shouldLog = shouldLogFromConfig || shouldLogFromEnv;
+
+                        const url =
+                            typeof input === 'string'
+                                ? input
+                                : input instanceof Request
+                                  ? input.url
+                                  : String(input);
+                        const method = init?.method || 'GET';
+                        const isProfileUpdate =
+                            method === 'PATCH' && url.includes('/rest/v1/profiles');
+                        const shouldLogProfileUpdate = shouldLog && isProfileUpdate;
+
+                        // Parse request body for logging (before it's consumed)
+                        let requestBody = null;
+                        if (shouldLogProfileUpdate && init?.body) {
+                            try {
+                                requestBody =
+                                    typeof init.body === 'string'
+                                        ? JSON.parse(init.body)
+                                        : init.body;
+                            } catch {
+                                requestBody = init.body;
+                            }
+                        }
+
                         const newInit: RequestInit = { ...init };
                         const headers = new Headers(init?.headers || {});
                         let activeToken =
@@ -235,7 +267,54 @@ export function useAuthenticatedSupabase() {
                             headers.set('Authorization', `Bearer ${activeToken}`);
                         newInit.headers = headers;
 
+                        // Log profile update request details
+                        if (shouldLogProfileUpdate) {
+                            // Filter out sensitive headers
+                            const safeHeaders: Record<string, string> = {};
+                            headers.forEach((value, key) => {
+                                const lowerKey = key.toLowerCase();
+                                if (
+                                    lowerKey === 'apikey' ||
+                                    lowerKey === 'authorization' ||
+                                    lowerKey === 'cookie'
+                                ) {
+                                    safeHeaders[key] = '[REDACTED]';
+                                } else {
+                                    safeHeaders[key] = value;
+                                }
+                            });
+
+                            console.log('=== PROFILE UPDATE REQUEST DEBUG ===');
+                            console.log('URL:', url);
+                            console.log('Method:', method);
+                            console.log('Headers:', safeHeaders);
+                            console.log('Request Body:', requestBody);
+                            console.log('===========================================');
+                        }
+
                         let response = await fetch(input as RequestInfo, newInit);
+
+                        // Log profile update errors
+                        if (shouldLogProfileUpdate && !response.ok) {
+                            const responseText = await response.clone().text();
+                            let errorData = null;
+                            try {
+                                errorData = JSON.parse(responseText);
+                            } catch {
+                                errorData = responseText;
+                            }
+
+                            console.error(
+                                `=== PROFILE UPDATE ERROR ===\n` +
+                                    `Status: ${response.status} ${response.statusText}\n` +
+                                    `URL: ${url}\n` +
+                                    `Method: ${method}\n` +
+                                    `Error Response: ${JSON.stringify(errorData, null, 2)}\n` +
+                                    `Request Body: ${JSON.stringify(requestBody, null, 2)}\n` +
+                                    `================================`,
+                            );
+                        }
+
                         if (response.status === 401 || response.status === 403) {
                             const refreshed = await refreshSession();
                             if (refreshed) {
@@ -245,7 +324,34 @@ export function useAuthenticatedSupabase() {
                                     ...newInit,
                                     headers: retryHeaders,
                                 };
+
+                                // Log retry attempt
+                                if (shouldLogProfileUpdate) {
+                                    console.log('=== PROFILE UPDATE RETRY ===');
+                                    console.log('Retrying with refreshed token');
+                                    console.log('================================');
+                                }
+
                                 response = await fetch(input as RequestInfo, retryInit);
+
+                                // Log retry error
+                                if (shouldLogProfileUpdate && !response.ok) {
+                                    const responseText = await response.clone().text();
+                                    let errorData = null;
+                                    try {
+                                        errorData = JSON.parse(responseText);
+                                    } catch {
+                                        errorData = responseText;
+                                    }
+
+                                    console.error(
+                                        `=== PROFILE UPDATE RETRY ERROR ===\n` +
+                                            `Status: ${response.status} ${response.statusText}\n` +
+                                            `Error Response: ${JSON.stringify(errorData, null, 2)}\n` +
+                                            `Request Body: ${JSON.stringify(requestBody, null, 2)}\n` +
+                                            `==================================`,
+                                    );
+                                }
                             }
                         }
                         return response;

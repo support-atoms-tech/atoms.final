@@ -52,8 +52,16 @@ export default function UserDashboard() {
     const [searchTerm, setSearchTerm] = useState(''); // Ensure the initial state is an empty string
 
     // Get current tab from URL params, default to 'all' if not present
-    const currentTabFromUrl = searchParams.get('currentTab') || 'all';
-    const [activeTab, setActiveTab] = useState(currentTabFromUrl);
+    // Use searchParams.toString() for stable dependency
+    const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+    const currentTabFromUrl = useMemo(() => {
+        const params = new URLSearchParams(searchParamsString);
+        return params.get('currentTab') || 'all';
+    }, [searchParamsString]);
+    const [activeTab, setActiveTab] = useState(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        return params.get('currentTab') || 'all';
+    });
 
     const [greeting, setGreeting] = useState('');
     const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
@@ -63,8 +71,7 @@ export default function UserDashboard() {
     const [inviteCount, setInviteCount] = useState(0);
 
     // Fetch organizations
-    const { data: organizations, refetch: refetchOrganizations } =
-        useOrganizationsByMembership(user?.id || '');
+    const { data: organizations } = useOrganizationsByMembership(user?.id || '');
 
     useEffect(() => {
         setUserContext({
@@ -178,20 +185,25 @@ export default function UserDashboard() {
     };
 
     // Update URL when tab changes
-    const handleTabChange = (newTab: string) => {
-        setActiveTab(newTab);
-        const params = new URLSearchParams(searchParams);
-        params.set('currentTab', newTab);
-        // router.push(`?${params.toString()}`, { scroll: false });
-    };
+    const handleTabChange = useCallback(
+        (newTab: string) => {
+            if (newTab === activeTab) return; // Prevent unnecessary updates
+            setActiveTab(newTab);
+            const params = new URLSearchParams(searchParams);
+            params.set('currentTab', newTab);
+            router.replace(`/home/user?${params.toString()}`, { scroll: false });
+        },
+        [searchParams, router, activeTab],
+    );
 
-    // Sync tab state with URL params when they change
+    // Sync tab state with URL params on mount or when URL actually changes
     useEffect(() => {
-        const tabFromUrl = searchParams.get('currentTab');
-        if (tabFromUrl && tabFromUrl !== activeTab) {
-            setActiveTab(tabFromUrl);
+        if (currentTabFromUrl !== activeTab) {
+            setActiveTab(currentTabFromUrl);
         }
-    }, [searchParams, activeTab]);
+        // Only run when currentTabFromUrl changes, not on every render
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentTabFromUrl]);
 
     return (
         <LayoutView>
@@ -261,9 +273,8 @@ export default function UserDashboard() {
 
                 {activeTab === 'invites' ? (
                     <div className="col-span-full flex flex-col">
-                        {/* Pass refetchOrganizations to UserInvitations */}
                         <div>
-                            <UserInvitations onAccept={refetchOrganizations} />
+                            <UserInvitations />
                         </div>
                     </div>
                 ) : (

@@ -12,7 +12,7 @@ import { useUser } from '@/lib/providers/user.provider';
 import { InvitationStatus } from '@/types/base/enums.types';
 import { Invitation } from '@/types/base/invitations.types';
 
-export default function UserInvitations({ onAccept }: { onAccept?: () => void }) {
+export default function UserInvitations() {
     const { user } = useUser();
     const queryClient = useQueryClient();
     const router = useRouter();
@@ -21,7 +21,7 @@ export default function UserInvitations({ onAccept }: { onAccept?: () => void })
         isLoading,
         refetch,
     } = useOrgInvitation(user?.email || '');
-    const { toast } = useToast();
+    const { toast, dismiss } = useToast();
 
     // Filter invitations to only include pending ones
     const invitations = allInvitations?.filter(
@@ -54,12 +54,16 @@ export default function UserInvitations({ onAccept }: { onAccept?: () => void })
 
             toast({
                 title: 'Success',
-                description: `Invitation accepted! Added to ${result.projects_added} project(s).`,
+                description: `Invitation accepted! Added to ${result.projects_added || 0} project(s).`,
                 variant: 'default',
             });
 
-            // Refresh the invitations and organizations list
-            refetch();
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
+
+            // Invalidate queries (this will trigger refetch automatically)
             queryClient.invalidateQueries({
                 queryKey: queryKeys.organizations.byMembership(user.id),
             });
@@ -68,13 +72,15 @@ export default function UserInvitations({ onAccept }: { onAccept?: () => void })
                 queryKey: queryKeys.organizations.list(),
             });
 
-            // Call the onAccept callback after the render cycle
-            if (onAccept) {
-                setTimeout(() => onAccept(), 0);
-            }
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.organizationInvitations.byEmail(user.email || ''),
+            });
 
-            // Navigate to the organization's dashboard page
-            router.push(`/org/${invitation.organization_id}`);
+            // Navigate to the organization's dashboard page after a short delay
+            // to allow queries to settle and prevent loading loops
+            setTimeout(() => {
+                router.push(`/org/${invitation.organization_id}`);
+            }, 100);
         } catch (error) {
             console.error('Error accepting invitation:', error);
             toast({

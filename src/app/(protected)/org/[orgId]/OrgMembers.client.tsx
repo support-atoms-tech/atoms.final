@@ -1,9 +1,10 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowBigDownIcon, Filter, Users } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,23 +29,21 @@ import {
     OrganizationRole,
     hasOrganizationPermission,
 } from '@/lib/auth/permissions';
-import { getOrganizationMembers } from '@/lib/db/client';
 import { useUser } from '@/lib/providers/user.provider';
 
 export default function OrgMembers() {
     const params = useParams<{ orgId: string }>();
     const { user } = useUser();
-    const { toast } = useToast();
+    const { toast, dismiss } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilters, setRoleFilters] = useState<OrganizationRole[]>([]);
-    const {
-        supabase,
-        isLoading: authLoading,
-        error: authError,
-    } = useAuthenticatedSupabase();
+    const { supabase, isLoading: authLoading } = useAuthenticatedSupabase();
 
     const { data: userRoleQuery } = useOrgMemberRole(params.orgId, user?.id || '');
     const userRole: OrganizationRole | null = userRoleQuery ?? null;
+
+    const queryClient = useQueryClient();
+    const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
     const {
         data: members = [],
@@ -52,12 +51,60 @@ export default function OrgMembers() {
         refetch,
     } = useQuery({
         queryKey: ['organization-members', params?.orgId || ''],
-        queryFn: () =>
-            params && supabase
-                ? getOrganizationMembers(supabase, params.orgId)
-                : Promise.resolve([]),
-        enabled: !!params?.orgId && !!supabase && !authLoading,
+        queryFn: async () => {
+            if (!params?.orgId) return [];
+            const response = await fetch(`/api/organizations/${params.orgId}/members`, {
+                method: 'GET',
+                cache: 'no-store',
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch organization members');
+            }
+            const data = await response.json();
+            return data.members || [];
+        },
+        enabled: !!params?.orgId && !authLoading,
     });
+
+    // Subscribe to realtime changes for organization members
+    useEffect(() => {
+        if (!supabase || !params?.orgId || authLoading) {
+            return;
+        }
+
+        const channel = supabase
+            .channel(`organization-members:${params.orgId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'organization_members',
+                    filter: `organization_id=eq.${params.orgId}`,
+                },
+                (payload) => {
+                    console.log(
+                        '[OrgMembers] Realtime change detected:',
+                        payload.eventType,
+                        payload,
+                    );
+                    // Invalidate and refetch when any change occurs (INSERT, UPDATE, DELETE)
+                    queryClient.invalidateQueries({
+                        queryKey: ['organization-members', params.orgId],
+                    });
+                },
+            )
+            .subscribe((status) => {
+                console.log('[OrgMembers] Realtime subscription status:', status);
+            });
+
+        subscriptionRef.current = channel;
+
+        return () => {
+            channel.unsubscribe();
+            subscriptionRef.current = null;
+        };
+    }, [supabase, params?.orgId, authLoading, queryClient]);
 
     const handleRemoveMember = async (memberId: string) => {
         if (!hasOrganizationPermission(userRole, 'removeMember')) {
@@ -69,32 +116,31 @@ export default function OrgMembers() {
             return;
         }
 
-        if (!user?.id) {
+        if (!params?.orgId) {
             toast({
                 title: 'Error',
-                description: 'User not authenticated.',
+                description: 'Organization ID is required.',
                 variant: 'destructive',
             });
             return;
         }
 
         try {
-            if (!supabase) {
-                throw new Error(authError ?? 'Supabase client not available');
-            }
-            const { error } = await supabase
-                .from('organization_members')
-                .delete()
-                .eq('organization_id', params?.orgId || '')
-                .eq('user_id', memberId);
+            const response = await fetch(
+                `/api/organizations/${params.orgId}/members/${memberId}`,
+                {
+                    method: 'DELETE',
+                    cache: 'no-store',
+                },
+            );
 
-            if (error) {
-                console.error('Error removing member:', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to remove member');
             }
 
             // Update member count via API
-            await fetch(`/api/organizations/${params?.orgId}/update-member-count`, {
+            await fetch(`/api/organizations/${params.orgId}/update-member-count`, {
                 method: 'POST',
                 cache: 'no-store',
             });
@@ -105,12 +151,18 @@ export default function OrgMembers() {
                 variant: 'default',
             });
 
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
+
             refetch();
         } catch (error) {
             console.error('Error removing member:', error);
             toast({
                 title: 'Error',
-                description: 'Failed to remove member.',
+                description:
+                    error instanceof Error ? error.message : 'Failed to remove member.',
                 variant: 'destructive',
             });
         }
@@ -136,18 +188,21 @@ export default function OrgMembers() {
         }
 
         try {
-            if (!supabase) {
-                throw new Error(authError ?? 'Supabase client not available');
-            }
-            const { error } = await supabase
-                .from('organization_members')
-                .update({ role: selectedRole })
-                .eq('organization_id', params.orgId)
-                .eq('user_id', memberId);
+            const response = await fetch(
+                `/api/organizations/${params.orgId}/members/${memberId}/role`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ role: selectedRole }),
+                    cache: 'no-store',
+                },
+            );
 
-            if (error) {
-                console.error('Error updating organization member role:', error);
-                throw error;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update role');
             }
 
             toast({
@@ -155,6 +210,11 @@ export default function OrgMembers() {
                 description: `Role updated to ${selectedRole} successfully!`,
                 variant: 'default',
             });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
 
             refetch();
         } catch (error) {
