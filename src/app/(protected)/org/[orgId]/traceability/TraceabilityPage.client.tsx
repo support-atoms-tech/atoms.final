@@ -102,6 +102,7 @@ interface DraggableTreeNodeProps {
         title: string;
         parent_id: string | null;
     }) => void;
+    onViewInManage: (requirementId: string) => void;
 }
 
 function DraggableTreeNode({
@@ -116,6 +117,7 @@ function DraggableTreeNode({
     overId,
     onToggleCollapse,
     onDeleteRelationship,
+    onViewInManage,
 }: DraggableTreeNodeProps) {
     const router = useRouter();
 
@@ -249,12 +251,22 @@ function DraggableTreeNode({
                                     node.title ||
                                     node.requirement_id?.slice(0, 8)}
                             </Badge>
-                            <Badge
-                                variant={isTopLevel ? 'default' : 'secondary'}
-                                className="text-xs"
-                            >
-                                {isTopLevel ? 'PARENT' : `CHILD-L${relativeDepth}`}
-                            </Badge>
+                            {isTopLevel ? (
+                                <Badge variant="default" className="text-xs">
+                                    PARENT
+                                </Badge>
+                            ) : (
+                                <>
+                                    {node.has_children && (
+                                        <Badge variant="default" className="text-xs">
+                                            PARENT
+                                        </Badge>
+                                    )}
+                                    <Badge variant="secondary" className="text-xs">
+                                        CHILD-L{relativeDepth}
+                                    </Badge>
+                                </>
+                            )}
                             <h3 className="font-medium text-sm truncate">
                                 {requirement?.name || node.title}
                             </h3>
@@ -294,6 +306,18 @@ function DraggableTreeNode({
                                 Open
                             </div>
                         )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onViewInManage(node.requirement_id);
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="text-xs h-8 px-3 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        >
+                            View in Manage
+                        </Button>
                         {!isTopLevel && (
                             <Button
                                 variant="ghost"
@@ -1402,6 +1426,9 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
                                                                             }
                                                                             onDeleteRelationship={
                                                                                 handleDeleteRelationship
+                                                                            }
+                                                                            onViewInManage={
+                                                                                openInManage
                                                                             }
                                                                         />
                                                                     );
