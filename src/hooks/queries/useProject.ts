@@ -1,14 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { getUserProjects } from '@/lib/db/client';
+import { handle401Response } from '@/lib/utils/handle401';
 import { QueryFilters } from '@/types/base/filters.types';
 import { Project } from '@/types/base/projects.types';
 
 export function useProject(projectId: string) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     return useQuery({
         queryKey: queryKeys.projects.detail(projectId),
+        retry: false,
+        retryOnMount: false,
+        throwOnError: false,
         queryFn: async () => {
             const response = await fetch(`/api/projects/${projectId}`, {
                 method: 'GET',
@@ -16,9 +24,14 @@ export function useProject(projectId: string) {
             });
 
             if (!response.ok) {
+                // Handle 401 (Unauthorized) - user is logged out
+                const handled = handle401Response(response, pathname, router);
+                if (handled === null) return null;
+
+                // For other errors, log but don't throw
                 const message = `Error fetching project: ${response.statusText}`;
                 console.error(message);
-                throw new Error(message);
+                return null;
             }
 
             const payload = (await response.json()) as {

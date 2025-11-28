@@ -91,6 +91,19 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
             return;
         }
 
+        // Validate user.id is a valid UUID format
+        const uuidRegex =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(user.id)) {
+            console.error('Invalid user ID format:', user.id);
+            toast({
+                title: 'Error',
+                description: 'Invalid user ID format. Please log out and log back in.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
@@ -99,20 +112,32 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
             // Create the organization
             // Note: We skip slug uniqueness check and let the database unique constraint handle it
             // This avoids RLS issues and simplifies the code
+            const insertPayload = {
+                name: values.name,
+                slug: values.slug,
+                description: values.description || null,
+                created_by: user.id, // Should be UUID string
+                updated_by: user.id, // Should be UUID string
+                type: OrganizationType.enterprise,
+                billing_plan: BillingPlan.free, // Default to free plan
+                billing_cycle: PricingPlanInterval.month,
+                max_members: 5, // Default values
+                max_monthly_requests: 1000, // Default values
+            };
+
+            // Debug logging
+            if (process.env.NEXT_PUBLIC_DEBUG_RLS === 'true') {
+                console.log('=== ORGANIZATION INSERT DEBUG ===');
+                console.log('User ID:', user.id);
+                console.log('User ID type:', typeof user.id);
+                console.log('User ID length:', user.id.length);
+                console.log('Insert payload:', JSON.stringify(insertPayload, null, 2));
+                console.log('================================');
+            }
+
             const { data: orgData, error: orgError } = await supabase
                 .from('organizations')
-                .insert({
-                    name: values.name,
-                    slug: values.slug,
-                    description: values.description || null,
-                    created_by: user.id,
-                    updated_by: user.id,
-                    type: OrganizationType.enterprise,
-                    billing_plan: BillingPlan.free, // Default to free plan
-                    billing_cycle: PricingPlanInterval.month,
-                    max_members: 5, // Default values
-                    max_monthly_requests: 1000, // Default values
-                })
+                .insert(insertPayload)
                 .select('id')
                 .single();
 
@@ -129,6 +154,33 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
                     form.setError('slug', {
                         type: 'manual',
                         message: `Slug "${values.slug}" is already taken. Suggested: "${suggestedSlug}". You can use this or choose a new one.`,
+                    });
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                // Handle COALESCE type mismatch error (database trigger issue)
+                if (
+                    orgError?.message?.includes('COALESCE types') ||
+                    orgError?.message?.includes('cannot be matched')
+                ) {
+                    console.error('Database trigger error - COALESCE type mismatch:', {
+                        error: orgError,
+                        errorCode: orgError?.code,
+                        errorMessage: orgError?.message,
+                        errorDetails: orgError?.details,
+                        errorHint: orgError?.hint,
+                        user_id: user.id,
+                        user_id_type: typeof user.id,
+                        user_workos_id: user.workosId,
+                        insertPayload,
+                    });
+                    toast({
+                        title: 'Database Error',
+                        description:
+                            'A database trigger configuration issue was detected. The trigger is trying to mix UUID and text types. Please check the auto_add_org_owner trigger function. Error: ' +
+                            (orgError?.message || 'Unknown error'),
+                        variant: 'destructive',
                     });
                     setIsSubmitting(false);
                     return;

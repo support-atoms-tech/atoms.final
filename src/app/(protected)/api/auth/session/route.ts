@@ -11,17 +11,10 @@ import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
  */
 export async function GET(_request: NextRequest) {
     try {
-        console.log('Session API: Checking WorkOS session...');
         const { user, accessToken } = await withAuth();
 
-        console.log('Session API: withAuth result:', {
-            hasUser: !!user,
-            hasAccessToken: !!accessToken,
-            userId: user?.id,
-        });
-
         if (!user) {
-            console.log('Session API: No user found, returning 401');
+            // 401 is expected when logged out - don't log it
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
         }
 
@@ -43,9 +36,6 @@ export async function GET(_request: NextRequest) {
 
         const resolvedUserId = profile.id;
 
-        console.log('Session API: User authenticated successfully:', resolvedUserId, {
-            workosUserId: user.id,
-        });
         return NextResponse.json({
             user: {
                 id: resolvedUserId,

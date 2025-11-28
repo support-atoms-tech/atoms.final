@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
+import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { Database } from '@/types/base/database.types';
+
+// Public routes where we don't need to check session (reduces unnecessary 401s)
+const PUBLIC_ROUTES = ['/login', '/', '/signup', '/register', '/auth/callback'];
 
 /**
  * Hook to get authenticated Supabase client with WorkOS token
@@ -24,6 +28,7 @@ const globalForWorkOS = globalThis as unknown as {
 };
 
 export function useAuthenticatedSupabase() {
+    const pathname = usePathname();
     const [supabase, setSupabase] = useState<ReturnType<
         typeof createClient<Database>
     > | null>(null);
@@ -101,14 +106,15 @@ export function useAuthenticatedSupabase() {
                     method: 'GET',
                     credentials: 'include',
                 });
+                // 401 is expected when logged out - return null gracefully
                 if (!response.ok) {
-                    throw new Error('Failed to refresh session');
+                    return null;
                 }
                 const sessionData = (await response.json()) as {
                     accessToken?: string | null;
                 } | null;
                 const newToken = sessionData?.accessToken ?? null;
-                if (!newToken) throw new Error('No access token in refreshed session');
+                if (!newToken) return null;
 
                 // Update token refs and realtime auth without recreating the client
                 globalForWorkOS.atomsWorkosAccessToken = newToken;
@@ -141,6 +147,19 @@ export function useAuthenticatedSupabase() {
     }, [scheduleRefresh]);
 
     const createAuthenticatedClient = useCallback(async () => {
+        // Skip session check on public routes to avoid unnecessary 401s
+        const isPublicRoute =
+            pathname &&
+            PUBLIC_ROUTES.some(
+                (route) => pathname === route || pathname.startsWith(route + '/'),
+            );
+        if (isPublicRoute) {
+            setSupabase(null);
+            setError(null);
+            setIsLoading(false);
+            return;
+        }
+
         try {
             // Dedupe session fetches across hooks
             // If we already have a valid token that is not near expiry, skip hitting /api/auth/session
@@ -155,6 +174,7 @@ export function useAuthenticatedSupabase() {
                     const response = await fetch('/api/auth/session', {
                         credentials: 'include',
                     });
+                    // 401 is expected when logged out - don't treat as error
                     if (!response.ok) return null;
                     const sessionData = await response.json();
                     if (!sessionData?.accessToken) return null;
@@ -168,7 +188,13 @@ export function useAuthenticatedSupabase() {
             const session = needsSessionFetch
                 ? await globalForWorkOS.atomsWorkosSessionPromise
                 : { accessToken: existingToken as string };
-            if (!session) throw new Error('No active WorkOS session');
+            if (!session) {
+                // No session is expected when logged out - handle gracefully without error
+                setSupabase(null);
+                setError(null);
+                setIsLoading(false);
+                return;
+            }
 
             // Reuse existing client; we will update Authorization dynamically per request
             if (globalForWorkOS.atomsWorkosSupabaseClient) {
@@ -271,15 +297,20 @@ export function useAuthenticatedSupabase() {
             setError(null);
             scheduleRefresh(session.accessToken);
         } catch (err) {
-            console.error('Error creating authenticated Supabase client:', err);
-            setError(err instanceof Error ? err.message : 'Failed to authenticate');
+            // Only log unexpected errors - "No active WorkOS session" is expected when logged out
+            const errorMessage =
+                err instanceof Error ? err.message : 'Failed to authenticate';
+            if (!errorMessage.includes('No active WorkOS session')) {
+                console.error('Error creating authenticated Supabase client:', err);
+            }
+            setError(errorMessage);
             setSupabase(null);
             clientRef.current = null;
             tokenRef.current = null;
         } finally {
             setIsLoading(false);
         }
-    }, [scheduleRefresh, refreshSession]);
+    }, [scheduleRefresh, refreshSession, pathname]);
 
     useEffect(() => {
         createAuthenticatedClient();

@@ -42,7 +42,7 @@ interface DocumentFormProps {
 
 export default function DocumentForm({ projectId, onSuccess }: DocumentFormProps) {
     const { userProfile } = useAuth();
-    const { toast } = useToast();
+    const { toast, dismiss } = useToast();
     const { mutateAsync: createDocumentWithSchemas, isPending: isCreatingDocument } =
         useCreateDocumentWithDefaultSchemas();
 
@@ -78,6 +78,12 @@ export default function DocumentForm({ projectId, onSuccess }: DocumentFormProps
                 description:
                     'Document created successfully with default property schemas',
             });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
+
             onSuccess();
         } catch (error) {
             console.error('Failed to create document with schemas:', error);

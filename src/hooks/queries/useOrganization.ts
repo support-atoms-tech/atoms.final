@@ -1,14 +1,22 @@
 // import { supabase } from '@/lib/supabase/supabaseClient'
 import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
+import { handle401Response } from '@/lib/utils/handle401';
 import { Organization, OrganizationType } from '@/types';
 import { QueryFilters } from '@/types/base/filters.types';
 
 export function useOrganization(orgId: string) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     return useQuery<Organization | null>({
         queryKey: queryKeys.organizations.detail(orgId),
+        retry: false, // Don't retry failed requests
+        retryOnMount: false, // Don't retry on mount if query failed
+        throwOnError: false, // Don't throw errors - we handle them in queryFn
         queryFn: async () => {
             // Handle empty or invalid orgId more gracefully
             if (!orgId || orgId === '') {
@@ -39,6 +47,11 @@ export function useOrganization(orgId: string) {
             });
 
             if (!response.ok) {
+                // Handle 401 (Unauthorized) - user is logged out
+                const handled = handle401Response(response, pathname, router);
+                if (handled === null) return null;
+
+                // For other errors, log but don't redirect
                 console.error(
                     'Error fetching organization via API:',
                     response.statusText,

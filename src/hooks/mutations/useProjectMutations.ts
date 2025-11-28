@@ -91,39 +91,9 @@ export function useCreateProject() {
                 throw new Error('Failed to create project, insert returned no data.');
             }
 
-            // Add the creator as owner of the project in project_members
-            const memberInsertPayload = {
-                user_id: input.owned_by,
-                project_id: project.id,
-                role: 'owner' as ProjectRole,
-                org_id: input.organization_id,
-                status: 'active' as const,
-            };
-
-            // Log exact query for RLS diagnosis
-            if (debugConfig.debugRLSQueries()) {
-                console.log('=== PROJECT MEMBER INSERT QUERY DEBUG ===');
-                console.log(
-                    'Endpoint:',
-                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/project_members?select=*`,
-                );
-                console.log('Method:', 'POST');
-                console.log('Payload:', JSON.stringify(memberInsertPayload, null, 2));
-                console.log('User ID:', input.owned_by);
-                console.log('Project ID:', project.id);
-                console.log('Organization ID:', input.organization_id);
-                console.log('==========================================');
-            }
-
-            const { error: memberError } = await client
-                .from('project_members')
-                .insert(memberInsertPayload);
-
-            if (memberError) {
-                console.error('Failed to add creator as project member:', memberError);
-                // Don't throw - the project was created successfully
-                // The user can be added manually later if needed
-            }
+            // Note: The database trigger automatically adds the creator as owner member,
+            // so we don't need to insert manually. This prevents RLS conflicts and keeps
+            // membership consistent, similar to how organizations work.
 
             return project;
         },
@@ -312,19 +282,8 @@ export function useDuplicateProject() {
                 throw new Error('Failed to create duplicated project');
             }
 
-            // Add the user as owner of the new project
-            const { error: memberError } = await client.from('project_members').insert({
-                user_id: userId,
-                project_id: newProject.id,
-                role: 'owner' as ProjectRole,
-                org_id: originalProject.organization_id,
-                status: 'active' as const,
-            });
-
-            if (memberError) {
-                console.error('Failed to add user as project member', memberError);
-                // Don't throw here as the project was created successfully
-            }
+            // Note: The database trigger automatically adds the creator as owner member,
+            // so we don't need to insert manually. This prevents RLS conflicts.
 
             return newProject;
         },

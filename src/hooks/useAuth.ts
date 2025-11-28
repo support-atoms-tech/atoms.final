@@ -1,4 +1,4 @@
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Profile } from '@/types';
@@ -9,12 +9,16 @@ import { Profile } from '@/types';
  * Manages authentication state and user profile on the client side.
  * Checks for WorkOS session via API and fetches user profile.
  */
+// Public routes where we don't need to check session (reduces unnecessary 401s)
+const PUBLIC_ROUTES = ['/login', '/', '/signup', '/register', '/auth/callback'];
+
 export function useAuth() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userProfile, setUserProfile] = useState<Profile | null>(null);
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const router = useRouter();
+    const pathname = usePathname();
     const [initialized, setInitialized] = useState(false);
 
     /**
@@ -22,8 +26,6 @@ export function useAuth() {
      */
     const fetchUserProfile = useCallback(async (userId: string, token: string) => {
         try {
-            console.log('useAuth: Fetching profile for user:', userId);
-
             if (!userId) {
                 throw new Error('Missing profile identifier');
             }
@@ -39,7 +41,6 @@ export function useAuth() {
             }
 
             const profile: Profile = await response.json();
-            console.log('useAuth: Profile fetched successfully:', profile?.full_name);
             setUserProfile(profile);
         } catch (error) {
             console.error('useAuth: Error in fetchUserProfile:', error);
@@ -51,9 +52,21 @@ export function useAuth() {
      * Check current session and fetch user data
      */
     const checkSession = useCallback(async () => {
-        try {
-            console.log('useAuth: Checking session...');
+        // Skip session check on public routes to avoid unnecessary 401s
+        const isPublicRoute =
+            pathname &&
+            PUBLIC_ROUTES.some(
+                (route) => pathname === route || pathname.startsWith(route + '/'),
+            );
+        if (isPublicRoute) {
+            setIsAuthenticated(false);
+            setUserProfile(null);
+            setAccessToken(null);
+            setIsLoading(false);
+            return;
+        }
 
+        try {
             // Check if user is logged in via API
             const response = await fetch('/api/auth/session', {
                 method: 'GET',
@@ -61,10 +74,13 @@ export function useAuth() {
             });
 
             if (!response.ok) {
-                console.log(
-                    'useAuth: Session check failed with status:',
-                    response.status,
-                );
+                // Only log unexpected errors (401 is expected when logged out)
+                if (response.status !== 401) {
+                    console.warn(
+                        'useAuth: Session check failed with unexpected status:',
+                        response.status,
+                    );
+                }
                 setIsAuthenticated(false);
                 setUserProfile(null);
                 setAccessToken(null);
@@ -74,9 +90,6 @@ export function useAuth() {
             const data = await response.json();
 
             if (data.user && data.user.id && data.accessToken) {
-                console.log('useAuth: User session found:', data.user.id, {
-                    workosId: data.user.workosId,
-                });
                 setIsAuthenticated(true);
                 setAccessToken(data.accessToken);
                 if (data.profile) {
@@ -85,7 +98,6 @@ export function useAuth() {
                     await fetchUserProfile(data.user.id, data.accessToken);
                 }
             } else {
-                console.log('useAuth: No valid session found');
                 setIsAuthenticated(false);
                 setUserProfile(null);
                 setAccessToken(null);
@@ -98,7 +110,7 @@ export function useAuth() {
         } finally {
             setIsLoading(false);
         }
-    }, [fetchUserProfile]);
+    }, [fetchUserProfile, pathname]);
 
     /**
      * Sign out the user
@@ -132,7 +144,6 @@ export function useAuth() {
 
         // Set fallback timeout to ensure loading doesn't persist
         const fallbackTimeout = setTimeout(() => {
-            console.log('useAuth: Fallback timeout - forcing loading to false');
             setIsLoading(false);
         }, 3000);
 

@@ -427,6 +427,7 @@ function DraggableRequirementCard({
 export default function TraceabilityPageClient({ orgId }: TraceabilityPageClientProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
     const { user } = useUser();
     const { toast } = useToast();
 
@@ -504,14 +505,15 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
 
     // Keep local requirementId in sync when URL changes
     useEffect(() => {
-        const fromUrl = searchParams.get('requirementId') || '';
+        const params = new URLSearchParams(searchParamsString);
+        const fromUrl = params.get('requirementId') || '';
         setCurrentRequirementId(fromUrl);
-    }, [searchParams]);
+    }, [searchParamsString]);
 
     // Update URL when project or tab changes, preserving existing requirement/document params (and local requirementId)
     const updateURL = useCallback(
         (projectId: string, tab: string) => {
-            const params = new URLSearchParams(searchParams); // start with current params
+            const params = new URLSearchParams(searchParamsString); // start with current params
             if (projectId) {
                 params.set('projectId', projectId);
             } else {
@@ -524,17 +526,25 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
             if (currentRequirementId) {
                 params.set('requirementId', currentRequirementId);
             }
-            router.replace(`/org/${orgId}/traceability?${params.toString()}`, {
+            const nextSearch = params.toString();
+            if (nextSearch === searchParamsString) {
+                return;
+            }
+            const nextUrl =
+                nextSearch.length > 0
+                    ? `/org/${orgId}/traceability?${nextSearch}`
+                    : `/org/${orgId}/traceability`;
+            router.replace(nextUrl, {
                 scroll: false,
             });
         },
-        [router, orgId, searchParams, currentRequirementId],
+        [router, orgId, searchParamsString, currentRequirementId],
     );
 
     // Navigate directly to Manage tab for a chosen requirement
     const openInManage = useCallback(
         (requirementId: string) => {
-            const params = new URLSearchParams(searchParams);
+            const params = new URLSearchParams(searchParamsString);
             if (selectedProject) params.set('projectId', selectedProject);
             params.set('tab', 'manage');
             params.set('requirementId', requirementId);
@@ -542,7 +552,7 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
             router.replace(`/org/${orgId}/traceability?${params.toString()}`);
             setActiveTab('manage');
         },
-        [router, orgId, searchParams, selectedProject],
+        [router, orgId, searchParamsString, selectedProject],
     );
 
     // Sync URL when state changes

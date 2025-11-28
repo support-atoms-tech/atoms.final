@@ -1,8 +1,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
 import { getDocumentBlocksAndRequirements } from '@/lib/db/client';
+import { handle401Response } from '@/lib/utils/handle401';
 import {
     QueryFilters as GenericQueryFilters,
     buildQuery,
@@ -11,8 +13,14 @@ import { Block, Document } from '@/types/base/documents.types';
 import { QueryFilters } from '@/types/base/filters.types';
 
 export function useProjectDocuments(projectId: string) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     return useQuery({
         queryKey: queryKeys.documents.byProject(projectId),
+        retry: false,
+        retryOnMount: false,
+        throwOnError: false,
         queryFn: async () => {
             const response = await fetch(`/api/projects/${projectId}/documents`, {
                 method: 'GET',
@@ -20,9 +28,14 @@ export function useProjectDocuments(projectId: string) {
             });
 
             if (!response.ok) {
+                // Handle 401 (Unauthorized) - user is logged out
+                const handled = handle401Response(response, pathname, router);
+                if (handled === null) return null;
+
+                // For other errors, log but don't throw
                 const message = `Error fetching project documents: ${response.statusText}`;
                 console.error(message);
-                throw new Error(message);
+                return null;
             }
 
             const payload = (await response.json()) as {
@@ -36,8 +49,14 @@ export function useProjectDocuments(projectId: string) {
 }
 
 export function useDocument(documentId: string) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     return useQuery({
         queryKey: queryKeys.documents.detail(documentId),
+        retry: false,
+        retryOnMount: false,
+        throwOnError: false,
         queryFn: async () => {
             const response = await fetch(`/api/documents/${documentId}`, {
                 method: 'GET',
@@ -45,9 +64,14 @@ export function useDocument(documentId: string) {
             });
 
             if (!response.ok) {
+                // Handle 401 (Unauthorized) - user is logged out
+                const handled = handle401Response(response, pathname, router);
+                if (handled === null) return null;
+
+                // For other errors, log but don't throw
                 const message = `Error fetching document: ${response.statusText}`;
                 console.error(message);
-                throw new Error(message);
+                return null;
             }
 
             const payload = (await response.json()) as {

@@ -83,7 +83,7 @@ const envSchema = z.object({
         .transform((val) => val === 'true')
         .optional()
         .default('false'),
-    NEXT_PUBLIC_DEBUG_TABLE_COLUMNS: z
+    NEXT_PUBLIC_DEBUG_TABLE: z
         .string()
         .transform((val) => val === 'true')
         .optional()
@@ -199,12 +199,13 @@ export const debugConfig = {
     },
 
     /**
-     * Enable detailed table column query logging
-     * Helps debug column creation, updates, and queries
+     * Enable detailed table debugging
+     * Includes column creation, updates, queries, and requirement hydration
+     * Helps debug table-related issues including data merge conflicts
      */
-    debugTableColumns: () => {
+    debugTable: () => {
         if (isProduction()) return false;
-        return env.NEXT_PUBLIC_DEBUG_TABLE_COLUMNS ?? false;
+        return env.NEXT_PUBLIC_DEBUG_TABLE ?? false;
     },
 };
 

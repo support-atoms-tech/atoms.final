@@ -746,7 +746,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 return await pasteState.columnConfirmationPromise;
             }
 
-            if (debugConfig.debugTableColumns()) {
+            if (debugConfig.debugTable()) {
                 console.warn('[TableColumns] Starting column confirmation barrier', {
                     tableId,
                     documentId,
@@ -1159,7 +1159,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     delete metadataToSave.columns;
                 }
 
-                if (debugConfig.debugTableColumns() && includeColumns) {
+                if (debugConfig.debugTable() && includeColumns) {
                     console.warn('[TableColumns] Persisting column metadata snapshot', {
                         blockId,
                         documentId,
@@ -1345,17 +1345,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 accessorToUse = 'status' as keyof T;
             } else if (sysKind === 'priority') {
                 accessorToUse = 'priority' as keyof T;
-            }
-
-            if (sysKind) {
-                try {
-                    console.log('FixAccessor', {
-                        header: col.header,
-                        accessor: String(accessorToUse),
-                    });
-                } catch {
-                    // swallow any debug errors
-                }
             }
 
             return {
@@ -3718,7 +3707,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }> = [];
                 if (columnsNeeded > currentColumns.length) {
                     const existingColumnCount = currentColumns.length;
-                    if (debugConfig.debugTableColumns()) {
+                    if (debugConfig.debugTable()) {
                         console.warn(
                             '[TableColumns] Missing columns detected during paste',
                             {
@@ -3913,7 +3902,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         );
                                         const createStart = Date.now();
 
-                                        if (debugConfig.debugTableColumns()) {
+                                        if (debugConfig.debugTable()) {
                                             console.warn(
                                                 '[TableColumns] Auto-creating column via createPropertyAndColumn',
                                                 {

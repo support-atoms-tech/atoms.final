@@ -152,8 +152,7 @@ export async function POST(
         const isRequirementsTable =
             tableKind === 'requirements' || tableKind === 'requirements_default';
 
-        const debugTableColumns =
-            debugConfig.debugTableColumns() || isFeatureEnabled.debugLogging();
+        const debugTable = debugConfig.debugTable() || isFeatureEnabled.debugLogging();
 
         const createdColumns: unknown[] = [];
         if (isRequirementsTable && organizationId) {
@@ -172,7 +171,7 @@ export async function POST(
                     propsErr,
                 );
             } else if (Array.isArray(baseProps) && baseProps.length > 0) {
-                if (debugTableColumns) {
+                if (debugTable) {
                     const counts = baseProps.reduce<Record<string, number>>(
                         (acc, prop) => {
                             const key = (prop.name || '').toLowerCase().trim();

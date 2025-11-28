@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { v4 as _uuidv4 } from 'uuid';
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -10,6 +10,7 @@ import {
     useUpdateRequirement,
 } from '@/hooks/mutations/useRequirementMutations';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { debugConfig } from '@/lib/utils/env-validation';
 import { generateNextRequirementId } from '@/lib/utils/requirementIdGenerator';
 import { Json, TablesInsert, TablesUpdate } from '@/types/base/database.types';
 import {
@@ -51,7 +52,21 @@ export const useRequirementActions = ({
     const _createRequirementMutation = useCreateRequirement();
     const _updateRequirementMutation = useUpdateRequirement();
     const deletedRowIdsRef = useRef<Set<string>>(new Set());
+    const loggedHydrationRef = useRef<Set<string>>(new Set());
+    const lastRequirementsRef = useRef<string>('');
     const { getClientOrThrow } = useAuthenticatedSupabase();
+
+    // Clear hydration log tracking when requirements change (new data loaded)
+    useEffect(() => {
+        const currentIds = localRequirements
+            .map((r) => r.id)
+            .sort()
+            .join(',');
+        if (currentIds !== lastRequirementsRef.current) {
+            loggedHydrationRef.current.clear();
+            lastRequirementsRef.current = currentIds;
+        }
+    }, [localRequirements]);
 
     // Function to refresh requirements from the database
     const refreshRequirements = useCallback(async () => {
@@ -371,39 +386,38 @@ export const useRequirementActions = ({
             return [];
         }
 
+        const shouldDebug = debugConfig.debugTable();
+        const debugInfo = new Map<
+            string,
+            {
+                dbStatus?: string | null;
+                dbPriority?: string | null;
+                propsStatus?: unknown;
+                propsPriority?: unknown;
+                finalStatus?: unknown;
+                finalPriority?: unknown;
+                hasConflict?: boolean;
+            }
+        >();
+
         return localRequirements
             .filter((req) => !deletedRowIdsRef.current.has(req.id)) // Filter out deleted
             .map((req, index) => {
-                const isFirstRow = index === 0;
-                if (isFirstRow) {
-                    console.debug('[HYDRATE DB RAW]', {
-                        id: req.id,
-                        status: req.status,
-                        priority: req.priority,
-                        properties: req.properties,
-                    });
-                }
-
                 const dynamicReq: DynamicRequirement = {
                     id: req.id,
                     ai_analysis: req.ai_analysis as RequirementAiAnalysis,
                 };
 
+                // Track debug info for this requirement
+                if (shouldDebug && !loggedHydrationRef.current.has(req.id)) {
+                    debugInfo.set(req.id, {
+                        dbStatus: req.status ?? null,
+                        dbPriority: req.priority ?? null,
+                    });
+                }
+
                 // Extract values from properties object
                 if (req.properties) {
-                    if (isFirstRow) {
-                        console.debug('[HYDRATE PROPS BEFORE MERGE]', {
-                            id: req.id,
-                            properties: req.properties,
-                            statusProp: (req.properties as Record<string, unknown>)?.[
-                                'status'
-                            ],
-                            priorityProp: (req.properties as Record<string, unknown>)?.[
-                                'priority'
-                            ],
-                        });
-                    }
-
                     Object.entries(req.properties).forEach(([key, prop]) => {
                         const keyLc = key.toLowerCase();
                         if (keyLc === 'status' || keyLc === 'priority') {
@@ -444,14 +458,6 @@ export const useRequirementActions = ({
                 }
 
                 if (properties && properties.length > 0) {
-                    if (isFirstRow) {
-                        console.debug('[HYDRATE ENUM COLUMNS]', {
-                            id: req.id,
-                            dbStatus: req.status,
-                            dbPriority: req.priority,
-                        });
-                    }
-
                     properties.forEach((prop) => {
                         const keyLc = prop.name.toLowerCase();
                         if (!NATURAL_FIELD_KEYS.has(keyLc)) return;
@@ -466,6 +472,16 @@ export const useRequirementActions = ({
                                 ? props[keyLc] ||
                                   props[keyLc === 'status' ? 'Status' : 'Priority']
                                 : null;
+
+                            // Track for debug logging
+                            if (shouldDebug && debugInfo.has(req.id)) {
+                                const info = debugInfo.get(req.id)!;
+                                if (keyLc === 'status') {
+                                    info.propsStatus = propsOverride;
+                                } else {
+                                    info.propsPriority = propsOverride;
+                                }
+                            }
 
                             if (
                                 propsOverride &&
@@ -482,6 +498,33 @@ export const useRequirementActions = ({
                                 ) {
                                     dynamicReq[prop.name] = overrideValue as CellValue;
                                     dynamicReq[keyLc] = overrideValue as CellValue;
+
+                                    // Track final value for debug
+                                    if (shouldDebug && debugInfo.has(req.id)) {
+                                        const info = debugInfo.get(req.id)!;
+                                        if (keyLc === 'status') {
+                                            info.finalStatus = overrideValue;
+                                            // Check for conflict
+                                            if (
+                                                req.status &&
+                                                String(req.status) !==
+                                                    String(overrideValue)
+                                            ) {
+                                                info.hasConflict = true;
+                                            }
+                                        } else {
+                                            info.finalPriority = overrideValue;
+                                            // Check for conflict
+                                            if (
+                                                req.priority &&
+                                                String(req.priority) !==
+                                                    String(overrideValue)
+                                            ) {
+                                                info.hasConflict = true;
+                                            }
+                                        }
+                                    }
+
                                     return; // Skip DB overlay - properties is source of truth
                                 }
                             }
@@ -506,13 +549,10 @@ export const useRequirementActions = ({
                                 dynamicReq[prop.name] =
                                     req.status as unknown as string as unknown as CellValue;
 
-                                if (isFirstRow) {
-                                    console.debug('[MERGE] result', {
-                                        id: req.id,
-                                        field: 'status',
-                                        resultValue: req.status,
-                                        source: 'db_enum',
-                                    });
+                                // Track final value for debug
+                                if (shouldDebug && debugInfo.has(req.id)) {
+                                    const info = debugInfo.get(req.id)!;
+                                    info.finalStatus = req.status;
                                 }
                                 break;
                             case 'priority':
@@ -520,13 +560,10 @@ export const useRequirementActions = ({
                                 dynamicReq[prop.name] =
                                     req.priority as unknown as string as unknown as CellValue;
 
-                                if (isFirstRow) {
-                                    console.debug('[MERGE] result', {
-                                        id: req.id,
-                                        field: 'priority',
-                                        resultValue: req.priority,
-                                        source: 'db_enum',
-                                    });
+                                // Track final value for debug
+                                if (shouldDebug && debugInfo.has(req.id)) {
+                                    const info = debugInfo.get(req.id)!;
+                                    info.finalPriority = req.priority;
                                 }
                                 break;
                         }
@@ -564,6 +601,18 @@ export const useRequirementActions = ({
                         ) {
                             dynamicReq[statusDisplayKey] = statusValue as CellValue;
                             dynamicReq['status'] = statusValue as CellValue;
+
+                            // Track final value and conflict for debug
+                            if (shouldDebug && debugInfo.has(req.id)) {
+                                const info = debugInfo.get(req.id)!;
+                                info.finalStatus = statusValue;
+                                if (
+                                    req.status &&
+                                    String(req.status) !== String(statusValue)
+                                ) {
+                                    info.hasConflict = true;
+                                }
+                            }
                         }
                     }
 
@@ -583,25 +632,50 @@ export const useRequirementActions = ({
                         ) {
                             dynamicReq[priorityDisplayKey] = priorityValue as CellValue;
                             dynamicReq['priority'] = priorityValue as CellValue;
+
+                            // Track final value and conflict for debug
+                            if (shouldDebug && debugInfo.has(req.id)) {
+                                const info = debugInfo.get(req.id)!;
+                                info.finalPriority = priorityValue;
+                                if (
+                                    req.priority &&
+                                    String(req.priority) !== String(priorityValue)
+                                ) {
+                                    info.hasConflict = true;
+                                }
+                            }
                         }
                     }
                 }
 
-                if (isFirstRow) {
-                    console.debug(
-                        '[HYDRATE COMMITTED] final value that goes into local store',
-                        {
+                // Log debug info once per requirement ID (only if enabled and not already logged)
+                if (
+                    shouldDebug &&
+                    debugInfo.has(req.id) &&
+                    !loggedHydrationRef.current.has(req.id)
+                ) {
+                    const info = debugInfo.get(req.id)!;
+                    loggedHydrationRef.current.add(req.id);
+
+                    // Only log if there's a conflict or if it's the first requirement (sample)
+                    if (info.hasConflict || index === 0) {
+                        console.debug('[HYDRATE] Requirement hydration', {
                             id: req.id,
-                            finalStatus: dynamicReq['status'] || dynamicReq['Status'],
-                            finalPriority:
-                                dynamicReq['priority'] || dynamicReq['Priority'],
-                            allKeys: Object.keys(dynamicReq).filter(
-                                (k) =>
-                                    k.toLowerCase() === 'status' ||
-                                    k.toLowerCase() === 'priority',
-                            ),
-                        },
-                    );
+                            index,
+                            dbStatus: info.dbStatus,
+                            dbPriority: info.dbPriority,
+                            propsStatus: info.propsStatus,
+                            propsPriority: info.propsPriority,
+                            finalStatus: info.finalStatus,
+                            finalPriority: info.finalPriority,
+                            hasConflict: info.hasConflict,
+                            source: info.hasConflict
+                                ? 'CONFLICT: Properties override DB enum'
+                                : info.propsStatus || info.propsPriority
+                                  ? 'Properties override'
+                                  : 'DB enum',
+                        });
+                    }
                 }
 
                 return dynamicReq;

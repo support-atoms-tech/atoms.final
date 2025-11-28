@@ -48,7 +48,7 @@ interface ProjectFormProps {
 export default function ProjectForm({ onSuccess, organizationId }: ProjectFormProps) {
     const { userProfile } = useAuth();
     const { mutateAsync: createProject, isPending } = useCreateProject();
-    const { toast } = useToast();
+    const { toast, dismiss } = useToast();
     const { selectProject } = useProjectStore();
     const form = useForm<ProjectFormValues>({
         resolver: zodResolver(projectFormSchema),
@@ -105,6 +105,12 @@ export default function ProjectForm({ onSuccess, organizationId }: ProjectFormPr
                 title: 'Success',
                 description: 'Project created successfully',
             });
+
+            // Auto-dismiss the toast after 5 seconds
+            setTimeout(() => {
+                dismiss();
+            }, 5000);
+
             // Select the newly created project to open it in the side panel
             if (project) {
                 selectProject(project.id, project.name);

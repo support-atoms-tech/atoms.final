@@ -57,8 +57,7 @@ export const useColumnActions = ({
             _userId: string,
             debugContext = 'unspecified',
         ) => {
-            const shouldLog =
-                debugConfig.debugRLSQueries() || debugConfig.debugTableColumns();
+            const shouldLog = debugConfig.debugRLSQueries() || debugConfig.debugTable();
             try {
                 const requestBody = {
                     mode: 'new',
@@ -140,8 +139,7 @@ export const useColumnActions = ({
             _userId: string,
             debugContext = 'unspecified',
         ) => {
-            const shouldLog =
-                debugConfig.debugRLSQueries() || debugConfig.debugTableColumns();
+            const shouldLog = debugConfig.debugRLSQueries() || debugConfig.debugTable();
             try {
                 const requestBody = {
                     mode: 'fromProperty',
