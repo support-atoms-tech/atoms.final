@@ -139,10 +139,17 @@ export interface BlockTableMetadata {
         columnId: string;
         position: number;
         width?: number;
+        name?: string;
     }[];
     requirements: {
         requirementId: string;
         position: number;
         height?: number;
     }[];
+    rows?: {
+        rowId: string;
+        position: number;
+        height?: number;
+    }[];
+    tableKind?: 'requirements' | 'genericTable';
 }

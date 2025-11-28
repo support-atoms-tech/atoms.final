@@ -77,6 +77,12 @@ export function useCreateBlock() {
                 block: Block;
                 columns?: unknown[];
             };
+
+            if (Array.isArray(payload.columns)) {
+                (payload.block as Block & { columns?: unknown[] }).columns =
+                    payload.columns;
+            }
+
             return payload.block;
         },
     });

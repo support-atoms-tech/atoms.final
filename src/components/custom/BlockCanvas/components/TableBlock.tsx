@@ -28,7 +28,7 @@ import {
 } from '@/components/custom/BlockCanvas/utils/exportCsv';
 import { saveExcel } from '@/components/custom/BlockCanvas/utils/exportExcel';
 import { saveReqIF } from '@/components/custom/BlockCanvas/utils/exportReqIF';
-import { ensureNaturalColumns } from '@/components/custom/BlockCanvas/utils/naturalFields';
+import { dedupeNaturalColumns } from '@/components/custom/BlockCanvas/utils/requirementsNativeColumns';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -37,7 +37,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { useOrganizationProperties } from '@/hooks/queries/useProperties';
 import { useOrganization } from '@/lib/providers/organization.provider';
 import { cn } from '@/lib/utils';
 import { useDocumentStore } from '@/store/document.store';
@@ -73,6 +72,38 @@ const propertyTypeToColumnType = (type: PropertyType): EditableColumnType => {
         default:
             return 'text';
     }
+};
+
+const ACTIONS_COLUMN_ID = '__system_actions__';
+const ACTIONS_COLUMN_ACCESSOR = '__actions__';
+
+const buildActionsColumn = (position: number): EditableColumn<DynamicRequirement> => ({
+    id: ACTIONS_COLUMN_ID,
+    header: 'Links',
+    accessor: ACTIONS_COLUMN_ACCESSOR as keyof DynamicRequirement,
+    type: 'text',
+    width: 72,
+    position,
+    required: false,
+    isSortable: false,
+    isSystemColumn: true,
+});
+
+const deriveActionsLabel = (requirement: Requirement): string => {
+    const relationshipHints = [
+        (requirement as { relationship_count?: number }).relationship_count,
+        (requirement as { relationships_count?: number }).relationships_count,
+        (requirement as { links_count?: number }).links_count,
+        Array.isArray((requirement as { relationships?: unknown[] }).relationships)
+            ? ((requirement as { relationships?: unknown[] }).relationships?.length ?? 0)
+            : undefined,
+    ];
+
+    const hasRelationships = relationshipHints.some(
+        (value) => typeof value === 'number' && value > 0,
+    );
+
+    return hasRelationships ? 'Links' : 'Create Links';
 };
 
 const TableHeader: React.FC<{
@@ -233,12 +264,9 @@ export const TableBlock: React.FC<BlockProps> = ({
 
     const params = useParams();
     const { currentOrganization } = useOrganization();
-
-    // Fetch organization properties for merging virtual columns
-    const { data: orgProperties } = useOrganizationProperties(
-        currentOrganization?.id || '',
-        !!currentOrganization?.id,
-    );
+    const documentIdFromParams = params?.documentId as string | undefined;
+    const resolvedDocumentId = (documentIdFromParams ||
+        (block.document_id as string | undefined)) as string | undefined;
 
     const {
         createPropertyAndColumn,
@@ -251,7 +279,7 @@ export const TableBlock: React.FC<BlockProps> = ({
         documentId: params.documentId as string,
     });
 
-    const { updateBlockMetadata } = useBlockMetadataActions();
+    const { updateBlockMetadata } = useBlockMetadataActions(resolvedDocumentId);
 
     const projectId = params?.projectId as string;
 
@@ -374,30 +402,10 @@ export const TableBlock: React.FC<BlockProps> = ({
     }, [block.columns, block.id, deletedColumnIds]); // add deletedColumnIds as dependency
 
     // Effective columns used by UI (optimistic first, then server)
-    // For requirement tables, merge virtual native columns with real columns
-    const effectiveColumnsRaw = useMemo(() => {
-        const baseColumns = optimisticColumns ?? block.columns ?? [];
-
-        // Check if this is a requirement table
-        const tableKind = (block.content as unknown as { tableKind?: string })?.tableKind;
-        const isRequirementsTable =
-            block.type === 'table' &&
-            (tableKind === 'requirements' || tableKind === 'requirements_default');
-
-        // For requirement tables, ensure native columns are included
-        if (isRequirementsTable && block.id) {
-            return ensureNaturalColumns(baseColumns, block.id, orgProperties || null);
-        }
-
-        return baseColumns;
-    }, [
-        optimisticColumns,
-        block.columns,
-        block.type,
-        block.content,
-        block.id,
-        orgProperties,
-    ]);
+    const effectiveColumnsRaw = useMemo(
+        () => optimisticColumns ?? block.columns ?? [],
+        [optimisticColumns, block.columns],
+    );
 
     // Read tableKind once to decide pipeline
     const tableKind = (block.content as unknown as { tableKind?: string })?.tableKind;
@@ -415,53 +423,72 @@ export const TableBlock: React.FC<BlockProps> = ({
         if (block.type !== 'table') return null;
         const content = block.content;
 
-        try {
-            // Ensure content is an object and contains valid arrays for 'columns' and 'requirements'
-            const isValid =
-                typeof content === 'object' &&
-                content !== null &&
-                'columns' in content &&
-                'requirements' in content &&
-                Array.isArray((content as Record<string, unknown>).columns) &&
-                Array.isArray((content as Record<string, unknown>).requirements) &&
-                (content as { columns: unknown[] }).columns.every(
-                    (col) =>
-                        typeof col === 'object' &&
-                        col !== null &&
-                        'columnId' in col &&
-                        typeof (col as Record<string, unknown>).columnId === 'string' &&
-                        'position' in col &&
-                        typeof (col as Record<string, unknown>).position === 'number',
-                ) &&
-                (content as { requirements: unknown[] }).requirements.every(
-                    (req) =>
-                        typeof req === 'object' &&
-                        req !== null &&
-                        'requirementId' in req &&
-                        typeof (req as Record<string, unknown>).requirementId ===
-                            'string' &&
-                        'position' in req &&
-                        typeof (req as Record<string, unknown>).position === 'number',
-                );
-
-            if (isValid) {
-                const parsed = content as unknown as BlockTableMetadata;
-                return parsed;
-            } else {
-                console.warn(
-                    `[TableBlock] Invalid BlockTableMetadata structure for ${block.id}: `,
-                    content,
-                );
-            }
-        } catch (err) {
-            console.error(
-                `[TableBlock] Failed to parse content as BlockTableMetadata for ${block.id}: `,
-                err,
-            );
+        if (typeof content !== 'object' || content === null) {
+            return null;
         }
 
-        return null;
-    }, [block.content, block.id, block.type]);
+        const rawColumns = Array.isArray((content as Record<string, unknown>).columns)
+            ? ((content as { columns: unknown[] }).columns as unknown[])
+            : [];
+        const rawRequirements = Array.isArray(
+            (content as Record<string, unknown>).requirements,
+        )
+            ? ((content as { requirements: unknown[] }).requirements as unknown[])
+            : [];
+        const rawRows = Array.isArray((content as Record<string, unknown>).rows)
+            ? ((content as { rows: unknown[] }).rows as unknown[])
+            : undefined;
+
+        const parsedColumns = rawColumns.filter((col) => {
+            return (
+                typeof col === 'object' &&
+                col !== null &&
+                'columnId' in col &&
+                typeof (col as Record<string, unknown>).columnId === 'string'
+            );
+        }) as BlockTableMetadata['columns'];
+
+        const parsedRequirements = rawRequirements.filter((req) => {
+            return (
+                typeof req === 'object' &&
+                req !== null &&
+                'requirementId' in req &&
+                typeof (req as Record<string, unknown>).requirementId === 'string'
+            );
+        }) as BlockTableMetadata['requirements'];
+
+        const parsedRows = rawRows
+            ? (rawRows.filter((row) => {
+                  return (
+                      typeof row === 'object' &&
+                      row !== null &&
+                      'rowId' in row &&
+                      typeof (row as Record<string, unknown>).rowId === 'string'
+                  );
+              }) as NonNullable<BlockTableMetadata['rows']>)
+            : undefined;
+
+        if (
+            parsedColumns.length === 0 &&
+            parsedRequirements.length === 0 &&
+            (!parsedRows || parsedRows.length === 0)
+        ) {
+            return null;
+        }
+
+        const rawTableKind = (content as { tableKind?: string }).tableKind;
+        const tableKindValue =
+            rawTableKind === 'requirements' || rawTableKind === 'genericTable'
+                ? rawTableKind
+                : undefined;
+
+        return {
+            columns: parsedColumns,
+            requirements: parsedRequirements,
+            ...(parsedRows ? { rows: parsedRows } : {}),
+            ...(tableKindValue ? { tableKind: tableKindValue } : {}),
+        };
+    }, [block.content, block.type]);
 
     // Initialize requirement actions with properties
     const {
@@ -568,7 +595,9 @@ export const TableBlock: React.FC<BlockProps> = ({
 
     // Memoize columns to prevent unnecessary recalculations and re-renders
     const columns = useMemo(() => {
-        if (!effectiveColumnsRaw) return [];
+        if (!effectiveColumnsRaw) {
+            return [];
+        }
 
         const metadataColumns = tableContentMetadata?.columns ?? [];
 
@@ -584,7 +613,7 @@ export const TableBlock: React.FC<BlockProps> = ({
                 const headerName =
                     (metadata as unknown as ColumnMetadata)?.name || propertyKey;
 
-                const columnDef = {
+                return {
                     id: col.id,
                     header: headerName, // Use metadata name if available, otherwise property name
                     accessor: propertyKey as keyof DynamicRequirement, // Accessor stays as property key
@@ -595,41 +624,12 @@ export const TableBlock: React.FC<BlockProps> = ({
                     isSortable: true,
                     options: _property.options?.values,
                 };
-
-                return columnDef;
             })
             .sort((a, b) => a.position - b.position);
 
-        // Add system "Links" column if there are requirements
-        // This column shows relationship counts and is always placed after the first column (usually External_ID or Name)
-        if (mapped.length > 0 && localRequirements.length > 0) {
-            const firstColPosition = mapped[0].position ?? 0;
-            const linksColumn = {
-                id: '__system_links__',
-                header: 'Links',
-                accessor: '__links__' as keyof DynamicRequirement,
-                type: 'text' as EditableColumnType,
-                width: 80,
-                position: firstColPosition + 1, // Place after first column
-                required: false,
-                isSortable: false,
-            };
-
-            // Insert Links column after first column and adjust positions of remaining columns
-            const withLinks = [
-                mapped[0], // Keep first column at its original position
-                linksColumn,
-                ...mapped.slice(1).map((col) => ({
-                    ...col,
-                    position: (col.position ?? 0) + 1,
-                })),
-            ];
-
-            return withLinks;
-        }
-
-        return mapped;
-    }, [effectiveColumnsRaw, tableContentMetadata?.columns, localRequirements.length]);
+        const deduped = dedupeNaturalColumns(mapped);
+        return [...deduped, buildActionsColumn(deduped.length)];
+    }, [effectiveColumnsRaw, tableContentMetadata?.columns]);
 
     // Memoize dynamicRequirements to avoid recreating every render unless localRequirements changes
     const dynamicRequirements = useMemo(() => {
@@ -645,11 +645,12 @@ export const TableBlock: React.FC<BlockProps> = ({
         const reqsWithMetadata = reqs
             .map((req, idx) => {
                 const meta = metadataMap.get(req.id);
+                const actionLabel = deriveActionsLabel(req as Requirement);
                 return {
                     ...req,
                     position: meta?.position ?? req.position ?? idx,
                     height: meta?.height,
-                    __links__: '🔗', // Add links indicator for system column
+                    [ACTIONS_COLUMN_ACCESSOR]: actionLabel,
                 };
             })
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));

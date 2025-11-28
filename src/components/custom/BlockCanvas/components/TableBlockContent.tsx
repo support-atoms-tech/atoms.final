@@ -78,7 +78,7 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
         dataAdapter,
         rowMetadataKey,
     }) => {
-        // State for Links popover
+        // State for Actions popover
         const [linksPopoverOpen, setLinksPopoverOpen] = useState(false);
         const [selectedRequirement, setSelectedRequirement] =
             useState<DynamicRequirement | null>(null);
@@ -98,7 +98,7 @@ export const TableBlockContent: React.FC<TableBlockContentProps> = React.memo(
         // Default to requirement analysis (via adapter) if none provided
         const EffectiveRowDetailPanel = rowDetailPanel ?? RequirementPanelAdapter;
 
-        // Handle Links column click
+        // Handle Actions column click
         const handleLinksColumnClick = useCallback(
             (requirementId: string, rowData: DynamicRequirement) => {
                 setSelectedRequirement(rowData);

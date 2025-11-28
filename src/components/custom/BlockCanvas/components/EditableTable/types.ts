@@ -64,6 +64,8 @@ export interface EditableColumn<T extends BaseRow> {
     isSortable?: boolean;
     propertyConfig?: PropertyConfig;
     default_value?: CellValue;
+    isSystemColumn?: boolean;
+    isPinned?: boolean;
     // Add type-specific validation functions
     typeValidation?: {
         text?: (value: string) => boolean;
@@ -131,7 +133,7 @@ export interface GlideTableProps<T extends BaseRow> extends EditableTableProps<T
     dataAdapter?: TableDataAdapter<T>;
     rowDetailPanel?: RowDetailPanelRenderer<T>;
     rowMetadataKey?: string; // default 'requirements', can be 'rows'
-    onLinksColumnClick?: (requirementId: string, rowData: T) => void; // Callback when Links column is clicked
+    onLinksColumnClick?: (requirementId: string, rowData: T) => void; // Callback when Actions column is clicked
 }
 
 // Adapters to be implemented outside:

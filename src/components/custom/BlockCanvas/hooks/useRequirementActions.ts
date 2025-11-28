@@ -386,7 +386,7 @@ export const useRequirementActions = ({
             return [];
         }
 
-        const shouldDebug = debugConfig.debugTable();
+        const shouldDebug = debugConfig.debugLogging();
         const debugInfo = new Map<
             string,
             {

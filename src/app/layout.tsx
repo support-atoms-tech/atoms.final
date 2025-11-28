@@ -6,6 +6,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import Toaster from '@/components/ui/toaster';
 import { QueryProvider } from '@/lib/providers/query.provider';
 import { ThemeProvider } from '@/lib/providers/theme.provider';
+import { env } from '@/lib/utils/env-validation';
 
 import '@/styles/globals.css';
 
@@ -31,6 +32,8 @@ export default function RootLayout({
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    const enableDebugLogging = env.ENABLE_DEBUG_LOGGING;
+
     return (
         <GlobalErrorBoundary>
             <html lang="en" suppressHydrationWarning>
@@ -42,6 +45,7 @@ export default function RootLayout({
                 </head>
                 <body
                     className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+                    data-enable-debug-logging={enableDebugLogging ? 'true' : 'false'}
                 >
                     <AuthKitProvider>
                         <CookiesProvider>

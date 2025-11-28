@@ -283,12 +283,15 @@ export const useBlockActions = ({
             // Replace the temporary block with the real one to avoid flicker
             setLocalBlocks((prevBlocks) => {
                 const hasTemp = prevBlocks.some((b) => b.id === tempId);
+                const serverColumns =
+                    (createdBlock as Partial<BlockWithRequirements>).columns ?? [];
                 const next = hasTemp
                     ? prevBlocks.map((block) =>
                           block.id === tempId
                               ? {
-                                    ...createdBlock,
+                                    ...(createdBlock as BlockWithRequirements),
                                     requirements: [],
+                                    columns: serverColumns,
                                     order: block.order,
                                 }
                               : block,
@@ -298,6 +301,7 @@ export const useBlockActions = ({
                           {
                               ...(createdBlock as BlockWithRequirements),
                               requirements: [],
+                              columns: serverColumns,
                               order: prevBlocks.length,
                           },
                       ];

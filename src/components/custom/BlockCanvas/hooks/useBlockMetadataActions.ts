@@ -2,9 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { dedupeColumnMetadataEntries } from '@/components/custom/BlockCanvas/utils/requirementsNativeColumns';
-import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { queryKeys } from '@/lib/constants/queryKeys';
-import { Json } from '@/types/base/database.types';
 
 export interface ColumnMetadata {
     columnId: string;
@@ -34,9 +32,8 @@ export interface BlockTableMetadata {
     tableKind?: string;
 }
 
-export const useBlockMetadataActions = () => {
+export const useBlockMetadataActions = (documentId?: string) => {
     const queryClient = useQueryClient();
-    const { getClientOrThrow } = useAuthenticatedSupabase();
 
     const updateBlockMetadata = useCallback(
         async (blockId: string, partialMetadata: Partial<BlockTableMetadata>) => {
@@ -44,142 +41,57 @@ export const useBlockMetadataActions = () => {
                 throw new Error('[updateBlockMetadata] blockId is required.');
             }
 
-            try {
-                const supabase = getClientOrThrow();
-
-                // Fetch existing content to preserve other fields
-                // Use maybeSingle() to handle cases where block might not exist yet
-                const { data: blockData, error: fetchError } = await supabase
-                    .from('blocks')
-                    .select('content')
-                    .eq('id', blockId)
-                    .maybeSingle();
-
-                if (fetchError) {
-                    console.error(
-                        '[updateBlockMetadata] Failed to fetch block content:',
-                        fetchError,
-                    );
-                    throw fetchError;
-                }
-
-                // If block doesn't exist, we can't update metadata
-                // This can happen when metadata is saved before the block is fully created
-                // In that case, we should silently skip the save rather than throwing an error
-                if (!blockData) {
-                    console.warn(
-                        '[updateBlockMetadata] Block not found, skipping metadata update (block may not be created yet):',
+            if (!documentId) {
+                console.error(
+                    '[updateBlockMetadata] Cannot persist metadata without a documentId',
+                    {
                         blockId,
-                    );
-                    return; // Silently return instead of throwing
-                }
+                        documentId,
+                    },
+                );
+                return;
+            }
 
-                // Casting to unknown puts validation on us. Fallbacks included below.
-                const currentContentRaw = blockData?.content ?? {};
-
-                function isBlockTableMetadata(
-                    obj: unknown,
-                ): obj is Partial<BlockTableMetadata> {
-                    return typeof obj === 'object' && obj !== null;
-                }
-
-                const safeContent = isBlockTableMetadata(currentContentRaw)
-                    ? currentContentRaw
-                    : {};
-
-                const currentContent: BlockTableMetadata = {
-                    columns: dedupeColumnMetadataEntries(
-                        Array.isArray(
-                            (safeContent as Partial<BlockTableMetadata>).columns,
-                        )
-                            ? ((safeContent as Partial<BlockTableMetadata>)
-                                  .columns as ColumnMetadata[])
-                            : [],
-                    ),
-                    requirements: Array.isArray(
-                        (safeContent as Partial<BlockTableMetadata>).requirements,
-                    )
-                        ? ((safeContent as Partial<BlockTableMetadata>)
-                              .requirements as RequirementMetadata[])
-                        : [],
-                    rows: Array.isArray((safeContent as Partial<BlockTableMetadata>).rows)
-                        ? ((safeContent as Partial<BlockTableMetadata>)
-                              .rows as RowMetadata[])
-                        : undefined,
-                    tableKind: (safeContent as Partial<BlockTableMetadata>).tableKind,
+            try {
+                const payload: Partial<BlockTableMetadata> = {
+                    ...partialMetadata,
+                    ...(partialMetadata.columns
+                        ? {
+                              columns: dedupeColumnMetadataEntries(
+                                  partialMetadata.columns,
+                              ),
+                          }
+                        : {}),
                 };
 
-                // ensures renamed column names are not overwritten by stale data
-                const sanitizedPartialColumns =
-                    partialMetadata.columns !== undefined
-                        ? dedupeColumnMetadataEntries(partialMetadata.columns)
-                        : undefined;
+                const response = await fetch(
+                    `/api/documents/${documentId}/blocks/${blockId}/metadata`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(payload),
+                    },
+                );
 
-                const updatedContent: BlockTableMetadata = {
-                    ...currentContent,
-                    columns:
-                        sanitizedPartialColumns !== undefined
-                            ? sanitizedPartialColumns
-                            : currentContent.columns,
-                    requirements:
-                        partialMetadata.requirements !== undefined
-                            ? partialMetadata.requirements
-                            : currentContent.requirements,
-                    rows:
-                        partialMetadata.rows !== undefined
-                            ? partialMetadata.rows
-                            : currentContent.rows,
-                    // Ensure tableKind is never lost even if not present in partialMetadata
-                    tableKind:
-                        (partialMetadata as Partial<BlockTableMetadata>).tableKind ??
-                        currentContent.tableKind,
-                };
-
-                const { data: updateResult, error: updateError } = await supabase
-                    .from('blocks')
-                    .update({ content: updatedContent as unknown as Json })
-                    .eq('id', blockId)
-                    .select('content');
-
-                if (updateError) {
-                    console.error(
-                        '[updateBlockMetadata] Failed to update content: ',
-                        updateError,
-                    );
-                    throw updateError;
-                }
-
-                const savedContent = updateResult?.[0]?.content as unknown as {
-                    columns?: { columnId?: string; name?: string }[];
-                };
-
-                const savedColumns = savedContent?.columns || [];
-
-                // Verify that if we updated columns, the saved columns match what we sent
-                if (partialMetadata.columns !== undefined) {
-                    const sentColumnNames = partialMetadata.columns.map((c) => ({
-                        columnId: c.columnId,
-                        name: c.name,
-                    }));
-                    const savedColumnNames = savedColumns.map(
-                        (c: { columnId?: string; name?: string }) => ({
-                            columnId: c.columnId,
-                            name: c.name,
-                        }),
-                    );
-                    const namesMatch =
-                        JSON.stringify(sentColumnNames) ===
-                        JSON.stringify(savedColumnNames);
-
-                    if (!namesMatch) {
-                        console.error(
-                            '[updateBlockMetadata] CRITICAL: Saved columns do not match sent columns!',
-                            {
-                                sent: sentColumnNames,
-                                saved: savedColumnNames,
-                            },
-                        );
+                if (!response.ok) {
+                    let errorBody: unknown = null;
+                    try {
+                        errorBody = await response.json();
+                    } catch {
+                        errorBody = null;
                     }
+
+                    console.error('[updateBlockMetadata] API request failed', {
+                        status: response.status,
+                        errorBody,
+                    });
+                    throw new Error(
+                        (errorBody as { error?: string })?.error ||
+                            'Failed to update block metadata',
+                    );
                 }
 
                 await queryClient.invalidateQueries({
@@ -190,7 +102,7 @@ export const useBlockMetadataActions = () => {
                 throw err;
             }
         },
-        [getClientOrThrow, queryClient],
+        [documentId, queryClient],
     );
 
     return {

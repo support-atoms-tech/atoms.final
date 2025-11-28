@@ -40,10 +40,14 @@ import { useLayer } from 'react-laag';
 import { ConflictWarning } from '@/components/custom/BlockCanvas/components/ConflictWarning';
 import {
     BlockTableMetadata,
+    ColumnMetadata,
+    RequirementMetadata,
+    RowMetadata,
     useBlockMetadataActions,
 } from '@/components/custom/BlockCanvas/hooks/useBlockMetadataActions';
 import { useColumnActions } from '@/components/custom/BlockCanvas/hooks/useColumnActions';
 import { PropertyType } from '@/components/custom/BlockCanvas/types';
+import { dedupeColumnMetadataEntries } from '@/components/custom/BlockCanvas/utils/requirementsNativeColumns';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useBroadcastCellUpdate } from '@/hooks/useBroadcastCellUpdate';
 import { useUser } from '@/lib/providers/user.provider';
@@ -64,9 +68,40 @@ import {
 } from './types';
 
 const SYSTEM_COLUMNS = ['external_id', 'name', 'description', 'status', 'priority'];
+const ACTIONS_COLUMN_ID = '__system_actions__';
+const ACTIONS_COLUMN_ACCESSOR = '__actions__';
+const ACTIONS_COLUMN_HEADER = 'Links';
+
+const logTableDebug = (
+    message: string,
+    context?: Record<string, unknown> | undefined,
+) => {
+    if (!debugConfig.debugLogging()) {
+        return;
+    }
+    if (context) {
+        console.log(`[GlideEditableTable] ${message}`, context);
+    } else {
+        console.log(`[GlideEditableTable] ${message}`);
+    }
+};
 
 const isSystemColumn = (columnHeader: string): boolean => {
     return SYSTEM_COLUMNS.includes(columnHeader.toLowerCase());
+};
+
+const getActionLabel = (row: BaseRow): string => {
+    const value = row[ACTIONS_COLUMN_ACCESSOR];
+    if (typeof value === 'string' && value.trim().length > 0) {
+        return value;
+    }
+    return 'Create Links';
+};
+
+const isActionsColumn = <T extends BaseRow>(column: EditableColumn<T>): boolean => {
+    if (!column) return false;
+    if (column.id === ACTIONS_COLUMN_ID) return true;
+    return String(column.accessor) === ACTIONS_COLUMN_ACCESSOR;
 };
 
 // valid values for Status / Priority select columns
@@ -126,71 +161,6 @@ const isValidStatusOrPriority = (kind: StatusOrPriorityKind, raw: unknown): bool
 
     const allowed = kind === 'status' ? STATUS_VALID_VALUES : PRIORITY_VALID_VALUES;
     return allowed.includes(normalized);
-};
-
-// Helper to detect the Links column
-const isLinksColumn = <T extends BaseRow>(column: EditableColumn<T>): boolean => {
-    if (!column) return false;
-
-    const identifiers: string[] = [];
-
-    const pushIdentifier = (value: unknown) => {
-        if (typeof value === 'string') {
-            const trimmed = value.trim();
-            if (trimmed.length > 0) {
-                identifiers.push(trimmed.toLowerCase());
-            }
-        }
-    };
-
-    // Known fields on EditableColumn
-    pushIdentifier(column.id);
-    pushIdentifier(column.header);
-    pushIdentifier(String(column.accessor));
-    pushIdentifier(column.propertyId);
-
-    const maybeAnyColumn = column as any;
-    pushIdentifier(maybeAnyColumn.name);
-    pushIdentifier(maybeAnyColumn.title);
-    pushIdentifier(maybeAnyColumn.originalKey);
-    pushIdentifier(maybeAnyColumn.propertyKey);
-    pushIdentifier(maybeAnyColumn.key);
-
-    for (const id of identifiers) {
-        const stripped = id.replace(/_/g, '');
-
-        if (
-            id === 'links' ||
-            id === '__links__' ||
-            id === '__system_links__' ||
-            id.includes('links') ||
-            id.includes('trace') ||
-            id.includes('relationship') ||
-            stripped === 'links'
-        ) {
-            return true;
-        }
-    }
-
-    return false;
-};
-
-// Find the next non-Links column index starting at startIndex
-const findNextNonLinksColumn = <T extends BaseRow>(
-    startIndex: number,
-    columns: Array<EditableColumn<T>>,
-): number | null => {
-    if (!Array.isArray(columns) || columns.length === 0) return null;
-
-    for (let i = startIndex; i < columns.length; i++) {
-        const col = columns[i];
-        if (!col) continue;
-        if (!isLinksColumn(col)) {
-            return i;
-        }
-    }
-
-    return null;
 };
 
 const isExpectedResultColumn = <T extends BaseRow>(
@@ -340,11 +310,30 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     // Track which invalid Status/Priority cells have already been logged on render
     const invalidRenderLoggedCellsRef = useRef<Set<string>>(new Set());
 
+    const params = useParams();
+    const orgId = params?.orgId || '';
+    const projectId = params?.projectId || '';
+    const documentId = params?.documentId || '';
+
+    if (!orgId) {
+        console.error('Org ID is missing from the URL.');
+    }
+
+    if (!projectId) {
+        console.error('Project ID is missing from the URL.');
+    }
+
+    if (!documentId) {
+        console.error('Doc ID is missing from the URL.');
+    }
+
     const { profile } = useUser();
     const userId = profile?.id;
     const userName = profile?.full_name || '';
 
-    const { updateBlockMetadata } = useBlockMetadataActions();
+    const { updateBlockMetadata } = useBlockMetadataActions(
+        documentId ? String(documentId) : undefined,
+    );
     const saveRow = useCallback(
         async (
             item: T,
@@ -464,13 +453,164 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     );
 
     const [editingData, setEditingData] = useState<Record<string, Partial<T>>>({});
+    const [localData, setLocalData] = useState<T[]>(() => [...data]);
     const editingDataRef = useRef(editingData);
     useEffect(() => {
         editingDataRef.current = editingData;
     }, [editingData]);
 
+    const pendingDataAfterSaveRef = useRef<T[] | null>(null);
+    const isReorderingRef = useRef(false);
+
+    const applyServerDataSync = useCallback(
+        (incomingData: T[], reason: 'live' | 'after-save' = 'live') => {
+            const pasteState = getPasteState();
+            if (pasteState.isPasting || pasteState.pasteOperationActive) {
+                console.debug(
+                    `[Data Sync] Skipping (reason=${reason}) - paste in progress for table ${
+                        blockId || 'default'
+                    }`,
+                );
+                return;
+            }
+
+            setLocalData((prev) => {
+                if (incomingData.length === 0) {
+                    return prev;
+                }
+
+                if (isReorderingRef.current) {
+                    console.debug(
+                        `[Data Sync] Skipping (reason=${reason}) - local reordering in progress`,
+                    );
+                    return prev;
+                }
+
+                const sameLength = incomingData.length === prev.length;
+                const sameIds =
+                    sameLength &&
+                    incomingData.every((row, index) => {
+                        const localRow = prev[index];
+                        return localRow && row.id === localRow.id;
+                    });
+
+                if (sameIds && sameLength) {
+                    const hasDataChanges = incomingData.some((row, index) => {
+                        const localRow = prev[index];
+                        if (!localRow) return true;
+                        return (
+                            row.id !== localRow.id ||
+                            JSON.stringify(row) !== JSON.stringify(localRow)
+                        );
+                    });
+                    if (!hasDataChanges) {
+                        return prev;
+                    }
+                }
+
+                const needsUpdate = !sameIds || !sameLength;
+                const pendingEdits = editingDataRef.current || {};
+                const hasPendingEdits = Object.keys(pendingEdits).length > 0;
+                const mergedFromServerOrder = incomingData.map((row) => {
+                    const sanitizedRow = { ...row };
+
+                    for (const kind of ['status', 'priority'] as const) {
+                        const naturalKey = kind;
+                        const naturalValue = (sanitizedRow as any)[naturalKey];
+
+                        const propsValue =
+                            (sanitizedRow as any).properties?.[kind]?.value ??
+                            naturalValue ??
+                            null;
+
+                        const isValid = isValidStatusOrPriority(kind, propsValue);
+
+                        if (!isValid && propsValue) {
+                            if ((sanitizedRow as any)[naturalKey] !== undefined) {
+                                delete (sanitizedRow as any)[naturalKey];
+                            }
+
+                            if (!sanitizedRow.properties) {
+                                (sanitizedRow as any).properties = {};
+                            }
+                            const props = sanitizedRow.properties as Record<string, any>;
+                            props[kind] = {
+                                key: kind,
+                                type: 'select',
+                                value: propsValue,
+                                position: 0,
+                            };
+
+                            console.debug('[FixAccessor-block-invalid]', {
+                                kind,
+                                accessor: naturalKey,
+                                value: propsValue,
+                            });
+                        }
+                    }
+
+                    return pendingEdits[sanitizedRow.id]
+                        ? ({
+                              ...sanitizedRow,
+                              ...(pendingEdits[sanitizedRow.id] as Partial<T>),
+                          } as T)
+                        : sanitizedRow;
+                });
+
+                const sameIdSet = (() => {
+                    if (incomingData.length !== prev.length) return false;
+                    const a = new Set<string>(incomingData.map((r: any) => r.id));
+                    for (const r of prev as any[]) if (!a.has(r.id)) return false;
+                    return true;
+                })();
+
+                if (sameIdSet && (needsUpdate || hasPendingEdits)) {
+                    const incomingById = new Map<string, T>(
+                        mergedFromServerOrder.map((r: any) => [r.id as string, r]),
+                    );
+                    const mergedPreservingOrder = (prev as any[]).map((r) => {
+                        const incoming = incomingById.get(r.id);
+                        return incoming
+                            ? ({ ...incoming, position: r.position } as T)
+                            : (r as T);
+                    });
+                    console.debug(
+                        '[Data Sync] Applying merged data preserving local order',
+                        {
+                            incomingCount: incomingData.length,
+                            localCount: prev.length,
+                            reason,
+                        },
+                    );
+                    return mergedPreservingOrder;
+                }
+
+                if (needsUpdate || hasPendingEdits) {
+                    console.debug(
+                        '[Data Sync] Applying merged data (server + pending edits)',
+                        {
+                            incomingCount: incomingData.length,
+                            localCount: prev.length,
+                            reason,
+                        },
+                    );
+                    return mergedFromServerOrder;
+                }
+
+                return prev;
+            });
+        },
+        [blockId, getPasteState, setLocalData],
+    );
+
+    const pendingSaveRequestedRef = useRef(false);
+
     const handleSaveAll = useCallback(async () => {
         if (isSavingRef.current) {
+            // A save is already in progress – remember that we want to save again
+            // once it finishes so that any new edits buffered in editingDataRef
+            // are eventually persisted.
+            pendingSaveRequestedRef.current = true;
             return;
         }
 
@@ -491,9 +631,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
         isSavingRef.current = true;
 
+        // Snapshot the edits at the moment this save starts.
+        const snapshotEdits = { ...editingDataRef.current };
+
         try {
-            const currentEdits = editingDataRef.current;
-            const rows = Object.entries(currentEdits);
+            const rows = Object.entries(snapshotEdits);
 
             if (rows.length === 0) {
                 return;
@@ -525,8 +667,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
             await refreshAfterSave();
 
+            // Give the backend a brief moment to settle, then clear ONLY the edits
+            // that were part of this save. Any new edits that happened while the
+            // save was in flight remain in editingData.
             await new Promise((r) => setTimeout(r, 250));
-            setEditingData({});
+            setEditingData((prev) => {
+                const next = { ...prev };
+                for (const rowId of Object.keys(snapshotEdits)) {
+                    delete next[rowId];
+                }
+                return next;
+            });
         } catch (error) {
             // Improved error logging
             const errorDetails: any = {
@@ -548,8 +699,22 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             });
         } finally {
             isSavingRef.current = false;
+
+            if (pendingDataAfterSaveRef.current) {
+                const queued = pendingDataAfterSaveRef.current;
+                pendingDataAfterSaveRef.current = null;
+                applyServerDataSync(queued, 'after-save');
+            }
+
+            if (pendingSaveRequestedRef.current) {
+                // Another save was requested while this one was running.
+                // Clear the flag and immediately run a new save cycle using
+                // the latest editingDataRef snapshot.
+                pendingSaveRequestedRef.current = false;
+                void handleSaveAll();
+            }
         }
-    }, [refreshAfterSave, data, saveRow]);
+    }, [refreshAfterSave, data, saveRow, applyServerDataSync]);
 
     // Debounce saves - reduced to 500ms for real-time collaboration
     const useDebouncedSave = (delay = 500) => {
@@ -584,23 +749,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-
-    const params = useParams();
-    const orgId = params?.orgId || '';
-    const projectId = params?.projectId || '';
-    const documentId = params?.documentId || '';
-
-    if (!orgId) {
-        console.error('Org ID is missing from the URL.');
-    }
-
-    if (!projectId) {
-        console.error('Project ID is missing from the URL.');
-    }
-
-    if (!documentId) {
-        console.error('Doc ID is missing from the URL.');
-    }
 
     // Real-time broadcast for concurrent editing (always enabled to receive updates)
     const { broadcastCellUpdate, broadcastCursorMove } = useBroadcastCellUpdate({
@@ -746,7 +894,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 return await pasteState.columnConfirmationPromise;
             }
 
-            if (debugConfig.debugTable()) {
+            if (debugConfig.debugLogging()) {
                 console.warn('[TableColumns] Starting column confirmation barrier', {
                     tableId,
                     documentId,
@@ -915,8 +1063,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         });
     }, [pendingCellUpdates, blockId]);
 
-    const [localData, setLocalData] = useState<T[]>(() => [...data]);
-
     // Ref to track localData for immediate updates (bypassing React state batching)
     const localDataRef = useRef<T[]>(localData);
     useEffect(() => {
@@ -924,6 +1070,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     }, [localData]);
 
     const [colSizes, setColSizes] = useState<Partial<Record<keyof T, number>>>({});
+    const columnResizeTimerRef = useRef<number | null>(null);
+    const pendingColumnMetadataRef = useRef(false);
 
     const columnDefs: GridColumn[] = useMemo(() => {
         const visibleColumns = localColumns.filter(
@@ -1023,17 +1171,47 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         console.debug('[GlideEditableTable] Sorted Data:', sortedData);
     }, [sortedData]);
 
+    const fetchServerMetadata = useCallback(async () => {
+        if (!documentId || !blockId) return null;
+        try {
+            const response = await fetch(
+                `/api/documents/${documentId}/blocks/${blockId}/metadata`,
+                {
+                    method: 'GET',
+                    cache: 'no-store',
+                },
+            );
+            if (!response.ok) {
+                console.error('[GlideEditableTable] Failed to fetch block metadata', {
+                    status: response.status,
+                });
+                return null;
+            }
+            const body = (await response.json()) as {
+                metadata?: BlockTableMetadata | null;
+            };
+            return body.metadata ?? null;
+        } catch (error) {
+            console.error('[GlideEditableTable] Failed to fetch block metadata', error);
+            return null;
+        }
+    }, [documentId, blockId]);
+
     const saveTableMetadata = useCallback(
-        async (options?: { includeColumns?: boolean }) => {
+        async (options?: { includeColumns?: boolean; includeRows?: boolean }) => {
             if (!blockId) return;
 
             const includeColumns = options?.includeColumns ?? false;
+            const includeRows = options?.includeRows !== false;
 
             const latestLocalColumns = localColumnsRef.current;
+            const persistableColumns = latestLocalColumns.filter(
+                (col) => !col.isSystemColumn,
+            );
             const latestSortedData = sortedDataRef.current;
 
             const columnMetadata = includeColumns
-                ? latestLocalColumns.map((col, idx) => ({
+                ? persistableColumns.map((col, idx) => ({
                       columnId: col.id,
                       position: col.position !== undefined ? col.position : idx,
                       name: col.header,
@@ -1051,36 +1229,57 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 );
             }
 
-            const rowMetadataRows = latestSortedData.map((row, idx) => ({
-                rowId: row.id,
-                position: idx,
-                ...(row.height !== undefined ? { height: row.height } : {}),
-            }));
+            // Compute effective row heights based on current content + column widths
+            const currentColumnWidths = localColumnsRef.current.reduce(
+                (acc, col) => {
+                    acc[col.accessor as string] =
+                        colSizes[col.accessor] || col.width || 120;
+                    return acc;
+                },
+                {} as Record<string, number>,
+            );
 
-            const rowMetadataRequirements = latestSortedData.map((row, idx) => ({
-                requirementId: row.id,
-                position: idx,
-                ...(row.height !== undefined ? { height: row.height } : {}),
-            }));
+            const rowMetadataRows = latestSortedData.map((row, idx) => {
+                const height = calculateMinRowHeight(row, currentColumnWidths);
+                return {
+                    rowId: row.id,
+                    position: idx,
+                    ...(height !== undefined ? { height } : {}),
+                };
+            });
+
+            const rowMetadataRequirements = latestSortedData.map((row, idx) => {
+                const height = calculateMinRowHeight(row, currentColumnWidths);
+                return {
+                    requirementId: row.id,
+                    position: idx,
+                    ...(height !== undefined ? { height } : {}),
+                };
+            });
 
             // Only check for column changes if we're including columns
             let isColumnMetadataChanged = false;
             if (includeColumns && columnMetadata) {
-                // Compare against metadata, not props, to detect header changes correctly
-                // Props might have old headers, but metadata should have the latest
-                const originalColumnState = (tableMetadata?.columns || [])
-                    .map((col) => ({
-                        id: col.columnId,
-                        position: col.position ?? 0,
-                        width: col.width ?? undefined,
-                        name: (col as any).name, // name property exists but may not be in type yet
-                    }))
-                    .sort((a, b) => a.position - b.position);
+                // Compare against the last persisted metadata snapshot (falls back to props if empty)
+                const persistedColumns = lastPersistedColumnsRef.current ?? [];
+                const originalColumnState =
+                    persistedColumns.length > 0
+                        ? persistedColumns
+                              .map((col) => ({
+                                  id: col.columnId,
+                                  position: col.position ?? 0,
+                                  width: col.width ?? undefined,
+                                  name: (col as any).name,
+                              }))
+                              .sort((a, b) => a.position - b.position)
+                        : [];
 
-                // If no metadata exists, fall back to props
                 if (originalColumnState.length === 0) {
                     originalColumnState.push(
                         ...columns
+                            .filter(
+                                (col) => !(col as EditableColumn<BaseRow>).isSystemColumn,
+                            )
                             .map((col) => ({
                                 id: col.id,
                                 position: col.position ?? 0,
@@ -1115,51 +1314,108 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
             const hasRowChanges = true;
 
-            if (!includeColumns && !hasRowChanges) {
-                console.debug(
-                    '[GlideEditableTable] No metadata changes detected. Skipping save.',
-                );
+            if (!includeColumns && (!includeRows || !hasRowChanges)) {
+                logTableDebug('saveTableMetadata skipped - no row metadata changes');
                 return;
             }
 
             if (includeColumns && !isColumnMetadataChanged && !hasRowChanges) {
-                console.debug(
-                    '[GlideEditableTable] No metadata changes detected. Skipping save.',
+                logTableDebug(
+                    'saveTableMetadata skipped - no column/row metadata changes detected',
                 );
                 return;
             }
 
             try {
-                const isGeneric =
-                    rowMetadataKey === 'rows' ||
-                    (tableMetadata as unknown as { tableKind?: string })?.tableKind ===
-                        'genericTable';
-
-                const metadataToSave: Partial<BlockTableMetadata> = {
-                    ...(includeColumns && columnMetadata
-                        ? { columns: columnMetadata }
-                        : {}),
-                    ...(isGeneric
-                        ? { rows: rowMetadataRows }
-                        : { requirements: rowMetadataRequirements }),
-                    tableKind: isGeneric ? 'genericTable' : 'requirements',
-                };
-
-                if (!includeColumns && 'columns' in metadataToSave) {
-                    console.error(
-                        '[saveTableMetadata] CRITICAL BUG: columns field present when includeColumns is false!',
-                        {
-                            includeColumns,
-                            metadataToSave,
-                            hasColumnsKey: 'columns' in metadataToSave,
-                            columnsValue: metadataToSave.columns,
-                        },
-                    );
-                    // Remove columns to prevent overwrite
-                    delete metadataToSave.columns;
+                // Only consult the server for metadata when we are actively changing columns
+                // or when we have no local tableMetadata yet. This avoids races where a
+                // row-only save reads a stale server snapshot and overwrites a newer
+                // column resize with old widths.
+                let serverMetadata: BlockTableMetadata | null = null;
+                if (includeColumns || !tableMetadata) {
+                    serverMetadata = await fetchServerMetadata();
                 }
 
-                if (debugConfig.debugTable() && includeColumns) {
+                if (serverMetadata?.columns && includeColumns) {
+                    lastPersistedColumnsRef.current = dedupeColumnMetadataEntries(
+                        serverMetadata.columns as ColumnMetadata[],
+                    );
+                }
+                if (serverMetadata) {
+                    if (rowMetadataKey === 'rows' && Array.isArray(serverMetadata.rows)) {
+                        lastPersistedRowsRef.current = serverMetadata.rows;
+                    } else if (Array.isArray(serverMetadata.requirements)) {
+                        lastPersistedRowsRef.current = serverMetadata.requirements;
+                    }
+                }
+
+                const baseMetadata: BlockTableMetadata =
+                    serverMetadata ??
+                    tableMetadata ??
+                    ({
+                        columns: [],
+                        requirements: [],
+                        ...(rowMetadataKey === 'rows' ? { rows: [] } : {}),
+                        tableKind:
+                            rowMetadataKey === 'rows' ? 'genericTable' : 'requirements',
+                    } as BlockTableMetadata);
+
+                const tableKindToSave =
+                    baseMetadata.tableKind ??
+                    (rowMetadataKey === 'rows' ? 'genericTable' : 'requirements');
+                const isGeneric = tableKindToSave === 'genericTable';
+
+                // Columns:
+                // - When includeColumns is true, trust the freshly computed columnMetadata.
+                // - When includeColumns is false, keep whatever we last persisted for columns
+                //   (or fall back to the baseMetadata.columns if we have no local snapshot).
+                const columnsPayload =
+                    includeColumns && columnMetadata
+                        ? columnMetadata
+                        : lastPersistedColumnsRef.current?.length
+                          ? lastPersistedColumnsRef.current
+                          : (baseMetadata.columns ?? []);
+
+                const existingRows = baseMetadata.rows ?? [];
+                const existingRequirements = baseMetadata.requirements ?? [];
+
+                const rowsPayload =
+                    includeRows && rowMetadataKey === 'rows'
+                        ? rowMetadataRows
+                        : existingRows;
+                const requirementsPayload = isGeneric
+                    ? existingRequirements
+                    : includeRows
+                      ? rowMetadataRequirements
+                      : existingRequirements;
+
+                logTableDebug('saveTableMetadata preparing payload', {
+                    includeColumns,
+                    includeRows,
+                    isColumnMetadataChanged,
+                    hasRowChanges,
+                    columnDiff: {
+                        before: lastPersistedColumnsRef.current,
+                        after: columnsPayload,
+                    },
+                });
+
+                const metadataToSave: Partial<BlockTableMetadata> = {
+                    columns: columnsPayload,
+                    requirements: requirementsPayload,
+                    rows: rowsPayload,
+                    tableKind: tableKindToSave,
+                };
+
+                logTableDebug('saveTableMetadata payload ready', {
+                    blockId,
+                    documentId,
+                    includeColumns,
+                    includeRows,
+                    payload: metadataToSave,
+                });
+
+                if (debugConfig.debugLogging() && includeColumns) {
                     console.warn('[TableColumns] Persisting column metadata snapshot', {
                         blockId,
                         documentId,
@@ -1170,11 +1426,30 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }
 
                 await updateBlockMetadata(blockId, metadataToSave);
+
+                if (includeColumns && columnMetadata) {
+                    lastPersistedColumnsRef.current = columnMetadata;
+                }
+
+                if (includeRows) {
+                    if (rowMetadataKey === 'rows') {
+                        lastPersistedRowsRef.current = rowMetadataRows;
+                    } else {
+                        lastPersistedRowsRef.current = rowMetadataRequirements;
+                    }
+                }
             } catch (err) {
                 console.error('[GlideEditableTable] Failed to save table metadata:', err);
             }
         },
-        [blockId, columns, updateBlockMetadata, rowMetadataKey, tableMetadata],
+        [
+            blockId,
+            columns,
+            updateBlockMetadata,
+            rowMetadataKey,
+            tableMetadata,
+            fetchServerMetadata,
+        ],
     );
 
     const handleSaveAllRef = useRef(handleSaveAll);
@@ -1186,6 +1461,121 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     useEffect(() => {
         saveTableMetadataRef.current = saveTableMetadata;
     }, [saveTableMetadata]);
+
+    const metadataSaveFlagsRef = useRef({ columns: false, rows: false });
+    const metadataSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastPersistedColumnsRef = useRef<ColumnMetadata[]>(
+        Array.isArray(tableMetadata?.columns)
+            ? (dedupeColumnMetadataEntries(
+                  tableMetadata?.columns as ColumnMetadata[],
+              ) as ColumnMetadata[])
+            : [],
+    );
+    const lastPersistedRowsRef = useRef<
+        RequirementMetadata[] | RowMetadata[] | undefined
+    >(
+        rowMetadataKey === 'rows'
+            ? (tableMetadata?.rows as RowMetadata[] | undefined)
+            : (tableMetadata?.requirements as RequirementMetadata[] | undefined),
+    );
+
+    useEffect(() => {
+        if (Array.isArray(tableMetadata?.columns)) {
+            lastPersistedColumnsRef.current = dedupeColumnMetadataEntries(
+                tableMetadata.columns as ColumnMetadata[],
+            );
+        }
+
+        if (rowMetadataKey === 'rows') {
+            if (Array.isArray(tableMetadata?.rows)) {
+                lastPersistedRowsRef.current = tableMetadata.rows as RowMetadata[];
+            }
+        } else if (Array.isArray(tableMetadata?.requirements)) {
+            lastPersistedRowsRef.current =
+                tableMetadata.requirements as RequirementMetadata[];
+        }
+    }, [tableMetadata, rowMetadataKey]);
+
+    const flushMetadataSave = useCallback(async () => {
+        const { columns, rows } = metadataSaveFlagsRef.current;
+        if (!columns && !rows) {
+            return;
+        }
+        logTableDebug('flushMetadataSave triggered', { columns, rows });
+        metadataSaveFlagsRef.current = { columns: false, rows: false };
+        try {
+            await saveTableMetadata({
+                includeColumns: columns,
+                includeRows: rows,
+            });
+        } catch (error) {
+            console.error('[GlideEditableTable] Failed to flush metadata save:', error);
+        }
+    }, [saveTableMetadata]);
+
+    const requestMetadataSave = useCallback(
+        async (options?: { columns?: boolean; rows?: boolean; immediate?: boolean }) => {
+            const includeColumns = Boolean(options?.columns);
+            const includeRows =
+                options?.rows === undefined ? true : Boolean(options?.rows);
+
+            if (includeColumns) {
+                metadataSaveFlagsRef.current.columns = true;
+            }
+            if (includeRows) {
+                metadataSaveFlagsRef.current.rows = true;
+            }
+
+            logTableDebug('requestMetadataSave invoked', {
+                includeColumns,
+                includeRows,
+                immediate: options?.immediate ?? false,
+                pendingFlags: metadataSaveFlagsRef.current,
+            });
+
+            if (options?.immediate) {
+                if (metadataSaveTimerRef.current) {
+                    clearTimeout(metadataSaveTimerRef.current);
+                    metadataSaveTimerRef.current = null;
+                    logTableDebug(
+                        'Cleared pending metadata save timer for immediate flush',
+                    );
+                }
+                await flushMetadataSave();
+                return;
+            }
+
+            if (metadataSaveTimerRef.current) {
+                logTableDebug('requestMetadataSave debounce already scheduled');
+                return;
+            }
+
+            metadataSaveTimerRef.current = setTimeout(() => {
+                metadataSaveTimerRef.current = null;
+                logTableDebug('Debounce: metadata save timer fired');
+                void flushMetadataSave();
+            }, 200);
+        },
+        [flushMetadataSave],
+    );
+
+    useEffect(() => {
+        return () => {
+            if (columnResizeTimerRef.current !== null) {
+                window.clearTimeout(columnResizeTimerRef.current);
+                columnResizeTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (metadataSaveTimerRef.current) {
+                clearTimeout(metadataSaveTimerRef.current);
+                metadataSaveTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         const incomingIds = new Set(data.map((r) => r.id));
@@ -1379,14 +1769,19 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         }
 
         const rawHasNewColumns = [...incomingIds].some((id) => !localIds.has(id));
-        const rawRemovedLocalIds = [...localIds].filter((id) => !incomingIds.has(id));
+        const removedLocalIdsList = currentLocalColumns
+            .filter(
+                (localCol) =>
+                    !incomingNormalized.some((incoming) => incoming.id === localCol.id),
+            )
+            .map((col) => col.id);
 
         const effectiveRemovedLocalIds =
             dynamicColumnsPendingSyncRef.current.size > 0
-                ? rawRemovedLocalIds.filter(
+                ? removedLocalIdsList.filter(
                       (id) => !dynamicColumnsPendingSyncRef.current.has(id),
                   )
-                : rawRemovedLocalIds;
+                : removedLocalIdsList;
 
         const hasNewColumns = rawHasNewColumns;
 
@@ -1403,11 +1798,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             !pasteStateForRemoval.pasteOperationActive &&
             !isPostPasteStabilizing &&
             !shouldSkipRemovalDueToDynamicPaste &&
-            incomingFiltered.length < currentLocalColumns.length &&
-            currentLocalColumns.some(
-                (localCol) =>
-                    !incomingNormalized.some((incoming) => incoming.id === localCol.id),
-            );
+            effectiveRemovedLocalIds.length > 0;
 
         if (shouldSkipRemovalDueToDynamicPaste) {
             console.debug(
@@ -1553,8 +1944,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         }
     }, [columns.length, tableMetadata, isPostPasteStabilizing, getPasteState]);
 
-    const isReorderingRef = useRef(false);
-
     useEffect(() => {
         const pasteState = getPasteState();
         if (pasteState.isPasting || pasteState.pasteOperationActive) {
@@ -1564,149 +1953,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             return;
         }
         if (isSavingRef.current) {
-            console.debug('[Data Sync] Skipping - save in progress');
+            console.debug('[Data Sync] Save in progress - queueing server snapshot');
+            pendingDataAfterSaveRef.current = data;
             return;
         }
 
         const syncTimer = setTimeout(() => {
-            const pasteState = getPasteState();
-            if (pasteState.isPasting || pasteState.pasteOperationActive) {
-                return;
-            }
-
-            setLocalData((prev) => {
-                if (data.length === 0) {
-                    return prev;
-                }
-
-                if (isReorderingRef.current) {
-                    console.debug('[Data Sync] Skipping - local reordering in progress');
-                    return prev;
-                }
-
-                // if arrays are same length and same IDs in same order, check for actual data changes
-                const sameLength = data.length === prev.length;
-                const sameIds =
-                    sameLength &&
-                    data.every((row, index) => {
-                        const localRow = prev[index];
-                        return localRow && row.id === localRow.id;
-                    });
-
-                // This prevents sync spam when only block metadata changes
-                if (sameIds && sameLength) {
-                    const hasDataChanges = data.some((row, index) => {
-                        const localRow = prev[index];
-                        if (!localRow) return true;
-                        // Compare key fields that matter for requirements
-                        return (
-                            row.id !== localRow.id ||
-                            JSON.stringify(row) !== JSON.stringify(localRow)
-                        );
-                    });
-
-                    if (!hasDataChanges) {
-                        // No actual data changes, just reference update - skip sync
-                        return prev;
-                    }
-                }
-
-                const needsUpdate = !sameIds || !sameLength;
-
-                const pendingEdits = editingDataRef.current || {};
-                const hasPendingEdits = Object.keys(pendingEdits).length > 0;
-                const mergedFromServerOrder = data.map((row) => {
-                    // prevent invalid Status/Priority values from being written to natural fields
-                    const sanitizedRow = { ...row };
-
-                    for (const kind of ['status', 'priority'] as const) {
-                        const naturalKey = kind;
-                        const naturalValue = (sanitizedRow as any)[naturalKey];
-
-                        const propsValue =
-                            (sanitizedRow as any).properties?.[kind]?.value ??
-                            naturalValue ??
-                            null;
-
-                        const isValid = isValidStatusOrPriority(kind, propsValue);
-
-                        if (!isValid && propsValue) {
-                            // Remove invalid value from natural field
-                            if ((sanitizedRow as any)[naturalKey] !== undefined) {
-                                delete (sanitizedRow as any)[naturalKey];
-                            }
-
-                            // Ensure invalid value is stored only in properties
-                            if (!sanitizedRow.properties) {
-                                (sanitizedRow as any).properties = {};
-                            }
-                            const props = sanitizedRow.properties as Record<string, any>;
-                            props[kind] = {
-                                key: kind,
-                                type: 'select',
-                                value: propsValue,
-                                position: 0,
-                            };
-
-                            console.debug('[FixAccessor-block-invalid]', {
-                                kind,
-                                accessor: naturalKey,
-                                value: propsValue,
-                            });
-                        }
-                    }
-
-                    // Apply pending edits after sanitization
-                    return pendingEdits[sanitizedRow.id]
-                        ? ({
-                              ...sanitizedRow,
-                              ...(pendingEdits[sanitizedRow.id] as Partial<T>),
-                          } as T)
-                        : sanitizedRow;
-                });
-
-                const sameIdSet = (() => {
-                    if (data.length !== prev.length) return false;
-                    const a = new Set<string>(data.map((r: any) => r.id));
-                    for (const r of prev as any[]) if (!a.has(r.id)) return false;
-                    return true;
-                })();
-
-                if (sameIdSet && (needsUpdate || hasPendingEdits)) {
-                    const incomingById = new Map<string, T>(
-                        mergedFromServerOrder.map((r: any) => [r.id as string, r]),
-                    );
-                    const mergedPreservingOrder = (prev as any[]).map((r, idx) => {
-                        const incoming = incomingById.get(r.id);
-                        return incoming
-                            ? ({ ...incoming, position: r.position } as T)
-                            : (r as T);
-                    });
-                    // Only log when there are actual changes
-                    if (needsUpdate || hasPendingEdits) {
-                        console.debug(
-                            '[Data Sync] Applying merged data preserving local order',
-                            { incomingCount: data.length, localCount: prev.length },
-                        );
-                    }
-                    return mergedPreservingOrder;
-                }
-
-                if (needsUpdate || hasPendingEdits) {
-                    console.debug(
-                        '[Data Sync] Applying merged data (server + pending edits)',
-                        { incomingCount: data.length, localCount: prev.length },
-                    );
-                    return mergedFromServerOrder;
-                }
-
-                // Don't log when no changes - this was causing spam
-                return prev;
-            });
+            applyServerDataSync(data, 'live');
         }, 200);
 
         return () => clearTimeout(syncTimer);
-    }, [data]);
+    }, [applyServerDataSync, blockId, data, getPasteState]);
 
     useEffect(() => {
         const pasteState = getPasteState();
@@ -1791,6 +2048,13 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
     }, [data]);
     const handleColumnResize = useCallback(
         (col: GridColumn, newSize: number) => {
+            const matchingColumn = localColumns.find((c) => c.title === col.title);
+            logTableDebug('handleColumnResize invoked', {
+                columnHeader: col.title,
+                columnId: matchingColumn?.id,
+                previousWidth: matchingColumn?.width ?? null,
+                nextWidth: newSize,
+            });
             setColSizes((prev) => {
                 const updated = { ...prev };
                 const target = localColumns.find((c) => c.title === col.title);
@@ -1806,8 +2070,25 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 );
 
                 debouncedSave();
-                // Explicitly save column metadata (width) when column is resized
-                saveTableMetadataRef.current?.({ includeColumns: true });
+                pendingColumnMetadataRef.current = true;
+                if (columnResizeTimerRef.current !== null) {
+                    window.clearTimeout(columnResizeTimerRef.current);
+                    logTableDebug('handleColumnResize cleared existing debounce timer');
+                }
+                columnResizeTimerRef.current = window.setTimeout(() => {
+                    columnResizeTimerRef.current = null;
+                    logTableDebug('handleColumnResize debounce fired', {
+                        pendingColumnMetadata: pendingColumnMetadataRef.current,
+                    });
+                    if (pendingColumnMetadataRef.current) {
+                        pendingColumnMetadataRef.current = false;
+                        void requestMetadataSave({
+                            columns: true,
+                            rows: true,
+                            immediate: true,
+                        });
+                    }
+                }, 500);
                 return updated;
             });
 
@@ -1820,44 +2101,84 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }
             }, 50);
         },
-        [debouncedSave, localColumns, sortedData],
+        [debouncedSave, localColumns, sortedData, requestMetadataSave],
     );
 
     const handleColumnMoved = useCallback(
         (startIndex: number, endIndex: number) => {
-            const oldState = [...localColumns];
+            if (startIndex === endIndex) return;
 
-            setLocalColumns((prevCols) => {
-                const updated = [...prevCols];
-                const [moved] = updated.splice(startIndex, 1);
-                updated.splice(endIndex, 0, moved);
+            const sourceColumns = [...localColumnsRef.current];
+            const movingColumn = sourceColumns[startIndex];
+            const targetColumn = sourceColumns[endIndex];
+            if (!movingColumn) {
+                logTableDebug('handleColumnMoved aborted (no column at index)', {
+                    startIndex,
+                    endIndex,
+                    available: sourceColumns.length,
+                });
+                return;
+            }
 
-                const reindexed = updated.map((col, i) => ({
-                    ...col,
-                    position: i,
-                }));
+            // Do not allow moving system-only columns (e.g. Links rail)
+            if (movingColumn.isSystemColumn || targetColumn?.isSystemColumn) {
+                logTableDebug('handleColumnMoved aborted (system column involved)', {
+                    from: startIndex,
+                    to: endIndex,
+                    movingColumnId: movingColumn.id,
+                    targetColumnId: targetColumn?.id,
+                });
+                return;
+            }
 
-                if (!isUndoingRef.current) {
-                    addToHistory({
-                        type: 'column_move',
-                        timestamp: Date.now(),
-                        data: {
-                            oldColumnState: oldState,
-                            newColumnState: reindexed,
-                            from: startIndex,
-                            to: endIndex,
-                        },
-                    });
-                }
+            const [removed] = sourceColumns.splice(startIndex, 1);
+            sourceColumns.splice(endIndex, 0, removed);
 
-                return reindexed;
+            const reindexed = sourceColumns.map((col, idx) => ({
+                ...col,
+                position: idx,
+            }));
+
+            logTableDebug('handleColumnMoved invoked', {
+                from: startIndex,
+                to: endIndex,
+                movingColumnId: movingColumn.id,
+                movingColumnHeader: movingColumn.header,
             });
 
+            logTableDebug('handleColumnMoved reindexed state', {
+                order: reindexed.map((col) => ({
+                    id: col.id,
+                    header: col.header,
+                    position: col.position,
+                })),
+            });
+
+            if (!isUndoingRef.current) {
+                addToHistory({
+                    type: 'column_move',
+                    timestamp: Date.now(),
+                    data: {
+                        oldColumnState: localColumnsRef.current,
+                        newColumnState: reindexed,
+                        from: startIndex,
+                        to: endIndex,
+                    },
+                });
+            }
+
+            localColumnsRef.current = reindexed as typeof localColumnsRef.current;
+            setLocalColumns(reindexed);
+
             debouncedSave();
-            // Explicitly save column metadata (position) when column is reordered
-            saveTableMetadataRef.current?.({ includeColumns: true });
+            // Explicitly save column metadata (position) and row heights when column is reordered
+            void requestMetadataSave({
+                columns: true,
+                rows: true,
+                immediate: true,
+            });
         },
-        [debouncedSave, localColumns, addToHistory],
+        [debouncedSave, addToHistory, requestMetadataSave],
     );
 
     const getCellContent = useCallback(
@@ -1886,20 +2207,27 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             }
 
             // Special handling for Links column (system column)
-            if (column.accessor === '__links__') {
+            if (isActionsColumn(column as EditableColumn<BaseRow>)) {
                 const isDark = resolvedTheme === 'dark';
+                const actionLabel = getActionLabel(rowData as BaseRow);
+                const icon = '🔗';
                 return {
                     kind: GridCellKind.Text,
                     allowOverlay: false,
                     readonly: true,
-                    data: '🔗',
-                    displayData: '🔗',
+                    data: icon,
+                    displayData: icon,
+                    contentAlign: 'center',
+                    hoverEffect: true,
                     themeOverride: {
-                        textDark: isDark ? '#60a5fa' : '#2563eb', // blue-400 (dark) / blue-600 (light)
-                        bgCell: isDark ? '#1e3a8a' : '#dbeafe', // blue-900 (dark) / blue-100 (light)
-                        accentColor: isDark ? '#3b82f6' : '#2563eb', // blue-500 (dark) / blue-600 (light)
+                        textDark: isDark ? '#c084fc' : '#7e22ce',
+                        textMedium: isDark ? '#e9d5ff' : '#7e22ce',
+                        bgCell: isDark ? '#3b0764' : '#f3e8ff',
+                        bgCellMedium: isDark ? '#4c1d95' : '#f3e8ff',
+                        accentColor: '#d8b4fe',
                     },
                     cursor: 'pointer',
+                    copyData: actionLabel,
                 } as TextCell;
             }
 
@@ -2472,8 +2800,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
             // Flush any pending edits so they are persisted before we add a new row
             // Do not await metadata save to avoid blocking UI
-            // Row add: do NOT include columns (only save row metadata)
-            saveTableMetadataRef.current?.({ includeColumns: false });
+            // Row add: snapshot metadata after pending edits flush
+            void requestMetadataSave({ rows: true, columns: false, immediate: true });
             // Persist buffered cell edits synchronously
             await handleSaveAllRef.current?.();
 
@@ -2505,11 +2833,18 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             // Persist the new row; avoid immediate full refresh to reduce flicker
             await saveRow(newRow, true);
             // Opportunistically update metadata (row add: do NOT include columns)
-            saveTableMetadataRef.current?.({ includeColumns: false });
+            void requestMetadataSave({ rows: true, columns: false, immediate: true });
         } catch (e) {
             console.error('[GlideEditableTable] Failed to append row:', e);
         }
-    }, [columns, localData, saveRow, refreshAfterSave, addToHistory]);
+    }, [
+        columns,
+        localData,
+        saveRow,
+        refreshAfterSave,
+        addToHistory,
+        requestMetadataSave,
+    ]);
 
     const handleRowMoved = useCallback(
         (from: number, to: number) => {
@@ -2545,13 +2880,13 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 return reindexed;
             });
             // Row reorder: do NOT include columns (only save row position metadata)
-            saveTableMetadataRef.current?.({ includeColumns: false });
+            void requestMetadataSave({ rows: true, columns: false, immediate: true });
             // allow some time for metadata save/realtime to propagate, then re-enable sync
             setTimeout(() => {
                 isReorderingRef.current = false;
             }, 1000);
         },
-        [debouncedSave, addToHistory],
+        [debouncedSave, addToHistory, requestMetadataSave],
     );
 
     // sort rows by a column and persist order to metadata
@@ -2636,12 +2971,12 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             setLocalData(sortedRows);
             try {
                 // Row sort: do NOT include columns (only save row position metadata)
-                saveTableMetadataRef.current?.({ includeColumns: false });
+                void requestMetadataSave({ rows: true, columns: false, immediate: true });
             } catch (e) {
                 console.error('[GlideEditableTable] Failed to save sort metadata', e);
             }
         },
-        [],
+        [requestMetadataSave],
     );
 
     // Calculate row height dynamically based on text content and column width
@@ -2664,6 +2999,10 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
 
             // Check each column to calculate required height for wrapped text
             localColumns.forEach((column) => {
+                if (column.isSystemColumn) {
+                    return;
+                }
+
                 // Only apply dynamic wrapping to text columns TBD
                 if (column.type !== 'text' && column.type !== undefined) return;
 
@@ -2779,7 +3118,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             setLocalColumns(newLocalColumns);
 
             // Column delete: include columns to save updated column list
-            await saveTableMetadata({ includeColumns: true });
+            await requestMetadataSave({
+                columns: true,
+                rows: false,
+                immediate: true,
+            });
 
             // Force grid to refresh
             gridRef.current?.updateCells([]);
@@ -2791,7 +3134,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         // Cleanup state on success
         setColumnToDelete(null);
         setDeleteConfirmOpen(false);
-    }, [columnToDelete, props, saveTableMetadata]);
+    }, [columnToDelete, props, requestMetadataSave]);
 
     // handle column rename with optimistic updates and error recovery
     const isRenamingRef = useRef(false);
@@ -2948,7 +3291,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             props.onDelete?.(row);
         }
         // Row delete: do NOT include columns (only save row metadata)
-        void saveTableMetadata({ includeColumns: false });
+        void requestMetadataSave({ rows: true, columns: false, immediate: true });
 
         // Cleanup.
         setRowsToDelete([]);
@@ -2957,7 +3300,80 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             rows: CompactSelection.empty(),
             columns: CompactSelection.empty(),
         });
-    }, [rowsToDelete, saveTableMetadata, props, sortedData, addToHistory]);
+    }, [rowsToDelete, requestMetadataSave, props, sortedData, addToHistory]);
+
+    const deleteRowsRightElement = useMemo(() => {
+        if (!isEditMode) return null;
+        const selectedRowIndices = gridSelection.rows.toArray();
+        if (selectedRowIndices.length === 0) return null;
+
+        const rowsToDeleteLocal = selectedRowIndices
+            .map((i) => sortedData[i])
+            .filter((row): row is T => Boolean(row));
+        if (rowsToDeleteLocal.length === 0) return null;
+
+        const handleDeleteClick = () => {
+            if (props.skipDeleteConfirm) {
+                const firstRow = rowsToDeleteLocal[0];
+                if (firstRow) {
+                    void props.onDelete?.(firstRow);
+                }
+            } else {
+                setRowsToDelete(rowsToDeleteLocal);
+                setRowDeleteConfirmOpen(true);
+            }
+        };
+
+        return (
+            <div
+                style={{
+                    position: 'absolute',
+                    bottom: 16,
+                    right: 16,
+                    zIndex: 1000,
+                    pointerEvents: 'auto',
+                }}
+            >
+                <button
+                    onClick={handleDeleteClick}
+                    style={{
+                        height: 42,
+                        lineHeight: '42px',
+                        padding: '0 24px',
+                        backgroundColor: '#7C3AED',
+                        color: 'white',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+                        backdropFilter: 'blur(10px)',
+                        transition: 'background 0.2s ease-in-out',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
+                        borderRadius: 6,
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(140, 95, 202, 1)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#7C3AED';
+                    }}
+                >
+                    Delete {rowsToDeleteLocal.length}{' '}
+                    {rowsToDeleteLocal.length === 1 ? 'Row' : 'Rows'}
+                </button>
+            </div>
+        );
+    }, [
+        gridSelection.rows,
+        isEditMode,
+        props.onDelete,
+        props.skipDeleteConfirm,
+        setRowDeleteConfirmOpen,
+        setRowsToDelete,
+        sortedData,
+    ]);
 
     // Modify Trailing Row Visuals.
     columns.map((col, idx) => ({
@@ -3010,7 +3426,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
             console.debug('[GlideEditableTable] Cleared selection on edit mode exit');
 
             // Edit mode exit: do NOT include columns (only save row metadata if needed)
-            void saveTableMetadata({ includeColumns: false });
+            void requestMetadataSave({ rows: true, columns: false, immediate: true });
         }
     }, [
         isEditMode,
@@ -3019,7 +3435,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
         onSave,
         onPostSave,
         handleSaveAll,
-        saveTableMetadata,
+        requestMetadataSave,
     ]);
 
     // clear selection highlight when table loses focus
@@ -3288,7 +3704,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 );
                 void handleSaveAll();
                 // Undo/redo: do NOT include columns (only save row metadata)
-                void saveTableMetadata({ includeColumns: false });
+                void requestMetadataSave({ rows: true, columns: false, immediate: true });
                 return;
             }
 
@@ -3319,7 +3735,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 return;
             }
         },
-        [handleSaveAll, saveTableMetadata, isEditMode, performUndo, performRedo],
+        [handleSaveAll, requestMetadataSave, isEditMode, performUndo, performRedo],
     );
 
     useEffect(() => {
@@ -3431,9 +3847,13 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 };
             }
 
-            // Handle Links column click
-            if (column?.accessor === '__links__' && rowData && props.onLinksColumnClick) {
-                console.log('[Links Column] Clicked:', {
+            // Handle Actions column click
+            if (
+                column?.accessor === ACTIONS_COLUMN_ACCESSOR &&
+                rowData &&
+                props.onLinksColumnClick
+            ) {
+                console.log('[Actions Column] Clicked:', {
                     requirementId: rowData.id,
                     rowData,
                 });
@@ -3629,17 +4049,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 // swallow any debug errors
             }
 
-            const startColFinal = findNextNonLinksColumn(rawStartCol, currentColumns);
-            if (startColFinal === null) {
-                console.info(
-                    `[${operationId}] Paste aborted: no non-Links column found to the right of start index ${rawStartCol}`,
-                );
-                pasteState.isPasting = false;
-                pasteState.pasteOperationActive = false;
-                return false;
-            }
+            const startColFinal = rawStartCol;
 
-            // Helper to compute paste target columns (skipping Links) based on clipboard width
+            // Helper to compute paste target columns based on clipboard width
             const getPasteTargetColumns = (
                 columns: EditableColumn<T>[],
                 startColIndex: number,
@@ -3655,10 +4067,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 ) {
                     const col = columns[colIndex];
                     if (!col) continue;
-                    if (isLinksColumn(col)) {
-                        // Skip Links columns entirely
-                        continue;
-                    }
                     targets.push({ column: col, columnIndex: colIndex });
                 }
 
@@ -3707,7 +4115,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }> = [];
                 if (columnsNeeded > currentColumns.length) {
                     const existingColumnCount = currentColumns.length;
-                    if (debugConfig.debugTable()) {
+                    if (debugConfig.debugLogging()) {
                         console.warn(
                             '[TableColumns] Missing columns detected during paste',
                             {
@@ -3902,7 +4310,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         );
                                         const createStart = Date.now();
 
-                                        if (debugConfig.debugTable()) {
+                                        if (debugConfig.debugLogging()) {
                                             console.warn(
                                                 '[TableColumns] Auto-creating column via createPropertyAndColumn',
                                                 {
@@ -4208,7 +4616,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }> = [];
                 const editingUpdates: Record<string, Partial<T>> = {};
 
-                // Compute target columns for paste, skipping Links columns entirely
+                // Compute target columns for paste, skipping the Actions column entirely
                 const pasteTargetColumns = getPasteTargetColumns(
                     currentColumns,
                     startColFinal,
@@ -4271,10 +4679,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         isNewRow = true;
                         maxPosition++;
 
-                        // create base row w all column defaults, excluding Links and id
+                        // create base row w all column defaults, excluding id
                         const newRowData = currentColumns.reduce((acc, col) => {
                             if (col.accessor === 'id') return acc;
-                            if (isLinksColumn(col as EditableColumn<T>)) return acc;
                             acc[col.accessor as keyof T] = '' as any;
                             return acc;
                         }, {} as Partial<T>);
@@ -4307,8 +4714,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         const { column: targetColumn, columnIndex: targetColIndex } =
                             targetInfo;
 
-                        if (!targetColumn || isLinksColumn(targetColumn)) {
-                            // Skip Links column entirely during paste
+                        if (!targetColumn) {
                             continue;
                         }
                         // Cell values are already trimmed during parsing
@@ -4691,7 +5097,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             const targetInfo = pasteTargetColumns[cellIndex];
                             if (!targetInfo) continue;
                             const { column: targetColumn } = targetInfo;
-                            if (!targetColumn || isLinksColumn(targetColumn)) continue;
+                            if (!targetColumn) continue;
 
                             const kind =
                                 detectStatusOrPriorityColumn(
@@ -5198,7 +5604,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             );
                             try {
                                 // Paste sync after column creation: include columns to save new column order
-                                await saveTableMetadata({ includeColumns: true });
+                                await requestMetadataSave({
+                                    columns: true,
+                                    rows: false,
+                                    immediate: true,
+                                });
                                 console.log(
                                     `[paste_sync][${operationId}] Table metadata saved (column order persisted)`,
                                 );
@@ -5968,7 +6378,11 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                         try {
                             // Paste sync after row saves: do NOT include columns (only save row metadata)
                             // This prevents overwriting renamed column names with stale data
-                            await saveTableMetadata({ includeColumns: false });
+                            await requestMetadataSave({
+                                rows: true,
+                                columns: false,
+                                immediate: true,
+                            });
                             const mdDuration = Date.now() - mdStart;
                             console.debug(
                                 `[paste_sync][${operationId}] saveTableMetadata done (duration=${mdDuration}ms)`,
@@ -6283,6 +6697,8 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                             onCellActivated={handleCellActivated}
                             onKeyDown={handleGridKeyDown}
                             onPaste={isEditMode ? handlePaste : undefined}
+                            smoothScrollX
+                            smoothScrollY
                             rows={sortedData.length}
                             highlightRegions={highlightRegions}
                             rowHeight={(row) => {
@@ -6341,94 +6757,7 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                       }
                                     : undefined
                             }
-                            // Right side DOM element for row actions (deletion). Should prob be own component.
-                            rightElement={
-                                isEditMode && gridSelection.rows.length > 0
-                                    ? (() => {
-                                          const selectedRowIndices =
-                                              gridSelection.rows.toArray();
-                                          const rowsToDelete = selectedRowIndices.map(
-                                              (i) => sortedData[i],
-                                          );
-
-                                          return (
-                                              <div
-                                                  style={{
-                                                      position: 'absolute',
-                                                      bottom: 16,
-                                                      right: 16,
-                                                      zIndex: 1000,
-                                                      pointerEvents: 'auto',
-                                                      transition:
-                                                          'opacity 0.2s ease-in-out',
-                                                  }}
-                                              >
-                                                  <button
-                                                      onClick={() => {
-                                                          if (props.skipDeleteConfirm) {
-                                                              // Delegate confirmation to parent; do not mutate local state here
-                                                              const firstRow =
-                                                                  rowsToDelete[0];
-                                                              if (firstRow) {
-                                                                  void props.onDelete?.(
-                                                                      firstRow,
-                                                                  );
-                                                              }
-                                                          } else {
-                                                              setRowsToDelete(
-                                                                  rowsToDelete,
-                                                              );
-                                                              setRowDeleteConfirmOpen(
-                                                                  true,
-                                                              );
-                                                          }
-                                                      }}
-                                                      style={{
-                                                          height: 42,
-                                                          lineHeight: '42px',
-                                                          padding: '0 24px',
-                                                          backgroundColor: '#7C3AED',
-                                                          color: 'white',
-                                                          border: 'none',
-                                                          fontWeight: 600,
-                                                          fontSize: 14,
-                                                          cursor: 'pointer',
-                                                          boxShadow:
-                                                              '0 4px 16px rgba(0, 0, 0, 0.15)',
-                                                          backdropFilter: 'blur(10px)',
-                                                          background:
-                                                              resolvedTheme === 'dark'
-                                                                  ? 'rgba(124, 58, 237, 0.8)'
-                                                                  : 'rgba(124, 58, 237, 0.85)',
-                                                          transition:
-                                                              'background 0.2s ease-in-out',
-                                                          whiteSpace: 'nowrap',
-                                                          display: 'inline-block',
-                                                      }}
-                                                      onMouseEnter={(e) =>
-                                                          (e.currentTarget.style.backgroundColor =
-                                                              resolvedTheme === 'dark'
-                                                                  ? 'rgba(140, 95, 202, 1)'
-                                                                  : 'rgba(140, 95, 202, 1)')
-                                                      }
-                                                      onMouseLeave={(e) =>
-                                                          (e.currentTarget.style.backgroundColor =
-                                                              resolvedTheme === 'dark'
-                                                                  ? 'rgba(124, 58, 237, 0.8)'
-                                                                  : 'rgba(124, 58, 237, 0.85)')
-                                                      }
-                                                  >
-                                                      Delete {selectedRowIndices.length}{' '}
-                                                      Row
-                                                      {selectedRowIndices.length !== 1
-                                                          ? 's'
-                                                          : ''}
-                                                  </button>
-                                              </div>
-                                          );
-                                      })()
-                                    : null
-                            }
+                            rightElement={deleteRowsRightElement}
                             rightElementProps={{
                                 sticky: true,
                             }}
@@ -6517,9 +6846,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             return reindexed as typeof prev;
                                         });
 
+                                        if (column.id) {
+                                            dynamicColumnsPendingSyncRef.current.add(
+                                                column.id,
+                                            );
+                                        }
+
                                         // Column add (createPropertyAndColumn): include columns to save new column list
-                                        await saveTableMetadataRef.current?.({
-                                            includeColumns: true,
+                                        await requestMetadataSave({
+                                            columns: true,
+                                            rows: false,
+                                            immediate: true,
                                         });
                                         await onPostSave?.();
                                     } finally {
@@ -6597,9 +6934,17 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             return reindexed as typeof prev;
                                         });
 
+                                        if (column.id) {
+                                            dynamicColumnsPendingSyncRef.current.add(
+                                                column.id,
+                                            );
+                                        }
+
                                         // Column add (createColumnFromProperty): include columns to save new column list
-                                        await saveTableMetadataRef.current?.({
-                                            includeColumns: true,
+                                        await requestMetadataSave({
+                                            columns: true,
+                                            rows: false,
+                                            immediate: true,
                                         });
                                         await onPostSave?.();
                                     } finally {

@@ -5,7 +5,7 @@ import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
 import { getDocumentDataServer } from '@/lib/db/server/documents.server';
 // No user-scoped client needed here; use service role for insertion to avoid UUID casting issues in policies
 import { getSupabaseServiceRoleClient } from '@/lib/supabase/supabase-service-role';
-import { debugConfig, isFeatureEnabled } from '@/lib/utils/env-validation';
+import { debugConfig } from '@/lib/utils/env-validation';
 import { Json, TablesInsert } from '@/types/base/database.types';
 
 /**
@@ -152,130 +152,163 @@ export async function POST(
         const isRequirementsTable =
             tableKind === 'requirements' || tableKind === 'requirements_default';
 
-        const debugTable = debugConfig.debugTable() || isFeatureEnabled.debugLogging();
+        const debugTable = debugConfig.debugLogging();
 
-        const createdColumns: unknown[] = [];
+        let responseColumns: unknown[] = [];
+        let blockWithContent = block;
         if (isRequirementsTable && organizationId) {
-            // Fetch base properties (org-scoped)
-            const { data: baseProps, error: propsErr } = await supabase
-                .from('properties')
-                .select('*')
-                .eq('org_id', organizationId)
-                .eq('is_base', true)
-                .is('document_id', null)
-                .is('project_id', null);
-            if (propsErr) {
-                // Non-fatal: return block without columns
-                console.error(
-                    'Failed to fetch base properties for default columns:',
-                    propsErr,
-                );
-            } else if (Array.isArray(baseProps) && baseProps.length > 0) {
-                if (debugTable) {
-                    const counts = baseProps.reduce<Record<string, number>>(
-                        (acc, prop) => {
-                            const key = (prop.name || '').toLowerCase().trim();
-                            if (!key) return acc;
-                            acc[key] = (acc[key] || 0) + 1;
-                            return acc;
-                        },
-                        {},
+            const fetchColumnsWithProps = async () => {
+                const { data: cols, error: colsErr } = await supabase
+                    .from('columns')
+                    .select('id, position, width, property:properties(name)')
+                    .eq('block_id', block.id)
+                    .order('position', { ascending: true });
+                if (colsErr) {
+                    console.error(
+                        'Failed to fetch columns for newly created table block:',
+                        colsErr,
                     );
-                    const duplicates = Object.entries(counts)
-                        .filter(([, count]) => count > 1)
-                        .map(([name, count]) => ({ name, count }));
-                    console.warn('[Blocks API] Base properties for requirements table', {
-                        organizationId,
-                        documentId,
-                        blockId: block.id,
-                        basePropertyCount: baseProps.length,
-                        duplicates,
-                    });
+                    return [];
                 }
+                return cols ?? [];
+            };
 
-                // Desired order for requirement defaults
-                const order = [
-                    'external_id',
-                    'name',
-                    'description',
-                    'status',
-                    'priority',
-                ];
-                const normalize = (s: unknown) =>
-                    typeof s === 'string' ? s.toLowerCase().trim() : '';
-                const sorted = baseProps.slice().sort((a, b) => {
-                    const ia = order.indexOf(normalize(a.name));
-                    const ib = order.indexOf(normalize(b.name));
-                    const va = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
-                    const vb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
-                    return va - vb || normalize(a.name).localeCompare(normalize(b.name));
-                });
+            let colsWithProps = await fetchColumnsWithProps();
 
-                // Insert columns in order using service-role client to avoid user-id casting issues
-                let pos = 0;
-                for (const prop of sorted) {
-                    const { data: col, error: colErr } = await supabase
-                        .from('columns')
-                        .insert({
-                            block_id: block.id,
-                            property_id: prop.id,
-                            position: pos,
-                            width: 200,
-                            is_hidden: false,
-                            is_pinned: false,
-                            created_by: profile.id,
-                            updated_by: profile.id,
-                        })
-                        .select('*')
-                        .single();
-                    if (!colErr && col) {
-                        createdColumns.push(col);
+            if (!colsWithProps || colsWithProps.length === 0) {
+                // Fallback: create default columns only if they weren't created automatically
+                const { data: baseProps, error: propsErr } = await supabase
+                    .from('properties')
+                    .select('*')
+                    .eq('org_id', organizationId)
+                    .eq('is_base', true)
+                    .is('document_id', null)
+                    .is('project_id', null);
+                if (propsErr) {
+                    console.error(
+                        'Failed to fetch base properties for default columns:',
+                        propsErr,
+                    );
+                } else if (Array.isArray(baseProps) && baseProps.length > 0) {
+                    if (debugTable) {
+                        const counts = baseProps.reduce<Record<string, number>>(
+                            (acc, prop) => {
+                                const key = (prop.name || '').toLowerCase().trim();
+                                if (!key) return acc;
+                                acc[key] = (acc[key] || 0) + 1;
+                                return acc;
+                            },
+                            {},
+                        );
+                        const duplicates = Object.entries(counts)
+                            .filter(([, count]) => count > 1)
+                            .map(([name, count]) => ({ name, count }));
+                        console.warn(
+                            '[Blocks API] Base properties for requirements table',
+                            {
+                                organizationId,
+                                documentId,
+                                blockId: block.id,
+                                basePropertyCount: baseProps.length,
+                                duplicates,
+                            },
+                        );
+                    }
+
+                    const order = [
+                        'external_id',
+                        'name',
+                        'description',
+                        'status',
+                        'priority',
+                    ];
+                    const normalize = (s: unknown) =>
+                        typeof s === 'string' ? s.toLowerCase().trim() : '';
+                    const sorted = baseProps.slice().sort((a, b) => {
+                        const ia = order.indexOf(normalize(a.name));
+                        const ib = order.indexOf(normalize(b.name));
+                        const va = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+                        const vb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+                        return (
+                            va - vb || normalize(a.name).localeCompare(normalize(b.name))
+                        );
+                    });
+
+                    let pos = 0;
+                    for (const prop of sorted) {
+                        await supabase
+                            .from('columns')
+                            .insert({
+                                block_id: block.id,
+                                property_id: prop.id,
+                                position: pos,
+                                width: 200,
+                                is_hidden: false,
+                                is_pinned: false,
+                                created_by: profile.id,
+                                updated_by: profile.id,
+                            })
+                            .select('*')
+                            .single();
                         pos += 1;
                     }
-                }
 
-                // Save initial metadata with columns after they're created
-                if (createdColumns.length > 0) {
-                    // Fetch columns with property names for metadata
-                    const { data: colsWithProps } = await supabase
-                        .from('columns')
-                        .select('id, position, width, property:properties(name)')
-                        .eq('block_id', block.id)
-                        .order('position', { ascending: true });
-                    const columnMetadata =
-                        (colsWithProps || []).map((c, idx) => ({
-                            columnId: (c as { id: string }).id,
-                            position:
-                                typeof (c as { position?: number }).position === 'number'
-                                    ? (c as { position?: number }).position
-                                    : idx,
-                            width: (c as { width?: number }).width ?? 200,
-                            name:
-                                ((c as unknown as { property?: { name?: string | null } })
-                                    ?.property?.name ||
-                                    '') ??
-                                '',
-                        })) || [];
-                    const currentContent = (block.content || {}) as unknown as {
-                        columns?: unknown[];
-                        requirements?: unknown[];
-                        tableKind?: string;
-                    };
-                    await supabase
-                        .from('blocks')
-                        .update({
-                            content: {
-                                ...currentContent,
-                                columns: columnMetadata,
-                                tableKind: currentContent.tableKind ?? 'requirements',
-                            } as unknown as Json,
-                        })
-                        .eq('id', block.id);
+                    colsWithProps = await fetchColumnsWithProps();
                 }
             }
+
+            const columnMetadata =
+                (colsWithProps || []).map((c, idx) => ({
+                    columnId: (c as { id: string }).id,
+                    position:
+                        typeof (c as { position?: number }).position === 'number'
+                            ? (c as { position?: number }).position
+                            : idx,
+                    width: (c as { width?: number }).width ?? 200,
+                    name:
+                        ((c as unknown as { property?: { name?: string | null } })
+                            ?.property?.name ||
+                            '') ??
+                        '',
+                })) || [];
+
+            if (columnMetadata.length > 0) {
+                const currentContent = (block.content || {}) as unknown as {
+                    columns?: unknown[];
+                    requirements?: unknown[];
+                    tableKind?: string;
+                };
+                const nextContent = {
+                    ...currentContent,
+                    columns: columnMetadata,
+                    tableKind: currentContent.tableKind ?? 'requirements',
+                } as Json;
+
+                await supabase
+                    .from('blocks')
+                    .update({
+                        content: nextContent,
+                    })
+                    .eq('id', block.id);
+
+                blockWithContent = {
+                    ...blockWithContent,
+                    content: nextContent,
+                };
+            }
+
+            responseColumns = colsWithProps || [];
         }
 
-        return NextResponse.json({ block, columns: createdColumns });
+        const blockResponse =
+            Array.isArray(responseColumns) && responseColumns.length > 0
+                ? ({
+                      ...blockWithContent,
+                      columns: responseColumns,
+                  } as typeof blockWithContent & { columns: typeof responseColumns })
+                : blockWithContent;
+
+        return NextResponse.json({ block: blockResponse, columns: responseColumns });
     } catch (error) {
         console.error('Blocks API POST error:', error);
         return NextResponse.json(

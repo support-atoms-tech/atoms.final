@@ -1,3 +1,5 @@
+'use client';
+
 export { EditableTable } from './EditableTable';
 export { TanStackEditableTable } from './TanStackEditableTable';
 export { GlideEditableTable } from './GlideEditableTable';

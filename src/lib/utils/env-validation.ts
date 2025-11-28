@@ -186,14 +186,38 @@ export const debugConfig = {
     },
 
     /**
-     * Enable detailed table debugging
-     * Includes column creation, updates, queries, and requirement hydration
-     * Helps debug table-related issues including data merge conflicts
+     * Enable general debug logging (client/server)
+     * Controlled solely by ENABLE_DEBUG_LOGGING
      */
-    debugTable: () => {
+    debugLogging: () => {
         if (isProduction()) return false;
-        if (!env.ENABLE_DEBUG_LOGGING) return false;
-        return true;
+
+        if (typeof document !== 'undefined') {
+            const attr = document.body?.dataset?.enableDebugLogging;
+            if (typeof attr === 'string') {
+                return attr === 'true';
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            const winFlag = (
+                window as typeof window & {
+                    __ENABLE_DEBUG_LOGGING__?: boolean;
+                }
+            ).__ENABLE_DEBUG_LOGGING__;
+            if (typeof winFlag === 'boolean') {
+                return winFlag;
+            }
+        }
+
+        if (
+            typeof process !== 'undefined' &&
+            process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGGING === 'true'
+        ) {
+            return true;
+        }
+
+        return Boolean(env.ENABLE_DEBUG_LOGGING);
     },
 };
 
