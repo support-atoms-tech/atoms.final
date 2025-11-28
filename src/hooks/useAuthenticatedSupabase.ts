@@ -218,11 +218,7 @@ export function useAuthenticatedSupabase() {
                     // Custom fetch wrapper to attach latest token and retry once on 401/403
                     const customFetch: typeof fetch = async (input, init) => {
                         // Check debug flag both from config and directly from env (fallback)
-                        const shouldLogFromConfig = debugConfig.debugRLSQueries();
-                        const shouldLogFromEnv =
-                            typeof window !== 'undefined' &&
-                            process.env.NEXT_PUBLIC_DEBUG_RLS === 'true';
-                        const shouldLog = shouldLogFromConfig || shouldLogFromEnv;
+                        const shouldLog = debugConfig.debugRLSQueries();
 
                         const url =
                             typeof input === 'string'

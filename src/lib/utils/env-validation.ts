@@ -195,6 +195,7 @@ export const debugConfig = {
      */
     debugRLSQueries: () => {
         if (isProduction()) return false;
+        if (!env.ENABLE_DEBUG_LOGGING) return false;
         return env.NEXT_PUBLIC_DEBUG_RLS ?? false;
     },
 
@@ -205,6 +206,7 @@ export const debugConfig = {
      */
     debugTable: () => {
         if (isProduction()) return false;
+        if (!env.ENABLE_DEBUG_LOGGING) return false;
         return env.NEXT_PUBLIC_DEBUG_TABLE ?? false;
     },
 };
