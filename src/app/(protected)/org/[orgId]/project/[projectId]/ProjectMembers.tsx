@@ -29,6 +29,7 @@ import {
     ProjectRole,
     hasProjectPermission,
 } from '@/lib/auth/permissions';
+import { queryKeys } from '@/lib/constants/queryKeys';
 import { useUser } from '@/lib/providers/user.provider';
 
 interface ProjectMembersProps {
@@ -110,6 +111,20 @@ export default function ProjectMembers({ projectId }: ProjectMembersProps) {
                     queryClient.invalidateQueries({
                         queryKey: ['project-members', projectId],
                     });
+                    // Also invalidate documents query if membership status changed
+                    // This ensures removed members can't see cached documents
+                    if (
+                        payload.eventType === 'UPDATE' ||
+                        payload.eventType === 'DELETE'
+                    ) {
+                        queryClient.invalidateQueries({
+                            queryKey: queryKeys.documents.byProject(projectId),
+                        });
+                        // Also invalidate project role query
+                        queryClient.invalidateQueries({
+                            queryKey: queryKeys.roles.byProject(projectId),
+                        });
+                    }
                 },
             )
             .subscribe((status) => {

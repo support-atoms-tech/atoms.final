@@ -148,9 +148,25 @@ export function useKeyboardNavigation(
         [enableArrowNavigation, focusElement],
     );
 
+    // Helper to check if user is typing in an input field
+    const isTypingInInput = useCallback((target: EventTarget | null): boolean => {
+        if (!target || !(target instanceof HTMLElement)) return false;
+
+        const tagName = target.tagName.toLowerCase();
+        const isInput = tagName === 'input' || tagName === 'textarea';
+        const isContentEditable =
+            target.isContentEditable || target.getAttribute('contenteditable') === 'true';
+
+        // Block shortcuts when typing in any input field or contenteditable element
+        return isInput || isContentEditable;
+    }, []);
+
     // Main keyboard event handler
     const handleKeyDown = useCallback(
         (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            const isInInput = isTypingInInput(target);
+
             // Handle Ctrl + L to toggle agent chat panel
             if (event.ctrlKey && event.key === 'l') {
                 event.preventDefault();
@@ -158,7 +174,7 @@ export function useKeyboardNavigation(
                 return;
             }
 
-            // Handle Ctrl + / to toggle help dialog
+            // Handle Ctrl + / to toggle help dialog (always allow, even in inputs)
             if (event.ctrlKey && event.key === '/') {
                 event.preventDefault();
                 toggleHelp();
@@ -195,8 +211,9 @@ export function useKeyboardNavigation(
                 handleArrowNavigation(event);
             }
 
-            // Handle custom shortcuts
-            if (enableGlobalShortcuts) {
+            // Handle custom shortcuts - but skip if user is typing in an input field
+            // Exception: Ctrl/Cmd/Meta shortcuts should still work
+            if (enableGlobalShortcuts && !isInInput) {
                 for (const shortcut of shortcuts) {
                     // Skip if event.key or shortcut.key is undefined/null
                     if (!event.key || !shortcut.key) {
@@ -232,6 +249,7 @@ export function useKeyboardNavigation(
             togglePanel,
             toggleHelp,
             handleArrowNavigation,
+            isTypingInInput,
         ],
     );
 

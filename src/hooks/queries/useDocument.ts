@@ -32,6 +32,15 @@ export function useProjectDocuments(projectId: string) {
                 const handled = handle401Response(response, pathname, router);
                 if (handled === null) return null;
 
+                // Handle 403 (Forbidden) - user lost access, clear cache
+                if (response.status === 403) {
+                    console.warn(
+                        `Access denied to project ${projectId}. Membership may have been removed.`,
+                    );
+                    // Return empty array to clear cached documents
+                    return [];
+                }
+
                 // For other errors, log but don't throw
                 const message = `Error fetching project documents: ${response.statusText}`;
                 console.error(message);
