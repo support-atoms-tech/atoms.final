@@ -1,7 +1,19 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
-import { ArrowRight, Check, Network, Plus, Search, Trash2, Trash } from 'lucide-react';
+import {
+    ArrowRight,
+    Check,
+    Eye,
+    Link2,
+    Network,
+    Plus,
+    Search,
+    SlidersHorizontal,
+    Trash2,
+    Trash,
+    X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,6 +46,14 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import {
     useCreateTraceLinks,
@@ -71,6 +91,73 @@ interface TraceLinksContentProps {
     orgId: string;
     documentId?: string;
 }
+
+// MOCK TEST CASE DATA (for UI PURPOSES ONLY)
+// Replace with real data when backend is connected
+const MOCK_TEST_CASES = [
+    {
+        id: 'TC-001',
+        name: 'System Integration Test',
+        description: 'End-to-end flight control system test',
+        type: 'system',
+        status: 'approved',
+        requirements: ['REQ-001'],
+        lastExecution: '7/30/2024',
+        duration: '1h 0m 0s',
+    },
+    {
+        id: 'TC-002',
+        name: 'Performance Load Test',
+        description: 'Stress test under maximum load conditions',
+        type: 'performance',
+        status: 'rejected',
+        requirements: ['REQ-001', 'REQ-002'],
+        lastExecution: '7/29/2024',
+        duration: '2h 15m 30s',
+    },
+    {
+        id: 'TC-003',
+        name: 'Security Vulnerability Scan',
+        description: 'Automated security testing suite',
+        type: 'security',
+        status: 'in_progress',
+        requirements: ['REQ-003'],
+        lastExecution: '7/28/2024',
+        duration: '0h 45m 12s',
+    },
+];
+
+// MOCK TEST CASE RESULTS DATA (for UI PURPOSES ONLY)
+// Replace with real data when backend is connected
+const MOCK_TEST_CASE_RESULTS = [
+    {
+        executionId: 'TC-001-R17',
+        testCaseId: 'TC-001',
+        result: 'passed',
+        date: '7/30/2024',
+        duration: '1h 0m 0s',
+        tester: 'John Doe',
+        links: ['https://example.com/logs/123'],
+    },
+    {
+        executionId: 'TC-002-R16',
+        testCaseId: 'TC-002',
+        result: 'failed',
+        date: '7/29/2024',
+        duration: '2h 15m 30s',
+        tester: 'Jane Smith',
+        links: ['https://example.com/logs/124'],
+    },
+    {
+        executionId: 'TC-003-R15',
+        testCaseId: 'TC-003',
+        result: 'In Progress',
+        date: '7/28/2024',
+        duration: '0h 45m 12s',
+        tester: 'Bob Johnson',
+        links: [],
+    },
+];
 
 function getPropertyValue(props: Record<string, any>, target: string) {
     if (!props) return null;
@@ -157,6 +244,20 @@ export default function TraceLinksContent({
         isParent: boolean;
     } | null>(null);
 
+    // state for test case results dialogs
+    const [isLinksDialogOpen, setIsLinksDialogOpen] = useState(false);
+    const [selectedResultLinks, setSelectedResultLinks] = useState<string[]>([]);
+    const [isDeleteResultDialogOpen, setIsDeleteResultDialogOpen] = useState(false);
+    const [selectedResultToDelete, setSelectedResultToDelete] = useState<string | null>(
+        null,
+    );
+
+    // state for test cases delete dialog
+    const [isDeleteTestCaseDialogOpen, setIsDeleteTestCaseDialogOpen] = useState(false);
+    const [selectedTestCaseToDelete, setSelectedTestCaseToDelete] = useState<
+        string | null
+    >(null);
+
     // state for selected requirements in relationship dialogs
     const [selectedParentRequirement, setSelectedParentRequirement] =
         useState<SelectedRequirement | null>(null);
@@ -191,6 +292,7 @@ export default function TraceLinksContent({
     const realParentRequirements = useMemo(() => {
         if (!requirementAncestors) return [];
         return requirementAncestors
+            .filter((ancestor) => (ancestor as any).depth === 1)
             .map((ancestor) => {
                 const ancestorId = (ancestor as any).requirement_id;
 
@@ -575,98 +677,135 @@ export default function TraceLinksContent({
         const currentExternalId = currentRequirement.external_id || '';
         const currentDisplayName = currentRequirement.name || '-';
 
-        let children: any[] = [];
+        // Helper to build full descendant tree using both requirementTree and requirementDescendants
+        const buildFullDescendantTree = (
+            parentId: string,
+            parentDepth: number = 0,
+        ): any[] => {
+            const children: any[] = [];
 
-        if (requirementTree && requirementTree.length > 0) {
-            const directChildNodes = requirementTree.filter(
-                (node) => node.parent_id === currentRequirement.id,
-            );
-
-            children = directChildNodes.map((childNode) => {
-                // Get full metadata from the comprehensive map
-                const meta = requirementMetaMap.get(childNode.requirement_id);
-
-                const grandchildren = buildChildTree(
-                    childNode.requirement_id,
-                    requirementTree,
-                    requirementMetaMap,
-                    2, // depth 2 for grandchildren
+            // Try requirementTree first to get direct children
+            if (requirementTree && requirementTree.length > 0) {
+                const directChildNodes = requirementTree.filter(
+                    (node) => node.parent_id === parentId,
                 );
 
-                const hasChildren = grandchildren.length > 0;
-                const relationshipRole = hasChildren ? 'child-parent' : 'child';
+                for (const childNode of directChildNodes) {
+                    const childId = childNode.requirement_id;
+                    const meta = requirementMetaMap.get(childId);
 
-                // Merge full metadata from the map, with fallbacks
-                return {
-                    id: meta?.id ?? childNode.requirement_id,
-                    name: meta?.name ?? childNode.title ?? '(No Name)',
-                    external_id: meta?.external_id ?? '',
-                    type: meta?.type ?? '-',
-                    description: meta?.description ?? '',
-                    status: meta?.status,
-                    priority: meta?.priority,
-                    properties: meta?.properties,
-                    isCurrent: false,
-                    relationshipRole: relationshipRole,
-                    depth: 1,
-                    hasChildren: hasChildren,
-                    children: grandchildren,
-                };
-            });
-        }
+                    // Check if requirementTree shows this child as having children
+                    const hasChildrenInTree = requirementTree.some(
+                        (node) => node.parent_id === childId,
+                    );
 
-        if (
-            children.length === 0 &&
-            requirementDescendants &&
-            requirementDescendants.length > 0
-        ) {
-            let directChildren = (requirementDescendants || []).filter(
-                (desc) =>
-                    (desc as any).depth === 1 && (desc as any).directParent === true,
-            );
+                    // Recursively build descendants for this child
+                    const grandchildren = buildFullDescendantTree(
+                        childId,
+                        parentDepth + 1,
+                    );
 
-            if (directChildren.length === 0) {
-                directChildren = (requirementDescendants || []).filter(
-                    (desc) => (desc as any).depth === 1,
-                );
+                    const hasChildren = grandchildren.length > 0;
+                    let relationshipRole: string;
+                    if (parentDepth === 0) {
+                        relationshipRole = hasChildren ? 'child-parent' : 'child';
+                    } else if (parentDepth === 1) {
+                        relationshipRole = hasChildren
+                            ? 'grandchild-parent'
+                            : 'grandchild';
+                    } else if (parentDepth === 2) {
+                        relationshipRole = hasChildren
+                            ? 'great-grandchild-parent'
+                            : 'great-grandchild';
+                    } else {
+                        relationshipRole = hasChildren
+                            ? `level-${parentDepth + 1}-descendant-parent`
+                            : `level-${parentDepth + 1}-descendant`;
+                    }
+
+                    children.push({
+                        id: meta?.id ?? childId,
+                        name: meta?.name ?? childNode.title ?? '(No Name)',
+                        external_id: meta?.external_id ?? '',
+                        type: meta?.type ?? '-',
+                        description: meta?.description ?? '',
+                        status: meta?.status,
+                        priority: meta?.priority,
+                        properties: meta?.properties,
+                        isCurrent: false,
+                        relationshipRole: relationshipRole,
+                        depth: parentDepth + 1,
+                        hasChildren: hasChildren,
+                        children: grandchildren,
+                    });
+                }
             }
 
-            children = directChildren.map((child) => {
-                const childId = (child as any).requirement_id;
-                // Get full metadata from the comprehensive map
-                const meta = requirementMetaMap.get(childId);
+            if (
+                children.length === 0 &&
+                requirementDescendants &&
+                requirementDescendants.length > 0
+            ) {
+                // Find all descendants at depth = parentDepth + 1
+                const directDescendants = (requirementDescendants as any[]).filter(
+                    (desc: any) =>
+                        desc.depth === parentDepth + 1 &&
+                        desc.requirement_id &&
+                        desc.requirement_id !== currentRequirement.id,
+                );
 
-                let grandchildren: any[] = [];
-                if (requirementTree && requirementTree.length > 0) {
-                    grandchildren = buildChildTree(
+                // For each direct descendant, add it and recursively build its descendants
+                for (const desc of directDescendants) {
+                    const childId = desc.requirement_id;
+                    const meta = requirementMetaMap.get(childId);
+
+                    // Recursively build descendants for this child
+                    const grandchildren = buildFullDescendantTree(
                         childId,
-                        requirementTree,
-                        requirementMetaMap,
-                        2, // depth 2 for grandchildren
+                        parentDepth + 1,
                     );
+
+                    const hasChildren = grandchildren.length > 0;
+                    let relationshipRole: string;
+                    if (parentDepth === 0) {
+                        relationshipRole = hasChildren ? 'child-parent' : 'child';
+                    } else if (parentDepth === 1) {
+                        relationshipRole = hasChildren
+                            ? 'grandchild-parent'
+                            : 'grandchild';
+                    } else if (parentDepth === 2) {
+                        relationshipRole = hasChildren
+                            ? 'great-grandchild-parent'
+                            : 'great-grandchild';
+                    } else {
+                        relationshipRole = hasChildren
+                            ? `level-${parentDepth + 1}-descendant-parent`
+                            : `level-${parentDepth + 1}-descendant`;
+                    }
+
+                    children.push({
+                        id: meta?.id ?? childId,
+                        name: meta?.name ?? desc.title ?? '(No Name)',
+                        external_id: meta?.external_id ?? '',
+                        type: meta?.type ?? '-',
+                        description: meta?.description ?? '',
+                        status: meta?.status,
+                        priority: meta?.priority,
+                        properties: meta?.properties,
+                        isCurrent: false,
+                        relationshipRole: relationshipRole,
+                        depth: parentDepth + 1,
+                        hasChildren: hasChildren,
+                        children: grandchildren,
+                    });
                 }
+            }
 
-                const hasChildren = grandchildren.length > 0;
-                const relationshipRole = hasChildren ? 'child-parent' : 'child';
+            return children;
+        };
 
-                // Merge full metadata from the map, with fallbacks
-                return {
-                    id: meta?.id ?? childId,
-                    name: meta?.name ?? (child as any).title ?? '(No Name)',
-                    external_id: meta?.external_id ?? '',
-                    type: meta?.type ?? '-',
-                    description: meta?.description ?? '',
-                    status: meta?.status,
-                    priority: meta?.priority,
-                    properties: meta?.properties,
-                    isCurrent: false,
-                    relationshipRole: relationshipRole,
-                    depth: 1,
-                    hasChildren: hasChildren,
-                    children: grandchildren,
-                };
-            });
-        }
+        // Build children for current requirement
+        const children = buildFullDescendantTree(currentRequirement.id, 0);
 
         // Build the current node with its children
         const currentHasChildren = children.length > 0;
@@ -894,7 +1033,6 @@ export default function TraceLinksContent({
             }
         }
 
-        // For the current node, use hierarchyState directly
         if (isCurrent && hierarchyState) {
             const hasParentActual = hierarchyState.parents.length > 0;
             const hasChildrenActual = hierarchyState.current.children.length > 0;
@@ -1104,7 +1242,7 @@ export default function TraceLinksContent({
                 <CardContent>
                     {hierarchyState === null ? (
                         <p className="text-muted-foreground text-center py-4">
-                            Loading requirement...
+                            Loading Requirement...
                         </p>
                     ) : (
                         (() => {
@@ -1138,7 +1276,95 @@ export default function TraceLinksContent({
                                 );
                             }
 
-                            // Render the nested tree structure
+                            // Detect direct parents using requirementAncestors (depth === 1)
+                            const directParentIds = (requirementAncestors || [])
+                                .filter((ancestor: any) => (ancestor as any).depth === 1)
+                                .map(
+                                    (ancestor: any) =>
+                                        (ancestor as any).ancestor_id ||
+                                        (ancestor as any).requirement_id,
+                                )
+                                .filter(
+                                    (id: any): id is string =>
+                                        !!id && typeof id === 'string',
+                                );
+
+                            const uniqueDirectParentIds = Array.from(
+                                new Set(directParentIds),
+                            );
+                            const hasMultipleDirectParents =
+                                uniqueDirectParentIds.length > 1;
+
+                            if (hasMultipleDirectParents) {
+                                const directParents = uniqueDirectParentIds
+                                    .map((id) => {
+                                        const meta = ancestorRequirements?.find(
+                                            (req: any) => req.id === id,
+                                        );
+                                        if (!meta) return null;
+                                        return {
+                                            id,
+                                            name: meta.name || '(No Name)',
+                                            external_id: meta.external_id || '',
+                                        };
+                                    })
+                                    .filter(
+                                        (
+                                            p,
+                                        ): p is {
+                                            id: string;
+                                            name: string;
+                                            external_id: string;
+                                        } => p !== null,
+                                    );
+
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            {directParents.map((parent) => {
+                                                const parentNode = {
+                                                    id: parent.id,
+                                                    name: parent.name,
+                                                    external_id: parent.external_id,
+                                                    isCurrent: false,
+                                                    children: [
+                                                        {
+                                                            id: currentRequirement?.id,
+                                                            name:
+                                                                currentRequirement?.name ||
+                                                                '(No Name)',
+                                                            external_id:
+                                                                currentRequirement?.external_id ||
+                                                                '',
+                                                            isCurrent: true,
+                                                            children: [],
+                                                        },
+                                                    ],
+                                                };
+
+                                                return (
+                                                    <div key={parent.id}>
+                                                        {renderHierarchyNode(
+                                                            parentNode,
+                                                            0,
+                                                            false,
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Divider */}
+                                        <div className="border-t border-border/50 my-4" />
+
+                                        <div className="space-y-2 pl-3">
+                                            {renderHierarchyNode(currentNode, 1, true)}
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            // Render the nested tree structure (single or zero parent)
                             return (
                                 <div className="space-y-2">
                                     {hasParents
@@ -1169,16 +1395,16 @@ export default function TraceLinksContent({
                             </p>
                         </div>
                         <span
-                            className={`px-3 py-1 text-xs font-medium border ${
+                            className={`px-3 py-1 text-xs font ${
                                 currentRequirement?.status === 'approved' ||
                                 currentRequirement?.status === 'active'
-                                    ? 'bg-green-500/20 text-muted-foreground border-green-500/30'
+                                    ? 'bg-[#50C878]/60 text-gray-700 dark:text-gray-300'
                                     : currentRequirement?.status === 'rejected' ||
                                         currentRequirement?.status === 'deleted'
-                                      ? 'bg-red-500/20 text-muted-foreground border-red-500/30'
+                                      ? 'bg-[#FA5F55]/60 text-gray-700 dark:text-gray-300'
                                       : currentRequirement?.status === 'archived'
-                                        ? 'bg-gray-500/20 text-muted-foreground border-gray-500/30'
-                                        : 'bg-yellow-500/20 text-muted-foreground border-yellow-500/30'
+                                        ? 'bg-[#FBEC5D]/65 text-gray-700 dark:text-gray-300'
+                                        : 'bg-[#FBEC5D]/65 text-gray-700 dark:text-gray-300'
                             }`}
                         >
                             {currentRequirement?.status
@@ -1193,7 +1419,7 @@ export default function TraceLinksContent({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div>
-                                <span className="px-2 py-1 bg-primary/10 text-muted-foreground text-xs font-semibold border border-primary/20">
+                                <span className="px-2 py-1 bg-primary/10 dark:bg-primary/65 text-muted-foreground text-xs font-semibold border border-primary/20">
                                     {currentRequirement?.external_id || '—'}
                                 </span>
                             </div>
@@ -1444,7 +1670,7 @@ export default function TraceLinksContent({
                                         >
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 {req.external_id && (
-                                                    <span className="px-2 py-0.5 text-xs bg-muted/70 text-gray-600 dark:text-white border">
+                                                    <span className="px-2 py-0.5 text-xs bg-muted/60 text-gray-600 dark:text-white border">
                                                         {req.external_id}
                                                     </span>
                                                 )}
@@ -1461,7 +1687,7 @@ export default function TraceLinksContent({
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="ml-2 shrink-0"
+                                            className="ml-2 shrink-0 group hover:bg-transparent focus:bg-transparent"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (!profile) return;
@@ -1476,7 +1702,7 @@ export default function TraceLinksContent({
                                                 deleteRelationshipMutation.isPending
                                             }
                                         >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="h-4 w-4 text-muted-foreground group-hover:text-red-500 transition-colors" />
                                         </Button>
                                     </div>
                                 ))}
@@ -1630,7 +1856,7 @@ export default function TraceLinksContent({
                                         >
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 {req.external_id && (
-                                                    <span className="px-2 py-0.5 text-xs bg-muted/70 text-gray-600 dark:text-white border">
+                                                    <span className="px-2 py-0.5 text-xs bg-muted/60 text-gray-600 dark:text-white border">
                                                         {req.external_id}
                                                     </span>
                                                 )}
@@ -1647,7 +1873,7 @@ export default function TraceLinksContent({
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="ml-2 shrink-0"
+                                            className="ml-2 shrink-0 group hover:bg-transparent focus:bg-transparent"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (!profile) return;
@@ -1662,7 +1888,7 @@ export default function TraceLinksContent({
                                                 deleteRelationshipMutation.isPending
                                             }
                                         >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="h-4 w-4 text-muted-foreground group-hover:text-red-500 transition-colors" />
                                         </Button>
                                     </div>
                                 ))}
@@ -1680,81 +1906,495 @@ export default function TraceLinksContent({
             <Card className="border border-border">
                 <CardHeader className="py-4">
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Test Cases</CardTitle>
-                        <Dialog
-                            open={isAddTestCaseOpen}
-                            onOpenChange={setIsAddTestCaseOpen}
-                        >
-                            <DialogTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    ADD TEST CASE
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[500px]">
-                                <DialogHeader>
-                                    <DialogTitle>Add Test Case</DialogTitle>
-                                    <DialogDescription>
-                                        Select a test case to link to this requirement.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="grid gap-4 py-4">
-                                    <div className="space-y-2">
-                                        <h4 className="font-medium">
-                                            Available Test Cases
-                                        </h4>
-                                        <div className="max-h-[300px] overflow-y-auto">
-                                            {realTestCases.map((tc) => (
-                                                <div
-                                                    key={tc.id}
-                                                    className={`p-3 flex justify-between items-start hover:bg-primary/10 cursor-pointer border-b last:border-b-0 ${
-                                                        selectedTestCase?.id === tc.id
-                                                            ? 'bg-primary/20'
-                                                            : ''
-                                                    }`}
-                                                    onClick={() =>
-                                                        setSelectedTestCase(tc)
-                                                    }
-                                                >
-                                                    <div className="space-y-1">
-                                                        <div className="font-medium">
-                                                            {tc.name}
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {tc.title}
+                        <CardTitle className="text-lg">
+                            Test Cases - (Currently Using Mock Data to Show UI Stylings)
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon">
+                                <SlidersHorizontal className="h-4 w-4" />
+                            </Button>
+                            <Dialog
+                                open={isAddTestCaseOpen}
+                                onOpenChange={setIsAddTestCaseOpen}
+                            >
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        ADD TEST CASE
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Add Test Case</DialogTitle>
+                                        <DialogDescription>
+                                            Select a test case to link to this
+                                            requirement.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="grid gap-4 py-4">
+                                        <div className="space-y-2">
+                                            <h4 className="font-medium">
+                                                Available Test Cases
+                                            </h4>
+                                            <div className="max-h-[300px] overflow-y-auto">
+                                                {realTestCases.map((tc) => (
+                                                    <div
+                                                        key={tc.id}
+                                                        className={`p-3 flex justify-between items-start hover:bg-primary/10 cursor-pointer border-b last:border-b-0 ${
+                                                            selectedTestCase?.id === tc.id
+                                                                ? 'bg-primary/20'
+                                                                : ''
+                                                        }`}
+                                                        onClick={() =>
+                                                            setSelectedTestCase(tc)
+                                                        }
+                                                    >
+                                                        <div className="space-y-1">
+                                                            <div className="font-medium">
+                                                                {tc.name}
+                                                            </div>
+                                                            <div className="text-sm text-muted-foreground">
+                                                                {tc.title}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setIsAddTestCaseOpen(false)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={handleAddTestCase}
-                                        disabled={
-                                            !selectedTestCase ||
-                                            createTraceLinksMutation.isPending
-                                        }
-                                    >
-                                        {createTraceLinksMutation.isPending
-                                            ? 'Adding...'
-                                            : 'Add Test Case'}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
+                                    <DialogFooter>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setIsAddTestCaseOpen(false)}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleAddTestCase}
+                                            disabled={
+                                                !selectedTestCase ||
+                                                createTraceLinksMutation.isPending
+                                            }
+                                        >
+                                            {createTraceLinksMutation.isPending
+                                                ? 'Adding...'
+                                                : 'Add Test Case'}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                        <p className="text-sm">No test cases linked yet</p>
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="border-b border-border/20 hover:bg-transparent">
+                                    <TableHead className="h-12 px-6 pl-10 font-semibold text-foreground">
+                                        ID
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 pl-10 font-semibold text-foreground">
+                                        Name
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Requirements
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Status
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Type
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Last Execution
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {MOCK_TEST_CASES.map((testCase) => (
+                                    <TableRow
+                                        key={testCase.id}
+                                        className="border-b border-border/20 hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors duration-150"
+                                    >
+                                        <TableCell className="px-6 pl-10 py-3.5 whitespace-nowrap font-mono text-base font-semibold tracking-wider text-foreground">
+                                            {testCase.id}
+                                        </TableCell>
+                                        <TableCell className="px-5 pl-10 py-3.5">
+                                            <div className="space-y-0.5">
+                                                <div className="font-semibold text-sm">
+                                                    {testCase.name}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {testCase.description}
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="px-4 py-3 align-middle">
+                                            <div
+                                                className="w-full flex flex-col items-center justify-center gap-2"
+                                                style={{ marginLeft: '-12px' }}
+                                            >
+                                                {testCase.requirements.map((req) => (
+                                                    <span
+                                                        key={req}
+                                                        className="px-2 py-0.5 text-xs bg-muted/60 text-gray-600 dark:text-white border"
+                                                    >
+                                                        {req}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            <span
+                                                className={`inline-flex items-center px-2 py-0.5 text-xs font ${
+                                                    testCase.status === 'approved' ||
+                                                    testCase.status === 'active'
+                                                        ? 'bg-[#50C878]/60 text-gray-700 dark:text-gray-300'
+                                                        : testCase.status ===
+                                                                'rejected' ||
+                                                            testCase.status === 'deleted'
+                                                          ? 'bg-[#FA5F55]/60 text-gray-700 dark:text-gray-300'
+                                                          : testCase.status === 'archived'
+                                                            ? 'bg-[#FBEC5D]/65 text-gray-700 dark:text-gray-300'
+                                                            : 'bg-[#FBEC5D]/65 text-gray-700 dark:text-gray-300'
+                                                }`}
+                                            >
+                                                {testCase.status
+                                                    ? String(testCase.status)
+                                                          .replaceAll('_', ' ')
+                                                          .replace(/\b\w/g, (c) =>
+                                                              c.toUpperCase(),
+                                                          )
+                                                    : '-'}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            <span className="inline-flex items-center px-2 py-0.5 text-xs bg-gray-500/10 text-gray-700 dark:text-white border border-gray-500/20 rounded-sm">
+                                                {testCase.type}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5 text-sm text-muted-foreground">
+                                            {testCase.lastExecution}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            <AlertDialog
+                                                open={
+                                                    isDeleteTestCaseDialogOpen &&
+                                                    selectedTestCaseToDelete ===
+                                                        testCase.id
+                                                }
+                                                onOpenChange={(open) => {
+                                                    setIsDeleteTestCaseDialogOpen(open);
+                                                    if (!open)
+                                                        setSelectedTestCaseToDelete(null);
+                                                }}
+                                            >
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 group hover:bg-transparent focus:bg-transparent"
+                                                    title="Delete"
+                                                    onClick={() => {
+                                                        setSelectedTestCaseToDelete(
+                                                            testCase.id,
+                                                        );
+                                                        setIsDeleteTestCaseDialogOpen(
+                                                            true,
+                                                        );
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-muted-foreground group-hover:text-red-500 transition-colors" />
+                                                </Button>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>
+                                                            Delete Linked Test Case
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Are you sure you want to
+                                                            remove this test case link?
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel
+                                                            onClick={() => {
+                                                                setIsDeleteTestCaseDialogOpen(
+                                                                    false,
+                                                                );
+                                                                setSelectedTestCaseToDelete(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                            onClick={() => {
+                                                                setIsDeleteTestCaseDialogOpen(
+                                                                    false,
+                                                                );
+                                                                setSelectedTestCaseToDelete(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Test Case Results Section */}
+            <Card className="border border-border">
+                <CardHeader className="py-4">
+                    <CardTitle className="text-lg">
+                        Test Case Results - (Currently Using Mock Data to Show UI
+                        Stylings)
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="border-b border-border/20 hover:bg-transparent">
+                                    <TableHead className="h-12 px-6 pl-10 font-semibold text-foreground">
+                                        Execution ID
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Test Case
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Result
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Date
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Duration
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Assignee
+                                    </TableHead>
+                                    <TableHead className="h-12 px-6 font-semibold text-foreground">
+                                        Links
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {MOCK_TEST_CASE_RESULTS.map((result) => (
+                                    <TableRow
+                                        key={result.executionId}
+                                        className="border-b border-border/20 hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors duration-150"
+                                    >
+                                        <TableCell className="px-6 pl-10 py-3.5 font-mono text-base font-semibold tracking-wider text-foreground">
+                                            {result.executionId}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            <span className="px-2 py-0.5 text-xs bg-muted/60 text-gray-700 dark:text-gray-300 border">
+                                                {result.testCaseId}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            {result.result === 'passed' ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 text-xs font bg-[#50C878]/60 text-gray-700 dark:text-gray-300">
+                                                    Passed
+                                                </span>
+                                            ) : result.result === 'failed' ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 text-xs font bg-[#FA5F55]/60 text-gray-700 dark:text-gray-300">
+                                                    Failed
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 text-xs font bg-[#FA5F55]/60 text-gray-700 dark:text-gray-300">
+                                                    Blocked
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5 text-sm text-muted-foreground">
+                                            {result.date}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5 text-sm text-muted-foreground">
+                                            {result.duration}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5 text-sm text-muted-foreground">
+                                            {result.tester || '—'}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            {result.links && result.links.length > 0 ? (
+                                                <Dialog
+                                                    open={
+                                                        isLinksDialogOpen &&
+                                                        selectedResultLinks ===
+                                                            result.links
+                                                    }
+                                                    onOpenChange={(open) => {
+                                                        setIsLinksDialogOpen(open);
+                                                        if (!open)
+                                                            setSelectedResultLinks([]);
+                                                    }}
+                                                >
+                                                    <DialogTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 hover:bg-transparent focus:bg-transparent active:bg-transparent"
+                                                            title="View Links"
+                                                            onClick={() => {
+                                                                setSelectedResultLinks(
+                                                                    result.links,
+                                                                );
+                                                                setIsLinksDialogOpen(
+                                                                    true,
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Link2 className="h-4 w-4 text-blue-400 dark:text-blue-300" />
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="sm:max-w-[500px]">
+                                                        <DialogHeader>
+                                                            <DialogTitle>
+                                                                Manage Links
+                                                            </DialogTitle>
+                                                            <DialogDescription>
+                                                                View or add links for this
+                                                                test result.
+                                                            </DialogDescription>
+                                                        </DialogHeader>
+                                                        <div className="grid gap-4 py-4">
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">
+                                                                    Existing Links
+                                                                </h4>
+                                                                {result.links.length >
+                                                                0 ? (
+                                                                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                                                                        {result.links.map(
+                                                                            (
+                                                                                link,
+                                                                                index,
+                                                                            ) => (
+                                                                                <div
+                                                                                    key={
+                                                                                        index
+                                                                                    }
+                                                                                    className="text-sm p-2 bg-muted/50 rounded border"
+                                                                                >
+                                                                                    •{' '}
+                                                                                    {link}
+                                                                                </div>
+                                                                            ),
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        No links added
+                                                                        yet.
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">
+                                                                    Add New Link
+                                                                </h4>
+                                                                <Input placeholder="Paste link URL..." />
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="w-full"
+                                                                >
+                                                                    Add Link
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground italic">
+                                                    No links
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="px-5 py-3.5">
+                                            <AlertDialog
+                                                open={
+                                                    isDeleteResultDialogOpen &&
+                                                    selectedResultToDelete ===
+                                                        result.executionId
+                                                }
+                                                onOpenChange={(open) => {
+                                                    setIsDeleteResultDialogOpen(open);
+                                                    if (!open)
+                                                        setSelectedResultToDelete(null);
+                                                }}
+                                            >
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 group hover:bg-transparent focus:bg-transparent"
+                                                    title="Delete"
+                                                    onClick={() => {
+                                                        setSelectedResultToDelete(
+                                                            result.executionId,
+                                                        );
+                                                        setIsDeleteResultDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-muted-foreground group-hover:text-red-500 transition-colors" />
+                                                </Button>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>
+                                                            Delete Test Case Result
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Are you sure you want to
+                                                            delete this result? This
+                                                            action cannot be undone.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel
+                                                            onClick={() => {
+                                                                setIsDeleteResultDialogOpen(
+                                                                    false,
+                                                                );
+                                                                setSelectedResultToDelete(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                            onClick={() => {
+                                                                setIsDeleteResultDialogOpen(
+                                                                    false,
+                                                                );
+                                                                setSelectedResultToDelete(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     </div>
                 </CardContent>
             </Card>
@@ -1786,6 +2426,8 @@ export default function TraceLinksContent({
                                                 refetchAncestors(),
                                                 refetchDescendants(),
                                                 refetchCurrentRequirement(),
+                                                refetchAncestorRequirements(),
+                                                refetchDescendantRequirements(),
                                             ]);
                                             toast({
                                                 title: 'Success',

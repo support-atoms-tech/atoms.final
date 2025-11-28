@@ -149,11 +149,17 @@ async function getRequirementAncestors(
 }
 
 async function getRequirementTree(projectId?: string): Promise<RequirementTreeNode[]> {
+    console.log('[DIAG] getRequirementTree called with projectId:', projectId);
     const params = new URLSearchParams({ type: 'tree' });
     if (projectId) params.append('projectId', projectId);
     const response = await fetch(`/api/requirements/relationships?${params}`);
     if (!response.ok) throw new Error('Failed to fetch requirement tree');
     const result = await response.json();
+    console.log('[DIAG] getRequirementTree response:', {
+        dataLength: result.data?.length,
+        sample: result.data?.slice(0, 3),
+        timestamp: new Date().toISOString(),
+    });
     return result.data;
 }
 
