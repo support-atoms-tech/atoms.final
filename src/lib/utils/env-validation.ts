@@ -74,20 +74,6 @@ const envSchema = z.object({
         .string()
         .transform((val) => val === 'true')
         .default('false'),
-
-    // Debug Flags (optional, development-only)
-    // These can be set via environment variables but are not required
-    // For centralized management, see debugConfig below
-    NEXT_PUBLIC_DEBUG_RLS: z
-        .string()
-        .transform((val) => val === 'true')
-        .optional()
-        .default('false'),
-    NEXT_PUBLIC_DEBUG_TABLE: z
-        .string()
-        .transform((val) => val === 'true')
-        .optional()
-        .default('false'),
 });
 
 // Production-specific schema
@@ -196,7 +182,7 @@ export const debugConfig = {
     debugRLSQueries: () => {
         if (isProduction()) return false;
         if (!env.ENABLE_DEBUG_LOGGING) return false;
-        return env.NEXT_PUBLIC_DEBUG_RLS ?? false;
+        return true;
     },
 
     /**
@@ -207,7 +193,7 @@ export const debugConfig = {
     debugTable: () => {
         if (isProduction()) return false;
         if (!env.ENABLE_DEBUG_LOGGING) return false;
-        return env.NEXT_PUBLIC_DEBUG_TABLE ?? false;
+        return true;
     },
 };
 
