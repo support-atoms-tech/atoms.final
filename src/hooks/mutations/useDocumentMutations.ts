@@ -94,12 +94,14 @@ export function useCreateDocument() {
     });
 }
 
+export type UpdateDocumentInput = Partial<Omit<Document, 'fts_vector'>>;
+
 export function useUpdateDocument() {
     const queryClient = useQueryClient();
     const ensureSupabaseClient = useSupabaseClientOrThrow();
 
     return useMutation({
-        mutationFn: async (document: Partial<Document>) => {
+        mutationFn: async (document: UpdateDocumentInput) => {
             if (!document.id) {
                 throw new Error('Document ID is required for update');
             }
@@ -108,15 +110,16 @@ export function useUpdateDocument() {
             const { data, error } = await client
                 .from('documents')
                 .update({
-                    ...document,
-                    updated_at: new Date().toISOString(),
-                    version: (document.version || 1) + 1,
+                    name: document.name,
+                    description: document.description,
+                    tags: document.tags,
                 })
                 .eq('id', document.id)
                 .select()
                 .single();
 
             if (error) throw error;
+            if (!data) throw new Error('Failed to update document');
             return data as Document;
         },
         onSuccess: (data) => {

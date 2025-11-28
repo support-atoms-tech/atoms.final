@@ -65,7 +65,7 @@ export default function EditDocumentForm({
     async function onSubmit(data: DocumentFormValues) {
         try {
             await updateDocument.mutateAsync({
-                ...document,
+                id: document.id,
                 name: data.name,
                 description: data.description || null,
                 tags: data.tags || null,
