@@ -534,7 +534,7 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
         setCurrentRequirementId(fromUrl);
     }, [searchParamsString]);
 
-    // Update URL when project or tab changes, preserving existing requirement/document params (and local requirementId)
+    // Update URL when project or tab changes, preserving existing requirement/document params
     const updateURL = useCallback(
         (projectId: string, tab: string) => {
             const params = new URLSearchParams(searchParamsString); // start with current params
@@ -546,23 +546,32 @@ export default function TraceabilityPageClient({ orgId }: TraceabilityPageClient
             if (tab) {
                 params.set('tab', tab);
             }
-            // Ensure requirementId is preserved even if not yet reflected in searchParams
-            if (currentRequirementId) {
-                params.set('requirementId', currentRequirementId);
+            // Read requirementId directly from URL params instead of state to avoid navigation loops
+            // This prevents duplicate navigation when tree click already updated the URL
+            const existingRequirementId = params.get('requirementId');
+            if (existingRequirementId) {
+                // Keep existing requirementId from URL - don't overwrite it
+                params.set('requirementId', existingRequirementId);
             }
             const nextSearch = params.toString();
             if (nextSearch === searchParamsString) {
+                console.debug('[NAV TRACE] updateURL skipped - no changes needed');
                 return;
             }
             const nextUrl =
                 nextSearch.length > 0
                     ? `/org/${orgId}/traceability?${nextSearch}`
                     : `/org/${orgId}/traceability`;
+            console.debug('[NAV TRACE] router.replace called from updateURL', {
+                projectId,
+                tab,
+                requirementId: existingRequirementId,
+            });
             router.replace(nextUrl, {
                 scroll: false,
             });
         },
-        [router, orgId, searchParamsString, currentRequirementId],
+        [router, orgId, searchParamsString],
     );
 
     // Navigate directly to Manage tab for a chosen requirement

@@ -187,7 +187,7 @@ export default function TraceLinksContent({
 
     useEffect(() => {
         hasCompleteHierarchyRef.current = false;
-        setHierarchyState(null); // reset hierarchy state when requirement changes
+        // Keep previous hierarchy visible during navigation - let natural data updates replace state
     }, [requirementId]);
 
     const { data: requirements, isLoading: isLoadingRequirements } =
@@ -1113,6 +1113,7 @@ export default function TraceLinksContent({
         const handleNodeClick = () => {
             if (node.id !== requirementId) {
                 const traceUrl = `/org/${orgId}/traceability?tab=manage&projectId=${projectId}&requirementId=${node.id}${documentId ? `&documentId=${documentId}` : ''}`;
+                console.debug('[NAV TRACE] router.push called from TREE CLICK', node.id);
                 router.push(traceUrl);
             }
         };
@@ -1240,145 +1241,147 @@ export default function TraceLinksContent({
                     <CardTitle className="text-lg">Requirement Hierarchy</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {hierarchyState === null ? (
-                        <p className="text-muted-foreground text-center py-4">
-                            Loading Requirement...
-                        </p>
-                    ) : (
-                        (() => {
-                            const hasParents = hierarchyState.parents?.length > 0;
+                    {!hierarchyState
+                        ? null
+                        : (() => {
+                              const hasParents = hierarchyState.parents?.length > 0;
 
-                            // Get the current node
-                            let currentNode = hierarchyState.current;
-                            if (
-                                hasParents &&
-                                hierarchyState.parents[0]?.children?.length > 0
-                            ) {
-                                currentNode = hierarchyState.parents[0].children[0];
-                            }
+                              // Get the current node
+                              let currentNode = hierarchyState.current;
+                              if (
+                                  hasParents &&
+                                  hierarchyState.parents[0]?.children?.length > 0
+                              ) {
+                                  currentNode = hierarchyState.parents[0].children[0];
+                              }
 
-                            const hasChildren = currentNode?.children?.length > 0;
-                            const trulyNoRelationships = !hasParents && !hasChildren;
+                              const hasChildren = currentNode?.children?.length > 0;
+                              const trulyNoRelationships = !hasParents && !hasChildren;
 
-                            // Only show "No Relationships" if there are genuinely no parents and no children
-                            const isPlaceholder =
-                                currentNode?.id === '' ||
-                                (currentNode?.name === '-' && !currentNode?.id);
+                              // Only show "No Relationships" if there are genuinely no parents and no children
+                              const isPlaceholder =
+                                  currentNode?.id === '' ||
+                                  (currentNode?.name === '-' && !currentNode?.id);
 
-                            if (trulyNoRelationships && !isPlaceholder) {
-                                return (
-                                    <div>
-                                        {renderHierarchyNode(currentNode)}
-                                        <p className="text-muted-foreground text-center mt-4 text-sm">
-                                            No relationships found yet
-                                        </p>
-                                    </div>
-                                );
-                            }
+                              if (trulyNoRelationships && !isPlaceholder) {
+                                  return (
+                                      <div>
+                                          {renderHierarchyNode(currentNode)}
+                                          <p className="text-muted-foreground text-center mt-4 text-sm">
+                                              No relationships found yet
+                                          </p>
+                                      </div>
+                                  );
+                              }
 
-                            // Detect direct parents using requirementAncestors (depth === 1)
-                            const directParentIds = (requirementAncestors || [])
-                                .filter((ancestor: any) => (ancestor as any).depth === 1)
-                                .map(
-                                    (ancestor: any) =>
-                                        (ancestor as any).ancestor_id ||
-                                        (ancestor as any).requirement_id,
-                                )
-                                .filter(
-                                    (id: any): id is string =>
-                                        !!id && typeof id === 'string',
-                                );
+                              // Detect direct parents using requirementAncestors (depth === 1)
+                              const directParentIds = (requirementAncestors || [])
+                                  .filter(
+                                      (ancestor: any) => (ancestor as any).depth === 1,
+                                  )
+                                  .map(
+                                      (ancestor: any) =>
+                                          (ancestor as any).ancestor_id ||
+                                          (ancestor as any).requirement_id,
+                                  )
+                                  .filter(
+                                      (id: any): id is string =>
+                                          !!id && typeof id === 'string',
+                                  );
 
-                            const uniqueDirectParentIds = Array.from(
-                                new Set(directParentIds),
-                            );
-                            const hasMultipleDirectParents =
-                                uniqueDirectParentIds.length > 1;
+                              const uniqueDirectParentIds = Array.from(
+                                  new Set(directParentIds),
+                              );
+                              const hasMultipleDirectParents =
+                                  uniqueDirectParentIds.length > 1;
 
-                            if (hasMultipleDirectParents) {
-                                const directParents = uniqueDirectParentIds
-                                    .map((id) => {
-                                        const meta = ancestorRequirements?.find(
-                                            (req: any) => req.id === id,
-                                        );
-                                        if (!meta) return null;
-                                        return {
-                                            id,
-                                            name: meta.name || '(No Name)',
-                                            external_id: meta.external_id || '',
-                                        };
-                                    })
-                                    .filter(
-                                        (
-                                            p,
-                                        ): p is {
-                                            id: string;
-                                            name: string;
-                                            external_id: string;
-                                        } => p !== null,
-                                    );
+                              if (hasMultipleDirectParents) {
+                                  const directParents = uniqueDirectParentIds
+                                      .map((id) => {
+                                          const meta = ancestorRequirements?.find(
+                                              (req: any) => req.id === id,
+                                          );
+                                          if (!meta) return null;
+                                          return {
+                                              id,
+                                              name: meta.name || '(No Name)',
+                                              external_id: meta.external_id || '',
+                                          };
+                                      })
+                                      .filter(
+                                          (
+                                              p,
+                                          ): p is {
+                                              id: string;
+                                              name: string;
+                                              external_id: string;
+                                          } => p !== null,
+                                      );
 
-                                return (
-                                    <div className="space-y-4">
-                                        <div className="space-y-1">
-                                            {directParents.map((parent) => {
-                                                const parentNode = {
-                                                    id: parent.id,
-                                                    name: parent.name,
-                                                    external_id: parent.external_id,
-                                                    isCurrent: false,
-                                                    children: [
-                                                        {
-                                                            id: currentRequirement?.id,
-                                                            name:
-                                                                currentRequirement?.name ||
-                                                                '(No Name)',
-                                                            external_id:
-                                                                currentRequirement?.external_id ||
-                                                                '',
-                                                            isCurrent: true,
-                                                            children: [],
-                                                        },
-                                                    ],
-                                                };
+                                  return (
+                                      <div className="space-y-4">
+                                          <div className="space-y-1">
+                                              {directParents.map((parent) => {
+                                                  const parentNode = {
+                                                      id: parent.id,
+                                                      name: parent.name,
+                                                      external_id: parent.external_id,
+                                                      isCurrent: false,
+                                                      children: [
+                                                          {
+                                                              id: currentRequirement?.id,
+                                                              name:
+                                                                  currentRequirement?.name ||
+                                                                  '(No Name)',
+                                                              external_id:
+                                                                  currentRequirement?.external_id ||
+                                                                  '',
+                                                              isCurrent: true,
+                                                              children: [],
+                                                          },
+                                                      ],
+                                                  };
 
-                                                return (
-                                                    <div key={parent.id}>
-                                                        {renderHierarchyNode(
-                                                            parentNode,
-                                                            0,
-                                                            false,
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                                  return (
+                                                      <div key={parent.id}>
+                                                          {renderHierarchyNode(
+                                                              parentNode,
+                                                              0,
+                                                              false,
+                                                          )}
+                                                      </div>
+                                                  );
+                                              })}
+                                          </div>
 
-                                        {/* Divider */}
-                                        <div className="border-t border-border/50 my-4" />
+                                          {/* Divider */}
+                                          <div className="border-t border-border/50 my-4" />
 
-                                        <div className="space-y-2 pl-3">
-                                            {renderHierarchyNode(currentNode, 1, true)}
-                                        </div>
-                                    </div>
-                                );
-                            }
+                                          <div className="space-y-2 pl-3">
+                                              {renderHierarchyNode(currentNode, 1, true)}
+                                          </div>
+                                      </div>
+                                  );
+                              }
 
-                            // Render the nested tree structure (single or zero parent)
-                            return (
-                                <div className="space-y-2">
-                                    {hasParents
-                                        ? hierarchyState.parents.map((parent: any) => (
-                                              <div key={parent.id}>
-                                                  {renderHierarchyNode(parent, 0, false)}
-                                              </div>
-                                          ))
-                                        : // No parent - render current as root node
-                                          renderHierarchyNode(currentNode, 0, false)}
-                                </div>
-                            );
-                        })()
-                    )}
+                              // Render the nested tree structure (single or zero parent)
+                              return (
+                                  <div className="space-y-2">
+                                      {hasParents
+                                          ? hierarchyState.parents.map((parent: any) => (
+                                                <div key={parent.id}>
+                                                    {renderHierarchyNode(
+                                                        parent,
+                                                        0,
+                                                        false,
+                                                    )}
+                                                </div>
+                                            ))
+                                          : // No parent - render current as root node
+                                            renderHierarchyNode(currentNode, 0, false)}
+                                  </div>
+                              );
+                          })()}
                 </CardContent>
             </Card>
 
