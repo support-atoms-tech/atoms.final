@@ -1,17 +1,29 @@
 'use client';
 
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import { ChevronDown, CircleAlert, Grid, Link2, PenTool, Pencil } from 'lucide-react';
+import {
+    ChevronDown,
+    CircleAlert,
+    Grid,
+    PenTool,
+    Pencil,
+    Sparkles,
+    X,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { RequirementPicker } from '@/components/custom/Diagrams/RequirementPicker';
+import { UnsavedChangesDialog } from '@/components/custom/Diagrams/UnsavedChangesDialog';
+import { ViewportCollapsedTab } from '@/components/custom/Diagrams/ViewportCollapsedTab';
+import { ViewportPanel } from '@/components/custom/Diagrams/ViewportPanel';
+import type { ExcalidrawMountedApi } from '@/components/custom/LandingPage/excalidrawWrapper';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGumloop } from '@/hooks/useGumloop';
+import { useViewportPanelStore } from '@/store/viewportPanel.store';
 
 const ExcalidrawWithClientOnly = dynamic(
     async () =>
@@ -34,20 +46,30 @@ export default function Draw() {
     // const organizationId = '9badbbf0-441c-49f6-91e7-3d9afa1c13e6';
     const organizationId = usePathname().split('/')[2];
     const projectId = usePathname().split('/')[4];
+
+    // Viewport panel store for side panel viewer
+    const {
+        isOpen: isViewportOpen,
+        openViewport,
+        closeViewport,
+        setContentFromLink,
+    } = useViewportPanelStore();
     const [prompt, setPrompt] = useState('');
     const [diagramType, setDiagramType] = useState<DiagramType>('flowchart');
-    const [excalidrawApi, setExcalidrawApi] = useState<{
-        addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
-        linkRequirement: (
-            requirementId: string,
-            requirementName: string,
-            documentId: string,
-        ) => void;
-        unlinkRequirement: () => void;
-    } | null>(null);
-    const [selectedElements, setSelectedElements] = useState<
+    const [excalidrawApi, setExcalidrawApi] = useState<ExcalidrawMountedApi | null>(null);
+    const [_selectedElements, setSelectedElements] = useState<
         readonly ExcalidrawElement[]
     >([]);
+
+    // Unsaved changes warning state
+    const [isDirty, setIsDirty] = useState(false);
+    const [hasContent, setHasContent] = useState(false);
+    const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+    const [isSavingBeforeExit, setIsSavingBeforeExit] = useState(false);
+    const [pendingNavigation, setPendingNavigation] = useState<{
+        type: 'newDiagram' | 'selectDiagram' | 'gallery';
+        diagramId?: string;
+    } | null>(null);
 
     // Gallery/editor state management
     const [activeTab, setActiveTab] = useState<string>('editor');
@@ -78,6 +100,34 @@ export default function Draw() {
     // Add state for pending documentId
     const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null);
 
+    // AI Generator sidebar state
+    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('aiSidebarOpen');
+            return saved !== null ? JSON.parse(saved) : false;
+        }
+        return false;
+    });
+
+    // Persist sidebar state
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('aiSidebarOpen', JSON.stringify(isSidebarOpen));
+        }
+    }, [isSidebarOpen]);
+
+    // Mutual exclusivity: open AI Generator closes viewport
+    const handleOpenAIGenerator = useCallback(() => {
+        closeViewport();
+        setIsSidebarOpen(true);
+    }, [closeViewport]);
+
+    // Mutual exclusivity: open Viewport closes AI Generator
+    const handleOpenViewport = useCallback(() => {
+        setIsSidebarOpen(false);
+        openViewport();
+    }, [openViewport]);
+
     // On mount, check sessionStorage for pending diagram prompt and requirementId
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -88,6 +138,8 @@ export default function Draw() {
         if (pendingPrompt) {
             setPrompt(pendingPrompt);
             sessionStorage.removeItem('pendingDiagramPrompt');
+            // Auto-open sidebar when there's a pending prompt
+            setIsSidebarOpen(true);
         }
         // Read requirementId
         if (pendingReqId) {
@@ -289,6 +341,7 @@ export default function Draw() {
                 documentId: string,
             ) => void;
             unlinkRequirement: () => void;
+            forceSave: () => Promise<void>;
         }) => {
             setExcalidrawApi(api);
         },
@@ -303,34 +356,102 @@ export default function Draw() {
         [],
     );
 
+    // Handle linked element click - opens viewer in viewport side panel
+    const handleLinkedElementClick = useCallback(
+        (info: {
+            type: 'requirement' | 'document' | 'hyperlink';
+            requirementId?: string;
+            documentId?: string;
+            linkedDocumentId?: string;
+            hyperlinkUrl?: string;
+            label?: string;
+        }) => {
+            // Close AI Generator when opening viewport from link
+            setIsSidebarOpen(false);
+
+            if (info.type === 'requirement' && info.requirementId) {
+                setContentFromLink({
+                    type: 'requirement',
+                    contentId: info.requirementId,
+                    documentId: info.documentId,
+                    label: info.label,
+                });
+            } else if (info.type === 'document' && info.linkedDocumentId) {
+                setContentFromLink({
+                    type: 'document',
+                    contentId: info.linkedDocumentId,
+                    label: info.label,
+                });
+            } else if (info.type === 'hyperlink' && info.hyperlinkUrl) {
+                setContentFromLink({
+                    type: 'hyperlink',
+                    contentId: info.hyperlinkUrl,
+                    label: info.label,
+                });
+            }
+        },
+        [setContentFromLink],
+    );
+
     // Handle creating a new diagram from gallery
     const handleNewDiagram = useCallback(() => {
-        // Remove "id" from the URL so ExcalidrawWrapper won't try to load it
+        // Check for unsaved changes before navigating
+        if (isDirty && hasContent) {
+            setPendingNavigation({ type: 'newDiagram' });
+            setShowUnsavedDialog(true);
+            return;
+        }
+
+        // No unsaved changes, proceed directly
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete('id');
         window.history.pushState({}, '', newUrl);
 
-        // Also remove the old localStorage key so ExcalidrawWrapper doesn't load it again
-        const projectId = window.location.pathname.split('/')[4];
-        const projectStorageKey = `lastExcalidrawDiagramId_${projectId}`;
+        const projId = window.location.pathname.split('/')[4];
+        const projectStorageKey = `lastExcalidrawDiagramId_${projId}`;
         localStorage.removeItem(projectStorageKey);
 
         setSelectedDiagramId(null);
         setActiveTab('editor');
         setInstanceKey(`new-diagram-${Date.now()}`);
-    }, []);
+    }, [isDirty, hasContent]);
 
     // Handle selecting a diagram from gallery
-    const handleSelectDiagram = useCallback((diagramId: string) => {
-        setSelectedDiagramId(diagramId);
-        setActiveTab('editor');
-        setInstanceKey(`diagram-${diagramId}`);
-    }, []);
+    const handleSelectDiagram = useCallback(
+        (diagramId: string) => {
+            // Check for unsaved changes before navigating
+            if (isDirty && hasContent) {
+                setPendingNavigation({ type: 'selectDiagram', diagramId });
+                setShowUnsavedDialog(true);
+                return;
+            }
+
+            // No unsaved changes, proceed directly
+            setSelectedDiagramId(diagramId);
+            setActiveTab('editor');
+            setInstanceKey(`diagram-${diagramId}`);
+        },
+        [isDirty, hasContent],
+    );
 
     // Handle diagram saved callback
     const handleDiagramSaved = useCallback(() => {
         setShouldRefreshGallery(true);
     }, []);
+
+    // Handle tab change with unsaved changes check
+    const handleTabChange = useCallback(
+        (tab: string) => {
+            // If switching from editor to gallery and there are unsaved changes
+            if (tab === 'gallery' && activeTab === 'editor' && isDirty && hasContent) {
+                setPendingNavigation({ type: 'gallery' });
+                setShowUnsavedDialog(true);
+                return;
+            }
+            setActiveTab(tab);
+        },
+        [activeTab, isDirty, hasContent],
+    );
 
     // Reset the refresh flag after the gallery is refreshed
     useEffect(() => {
@@ -373,6 +494,97 @@ export default function Draw() {
         setCurrentDiagramName(name);
     }, []);
 
+    // Handle dirty state changes from ExcalidrawWrapper
+    const handleDirtyStateChange = useCallback((dirty: boolean, content: boolean) => {
+        setIsDirty(dirty);
+        setHasContent(content);
+    }, []);
+
+    // Execute the pending navigation after dialog action
+    const executePendingNavigation = useCallback(() => {
+        if (!pendingNavigation) return;
+
+        // Reset dirty state after navigation
+        setIsDirty(false);
+        setHasContent(false);
+
+        switch (pendingNavigation.type) {
+            case 'newDiagram': {
+                // Original handleNewDiagram logic
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.delete('id');
+                window.history.pushState({}, '', newUrl);
+
+                const projId = window.location.pathname.split('/')[4];
+                const projectStorageKey = `lastExcalidrawDiagramId_${projId}`;
+                localStorage.removeItem(projectStorageKey);
+
+                setSelectedDiagramId(null);
+                setActiveTab('editor');
+                setInstanceKey(`new-diagram-${Date.now()}`);
+                break;
+            }
+            case 'selectDiagram': {
+                if (pendingNavigation.diagramId) {
+                    setSelectedDiagramId(pendingNavigation.diagramId);
+                    setActiveTab('editor');
+                    setInstanceKey(`diagram-${pendingNavigation.diagramId}`);
+                }
+                break;
+            }
+            case 'gallery': {
+                setActiveTab('gallery');
+                break;
+            }
+        }
+
+        setPendingNavigation(null);
+    }, [pendingNavigation]);
+
+    // Dialog action handlers
+    const handleSaveAndExit = useCallback(async () => {
+        if (excalidrawApi?.forceSave) {
+            setIsSavingBeforeExit(true);
+            try {
+                await excalidrawApi.forceSave();
+                setShowUnsavedDialog(false);
+                executePendingNavigation();
+            } catch (err) {
+                console.error('Error saving diagram:', err);
+            } finally {
+                setIsSavingBeforeExit(false);
+            }
+        } else {
+            // No save function available, just proceed
+            setShowUnsavedDialog(false);
+            executePendingNavigation();
+        }
+    }, [excalidrawApi, executePendingNavigation]);
+
+    const handleDiscardChanges = useCallback(() => {
+        setShowUnsavedDialog(false);
+        executePendingNavigation();
+    }, [executePendingNavigation]);
+
+    const handleCancelNavigation = useCallback(() => {
+        setShowUnsavedDialog(false);
+        setPendingNavigation(null);
+    }, []);
+
+    // Browser beforeunload handler - warn when closing tab/browser with unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirty && hasContent) {
+                e.preventDefault();
+                e.returnValue = ''; // Required for Chrome
+                return ''; // Required for some browsers
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isDirty, hasContent]);
+
     return (
         <div className="flex flex-col gap-4 p-5 h-full">
             <div className="flex justify-between items-center">
@@ -396,7 +608,11 @@ export default function Draw() {
                         <h1 className="text-2xl font-bold">Diagrams</h1>
                     )}
                 </div>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={handleTabChange}
+                    className="w-auto"
+                >
                     <TabsList>
                         <TabsTrigger value="editor" className="flex items-center gap-1.5">
                             <PenTool size={16} />
@@ -420,11 +636,13 @@ export default function Draw() {
                     key={shouldRefreshGallery ? 'refresh' : 'default'}
                 />
             ) : (
-                <div className="flex flex-col lg:flex-row gap-5 h-[calc(100vh-150px)]">
+                <div className="flex flex-col lg:flex-row h-[calc(100vh-150px)] relative">
+                    {/* Main Canvas Area */}
                     <div className="flex-grow h-full min-h-[500px] overflow-hidden">
                         <ExcalidrawWithClientOnly
                             onMounted={handleExcalidrawMount}
                             diagramId={selectedDiagramId}
+                            diagramName={currentDiagramName}
                             onDiagramSaved={handleDiagramSaved}
                             onDiagramNameChange={handleDiagramNameChange}
                             onDiagramIdChange={setSelectedDiagramId}
@@ -432,125 +650,113 @@ export default function Draw() {
                             key={`pendingReq-${pendingRequirementId}-${instanceKey}`}
                             pendingRequirementId={pendingRequirementId}
                             pendingDocumentId={pendingDocumentId}
+                            onLinkedElementClick={handleLinkedElementClick}
+                            onDirtyStateChange={handleDirtyStateChange}
+                            isSidePanelOpen={isViewportOpen || isSidebarOpen}
                         />
                     </div>
-                    <div className="flex-shrink-0 flex flex-col gap-2.5 p-5 bg-gray-100 dark:bg-sidebar rounded-lg h-fit">
-                        <h3 className="text-xl text-BLACK dark:text-white">
-                            Text to Diagram
-                        </h3>
-                        <textarea
-                            value={prompt}
-                            onChange={(e) => {
-                                setPrompt(e.target.value);
-                                if (error) setError('');
-                            }}
-                            placeholder="Describe your diagram here..."
-                            className="w-[300px] h-[150px] p-2.5 rounded-none border border-[#454545] resize-y"
+
+                    {/* Right Panel Area - Viewport or AI Generator (mutually exclusive) */}
+                    {isViewportOpen ? (
+                        <ViewportPanel
+                            projectId={projectId}
+                            organizationId={organizationId}
+                            onClose={closeViewport}
                         />
-                        <div className="mb-2.5">
-                            <label className="block mb-1 text-sm text-gray-700 dark:text-gray-300">
-                                Diagram Type
-                            </label>
-                            <div className="relative">
-                                <select
-                                    value={diagramType}
-                                    onChange={(e) =>
-                                        setDiagramType(e.target.value as DiagramType)
-                                    }
-                                    className="w-full p-2.5 bg-white dark:bg-secondary rounded-none border appearance-none cursor-pointer"
-                                >
-                                    <option value="flowchart">Flowchart</option>
-                                    <option value="sequence">Sequence</option>
-                                    <option value="class">Class</option>
-                                </select>
-                                <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                    <ChevronDown size={16} />
-                                </div>
+                    ) : isSidebarOpen ? (
+                        <div className="flex-shrink-0 flex flex-col gap-2.5 p-5 bg-gray-100 dark:bg-sidebar rounded-lg h-fit ml-5 relative animate-slide-in-right">
+                            {/* Close button */}
+                            <button
+                                onClick={() => setIsSidebarOpen(false)}
+                                className="absolute top-2 right-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                title="Close AI Generator"
+                            >
+                                <X size={16} />
+                            </button>
+
+                            <div className="flex items-center gap-2 pr-6">
+                                <Sparkles size={20} className="text-purple-500" />
+                                <h3 className="text-xl text-BLACK dark:text-white">
+                                    AI Generator
+                                </h3>
                             </div>
-                        </div>
-
-                        {/* Link Requirement - appears when diagram elements are selected */}
-                        {selectedElements.length > 0 &&
-                            (() => {
-                                // Get current requirement ID from first selected element with a requirement
-                                const currentReqId =
-                                    (
-                                        selectedElements.find(
-                                            (el) =>
-                                                'requirementId' in el && el.requirementId,
-                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        ) as any
-                                    )?.requirementId || '';
-
-                                return (
-                                    <div className="mb-2.5 p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-secondary">
-                                        <div className="flex items-center gap-2 text-sm font-medium mb-2.5 text-gray-700 dark:text-gray-300">
-                                            <Link2 size={16} />
-                                            <span>
-                                                {selectedElements.length} element
-                                                {selectedElements.length > 1
-                                                    ? 's'
-                                                    : ''}{' '}
-                                                selected
-                                            </span>
-                                        </div>
-                                        <RequirementPicker
-                                            projectId={projectId}
-                                            value={currentReqId}
-                                            onChange={(reqId, reqName, docId) => {
-                                                excalidrawApi?.linkRequirement(
-                                                    reqId,
-                                                    reqName,
-                                                    docId,
-                                                );
-                                            }}
-                                        />
-                                        {currentReqId && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    excalidrawApi?.unlinkRequirement()
-                                                }
-                                                className="w-full mt-2"
-                                            >
-                                                Unlink Requirement
-                                            </Button>
-                                        )}
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                Describe your diagram and let AI create it for you
+                            </p>
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => {
+                                    setPrompt(e.target.value);
+                                    if (error) setError('');
+                                }}
+                                placeholder="Describe your diagram here..."
+                                className="w-[300px] h-[150px] p-2.5 rounded border border-gray-300 dark:border-gray-600 resize-y bg-white dark:bg-gray-800"
+                            />
+                            <div className="mb-2.5">
+                                <label className="block mb-1 text-sm text-gray-700 dark:text-gray-300">
+                                    Diagram Type
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={diagramType}
+                                        onChange={(e) =>
+                                            setDiagramType(e.target.value as DiagramType)
+                                        }
+                                        className="w-full p-2.5 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-600 appearance-none cursor-pointer"
+                                    >
+                                        <option value="flowchart">Flowchart</option>
+                                        <option value="sequence">Sequence</option>
+                                        <option value="class">Class</option>
+                                    </select>
+                                    <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                        <ChevronDown size={16} />
                                     </div>
-                                );
-                            })()}
-
-                        <button
-                            onClick={handleManualGenerate}
-                            disabled={isGenerating}
-                            className={`px-5 py-2.5 bg-[#993CF6] text-white border-none rounded-none font-bold ${
-                                isGenerating
-                                    ? 'opacity-70 cursor-default'
-                                    : 'opacity-100 cursor-pointer'
-                            }`}
-                        >
-                            {isGenerating ? (
-                                <div className="flex items-center justify-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    Generating...
                                 </div>
-                            ) : (
-                                'Generate'
+                            </div>
+
+                            <button
+                                onClick={handleManualGenerate}
+                                disabled={isGenerating}
+                                className={`px-5 py-2.5 bg-[#993CF6] text-white border-none rounded font-bold transition-opacity ${
+                                    isGenerating
+                                        ? 'opacity-70 cursor-default'
+                                        : 'opacity-100 cursor-pointer hover:bg-[#8432E0]'
+                                }`}
+                            >
+                                {isGenerating ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Generating...
+                                    </div>
+                                ) : (
+                                    'Generate'
+                                )}
+                            </button>
+                            {error && (
+                                <div className="flex items-center gap-2 text-red-600 bg-red-100 dark:bg-red-900/30 p-2 rounded text-sm">
+                                    <CircleAlert className="w-4 h-4" />
+                                    {error}
+                                </div>
                             )}
-                        </button>
-                        {error && (
-                            <div className="flex items-center gap-2 text-red-600 bg-red-100 p-2 rounded text-sm">
-                                <CircleAlert className="w-4 h-4" />
-                                {error}
-                            </div>
-                        )}
-                        {pipelineResponse?.state === 'DONE' && (
-                            <div className="text-emerald-600 bg-emerald-100 p-2 rounded text-sm">
-                                Diagram generated successfully!
-                            </div>
-                        )}
-                    </div>
+                            {pipelineResponse?.state === 'DONE' && (
+                                <div className="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded text-sm">
+                                    Diagram generated successfully!
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* Collapsed state - both tabs on right edge (compact icon-only) */
+                        <div className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-50">
+                            <ViewportCollapsedTab onClick={handleOpenViewport} />
+                            <button
+                                onClick={handleOpenAIGenerator}
+                                className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-l-lg cursor-pointer transition-colors shadow-lg"
+                                title="Open AI Generator"
+                            >
+                                <Sparkles size={18} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -584,6 +790,15 @@ export default function Draw() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Unsaved Changes Dialog */}
+            <UnsavedChangesDialog
+                open={showUnsavedDialog}
+                onSaveAndExit={handleSaveAndExit}
+                onDiscard={handleDiscardChanges}
+                onCancel={handleCancelNavigation}
+                isSaving={isSavingBeforeExit}
+            />
         </div>
     );
 }

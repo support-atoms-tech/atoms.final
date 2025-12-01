@@ -4,16 +4,27 @@ import { NextResponse } from 'next/server';
 import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
 import { getSupabaseServiceRoleClient } from '@/lib/supabase/supabase-service-role';
 
+/**
+ * GET /api/documents/[documentId]/requirements
+ *
+ * Fetches requirements for a specific document.
+ * Uses service role client to bypass RLS policy issues.
+ *
+ * Query params:
+ * - blockId (optional): Filter to requirements for a specific block
+ */
 export async function GET(
-    _request: Request,
-    context: { params: Promise<{ projectId: string }> },
+    request: Request,
+    context: { params: Promise<{ documentId: string }> },
 ) {
     try {
-        const { projectId } = await context.params;
+        const { documentId } = await context.params;
+        const { searchParams } = new URL(request.url);
+        const blockId = searchParams.get('blockId');
 
-        if (!projectId) {
+        if (!documentId) {
             return NextResponse.json(
-                { error: 'Project ID is required' },
+                { error: 'Document ID is required' },
                 { status: 400 },
             );
         }
@@ -39,11 +50,25 @@ export async function GET(
             );
         }
 
+        // First, get the document to find its project_id
+        const { data: document, error: documentError } = await supabase
+            .from('documents')
+            .select('id, project_id')
+            .eq('id', documentId)
+            .single();
+
+        if (documentError || !document) {
+            return NextResponse.json(
+                { error: 'Document not found', details: documentError?.message },
+                { status: 404 },
+            );
+        }
+
         // Verify membership in the project (active member)
         const { data: membership, error: membershipError } = await supabase
             .from('project_members')
             .select('role, org_id')
-            .eq('project_id', projectId)
+            .eq('project_id', document.project_id)
             .eq('user_id', profile.id)
             .eq('status', 'active')
             .maybeSingle();
@@ -62,23 +87,21 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Query requirements joined to documents for this project
-        const { data: requirements, error } = await supabase
+        // Query requirements for this document (optionally filtered by blockId)
+        let query = supabase
             .from('requirements')
-            .select(
-                `
-                *,
-                documents!inner (
-                    id,
-                    project_id,
-                    name
-                )
-            `,
-            )
-            .eq('documents.project_id', projectId)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: false })
-            .limit(5000);
+            .select('*')
+            .eq('document_id', documentId)
+            .eq('is_deleted', false);
+
+        // Add optional block filter
+        if (blockId) {
+            query = query.eq('block_id', blockId);
+        }
+
+        const { data: requirements, error } = await query.order('position', {
+            ascending: true,
+        });
 
         if (error) {
             return NextResponse.json(
@@ -87,12 +110,12 @@ export async function GET(
             );
         }
 
-        return NextResponse.json({ requirements });
+        return NextResponse.json({ requirements: requirements || [] });
     } catch (error) {
-        console.error('Project requirements API error:', error);
+        console.error('Document requirements API error:', error);
         return NextResponse.json(
             {
-                error: 'Failed to fetch project requirements',
+                error: 'Failed to fetch document requirements',
                 details: error instanceof Error ? error.message : 'Unknown error',
             },
             { status: 500 },

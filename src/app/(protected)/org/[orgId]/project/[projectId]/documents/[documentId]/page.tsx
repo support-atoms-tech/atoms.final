@@ -54,50 +54,89 @@ export default function DocumentPage() {
     });
     const { getClientOrThrow } = useAuthenticatedSupabase();
 
-    //scroll to requirement if requirementId is in sessionStorage
+    // Scroll to requirement if requirementId is in URL params or sessionStorage
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        //get requirementId from sessionStorage
-        const requirementId = sessionStorage.getItem('jumpToRequirementId');
-        console.log('Checking sessionStorage for requirementId:', requirementId);
+        // Check URL params first (from new tab navigation), then sessionStorage (legacy)
+        const urlParams = new URLSearchParams(window.location.search);
+        const requirementIdFromUrl = urlParams.get('requirementId');
+        const requirementIdFromStorage = sessionStorage.getItem('jumpToRequirementId');
+        const requirementId = requirementIdFromUrl || requirementIdFromStorage;
+
+        console.log('Checking for requirementId:', {
+            fromUrl: requirementIdFromUrl,
+            fromStorage: requirementIdFromStorage,
+        });
 
         if (requirementId) {
-            const timeout = setTimeout(() => {
+            let attempts = 0;
+            const maxAttempts = 20; // 4 seconds max (200ms * 20)
+            let intervalId: NodeJS.Timeout | null = null;
+
+            const tryScrollToElement = () => {
+                attempts++;
                 console.log(
-                    'Attempting to find element with ID:',
-                    `requirement-${requirementId}`,
+                    `Attempt ${attempts}/${maxAttempts} - Looking for element: requirement-${requirementId}`,
                 );
+
                 const element = document.getElementById(`requirement-${requirementId}`);
 
                 if (element) {
-                    //clear the requirementId from sessionStorage only after finding the element
-                    sessionStorage.removeItem('jumpToRequirementId');
-                    console.log('Element found, cleared sessionStorage, scrolling to it');
+                    // Found it! Clear the interval
+                    if (intervalId) clearInterval(intervalId);
 
-                    //scroll to element
+                    // Clear the requirementId from sessionStorage only after finding the element
+                    if (requirementIdFromStorage) {
+                        sessionStorage.removeItem('jumpToRequirementId');
+                    }
+                    // Clean up URL params without page reload
+                    if (requirementIdFromUrl) {
+                        const newUrl = new URL(window.location.href);
+                        newUrl.searchParams.delete('requirementId');
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                    console.log('Element found, scrolling to it');
+
+                    // Scroll to element
                     element.scrollIntoView({
                         behavior: 'smooth',
                         block: 'center',
                     });
 
+                    // Add highlight animation after scroll completes
                     setTimeout(() => {
-                        console.log('Adding highlight class');
-                        element.style.backgroundColor = 'rgba(153, 59, 246, 0.3)';
+                        console.log('Adding highlight animation');
+                        element.style.transition = 'background-color 0.3s ease-in-out';
+                        element.style.backgroundColor = 'rgba(139, 92, 246, 0.3)';
                         element.classList.add('highlight-requirement');
 
                         setTimeout(() => {
                             console.log('Removing highlight');
                             element.style.backgroundColor = '';
                             element.classList.remove('highlight-requirement');
-                        }, 3000);
-                    }, 100);
-                } else {
-                    console.log('Element not found for requirementId:', requirementId);
+                        }, 2000);
+                    }, 300);
+                } else if (attempts >= maxAttempts) {
+                    // Max attempts reached, give up
+                    if (intervalId) clearInterval(intervalId);
+                    console.log(
+                        'Max attempts reached, element not found for requirementId:',
+                        requirementId,
+                    );
                 }
-            }, 2500); // Increased timeout to give BlockCanvas more time to render
+            };
 
-            return () => clearTimeout(timeout);
+            // Start polling after initial delay for page to start loading
+            const startTimeout = setTimeout(() => {
+                tryScrollToElement(); // Try immediately
+                intervalId = setInterval(tryScrollToElement, 200); // Then every 200ms
+            }, 300);
+
+            return () => {
+                clearTimeout(startTimeout);
+                if (intervalId) clearInterval(intervalId);
+            };
         }
 
         // Return undefined explicitly for the case where requirementId is null

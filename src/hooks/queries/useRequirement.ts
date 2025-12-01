@@ -122,28 +122,24 @@ export function useDocumentRequirements(
     documentId: string,
     _queryFilters?: Omit<GenericQueryFilters<'requirements'>, 'filters'>,
 ) {
-    const {
-        supabase,
-        isLoading: authLoading,
-        error: authError,
-    } = useAuthenticatedSupabase();
-
     return useQuery({
         queryKey: queryKeys.requirements.byDocument(documentId),
         queryFn: async () => {
-            if (!supabase) {
-                throw new Error(authError ?? 'Supabase client not available');
+            // Use API route to bypass RLS issues with WorkOS org ID comparison
+            const response = await fetch(`/api/documents/${documentId}/requirements`, {
+                method: 'GET',
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to fetch requirements');
             }
 
-            const { data } = await supabase
-                .from('requirements')
-                .select('*')
-                .eq('document_id', documentId)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false });
-            return data;
+            const { requirements } = await response.json();
+            return requirements as Requirement[];
         },
-        enabled: !!documentId && !authLoading && !!supabase,
+        enabled: !!documentId,
     });
 }
 

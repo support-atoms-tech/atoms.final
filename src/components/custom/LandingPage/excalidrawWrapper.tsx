@@ -8,7 +8,7 @@ import type {
     ExcalidrawImperativeAPI,
     ExcalidrawInitialDataState,
 } from '@excalidraw/excalidraw/types';
-import { Save } from 'lucide-react';
+import { ExternalLink, FileText, Link2, Save } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
@@ -21,6 +21,12 @@ import { useTheme } from 'next-themes';
 import { usePathname, useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 
+import {
+    LINK_COLORS,
+    LinkingToolbar,
+    type ElementWithLinkProps,
+    type LinkType,
+} from '@/components/custom/Diagrams/LinkingToolbar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -37,23 +43,44 @@ interface ExcalidrawDiagramData {
 // Get the type for NormalizedZoomValue from @excalidraw/excalidraw
 type NormalizedZoomValue = AppState['zoom']['value'];
 
+// Link click info passed to onLinkedElementClick callback
+export interface LinkedElementClickInfo {
+    type: LinkType;
+    requirementId?: string;
+    documentId?: string;
+    linkedDocumentId?: string;
+    hyperlinkUrl?: string;
+    label?: string;
+}
+
+// Mounted API exposed to parent components
+export interface ExcalidrawMountedApi {
+    addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
+    linkRequirement: (
+        requirementId: string,
+        requirementName: string,
+        documentId: string,
+    ) => void;
+    unlinkRequirement: () => void;
+    forceSave: () => Promise<void>;
+}
+
 interface ExcalidrawWrapperProps {
-    onMounted?: (api: {
-        addMermaidDiagram: (mermaidSyntax: string) => Promise<void>;
-        linkRequirement: (
-            requirementId: string,
-            requirementName: string,
-            documentId: string,
-        ) => void;
-        unlinkRequirement: () => void;
-    }) => void;
+    onMounted?: (api: ExcalidrawMountedApi) => void;
     diagramId?: string | null;
+    diagramName?: string | null;
     onDiagramSaved?: (id: string) => void;
     onDiagramNameChange?: (name: string) => void;
     onDiagramIdChange?: (id: string | null) => void;
     onSelectionChange?: (elements: readonly ExcalidrawElement[]) => void;
     pendingRequirementId?: string | null;
     pendingDocumentId?: string | null;
+    // Callback when a linked element is clicked (opens in split view instead of new tab)
+    onLinkedElementClick?: (info: LinkedElementClickInfo) => void;
+    // Callback when dirty state or content state changes (for unsaved warning)
+    onDirtyStateChange?: (isDirty: boolean, hasContent: boolean) => void;
+    // Whether a side panel (viewport or AI generator) is open - adjusts toolbar position
+    isSidePanelOpen?: boolean;
 }
 
 // Utility to add requirementId and documentId to elements
@@ -70,24 +97,28 @@ function addRequirementIdToElements<T extends ExcalidrawElement>(
     })) as T[];
 }
 
-// Update the ElementWithRequirementProps to be a proper type
-type ElementWithRequirementProps = ExcalidrawElement & {
-    requirementId?: string;
-    documentId?: string;
-};
+// Use the imported ElementWithLinkProps from LinkingToolbar for consistency
+// Legacy alias for backward compatibility
+type ElementWithRequirementProps = ElementWithLinkProps;
 
 const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
     onMounted,
     diagramId: externalDiagramId,
+    diagramName: externalDiagramName,
     onDiagramSaved,
     onDiagramNameChange,
     onDiagramIdChange,
     onSelectionChange,
     pendingRequirementId,
     pendingDocumentId,
+    onLinkedElementClick,
+    onDirtyStateChange,
+    isSidePanelOpen,
 }) => {
     const [diagramId, setDiagramId] = useState<string | null>(externalDiagramId || null);
-    const [diagramName, setDiagramName] = useState<string>('Untitled Diagram');
+    const [diagramName, setDiagramName] = useState<string>(
+        externalDiagramName || 'Untitled Diagram',
+    );
     const [isAutoSaving, setIsAutoSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [initialData, setInitialData] = useState<ExcalidrawInitialDataState | null>(
@@ -98,6 +129,9 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
     const [authError, setAuthError] = useState<string | null>(null);
     const [isSaveAsDialogOpen, setIsSaveAsDialogOpen] = useState(false);
     const [newDiagramName, setNewDiagramName] = useState('');
+    const [localSelectedElements, setLocalSelectedElements] = useState<
+        readonly ExcalidrawElement[]
+    >([]);
 
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
@@ -117,16 +151,20 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
 
     const organizationId = usePathname().split('/')[2];
     const projectId = usePathname().split('/')[4];
-    const router = useRouter();
+    const _router = useRouter();
     const { isLoading: supabaseLoading, error: supabaseError } =
         useAuthenticatedSupabase();
 
-    // Tooltip state for selected requirement-linked element
+    // Tooltip state for selected linked element (supports all link types)
     const [linkTooltip, setLinkTooltip] = useState<{
         x: number;
         y: number;
-        requirementId: string;
+        linkType: LinkType;
+        requirementId?: string;
         documentId?: string;
+        linkedDocumentId?: string;
+        hyperlinkUrl?: string;
+        linkLabel?: string;
     } | null>(null);
     // Keep track of previously selected element to prevent update loops
     const prevSelectedElementRef = useRef<string | null>(null);
@@ -662,7 +700,14 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
 
     // Utility functions for requirement linking
     const updateElementRequirementLink = useCallback(
-        (requirementId: string, _requirementName: string, documentId: string) => {
+        (requirementId: string, requirementName: string, documentId: string) => {
+            // Debug: Log what values are being stored
+            console.log('[updateElementRequirementLink] Storing link with:', {
+                requirementId,
+                requirementName,
+                documentId,
+            });
+
             if (!excalidrawApiRef.current) return;
 
             const elements = excalidrawApiRef.current.getSceneElements();
@@ -670,15 +715,24 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 excalidrawApiRef.current.getAppState().selectedElementIds || {},
             );
 
-            // Update selected elements with requirementId and documentId
+            console.log('[updateElementRequirementLink] Updating elements:', selectedIds);
+
+            // Update selected elements with requirementId, documentId, and linkLabel (requirement name)
             const updatedElements = elements.map((el) => {
                 if (selectedIds.includes(el.id)) {
-                    // Add custom properties to element
-                    return {
+                    // Add custom properties to element, including linkLabel for tooltip display
+                    const updatedEl = {
                         ...el,
                         requirementId,
                         documentId: documentId,
-                    } as unknown as ExcalidrawElement;
+                        linkLabel: requirementName,
+                    };
+                    console.log(
+                        '[updateElementRequirementLink] Updated element:',
+                        el.id,
+                        updatedEl,
+                    );
+                    return updatedEl as unknown as ExcalidrawElement;
                 }
                 return el;
             });
@@ -688,12 +742,15 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 elements: updatedElements,
             });
 
-            // Trigger save after linking
+            // Trigger immediate save after linking (forceSave to ensure it persists)
             const appState = excalidrawApiRef.current.getAppState();
             const files = excalidrawApiRef.current.getFiles();
-            debouncedSave(updatedElements, appState, files);
+            saveDiagram(updatedElements, appState, files, undefined, undefined, true);
+
+            // Force tooltip to re-evaluate by resetting the previous selection
+            prevSelectedElementRef.current = null;
         },
-        [debouncedSave],
+        [saveDiagram],
     );
 
     const removeElementRequirementLink = useCallback(() => {
@@ -704,15 +761,16 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             excalidrawApiRef.current.getAppState().selectedElementIds || {},
         );
 
-        // Remove requirementId and documentId from selected elements
+        // Remove requirementId, documentId, and linkLabel from selected elements
         const updatedElements = elements.map((el) => {
             if (selectedIds.includes(el.id)) {
-                // Create a new element without the requirementId and documentId properties
+                // Create a new element without the requirementId, documentId, and linkLabel properties
                 const {
                     requirementId: _requirementId,
                     documentId: _documentId,
+                    linkLabel: _linkLabel,
                     ...rest
-                } = el as ElementWithRequirementProps;
+                } = el as ElementWithRequirementProps & { linkLabel?: string };
                 return rest as ExcalidrawElement;
             }
             return el;
@@ -723,11 +781,170 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             elements: updatedElements,
         });
 
-        // Trigger save after unlinking
+        // Trigger immediate save after unlinking (forceSave to ensure it persists)
         const appState = excalidrawApiRef.current.getAppState();
         const files = excalidrawApiRef.current.getFiles();
-        debouncedSave(updatedElements, appState, files);
-    }, [debouncedSave]);
+        saveDiagram(updatedElements, appState, files, undefined, undefined, true);
+    }, [saveDiagram]);
+
+    // Handler for document linking
+    const updateElementDocumentLink = useCallback(
+        (linkedDocumentId: string, documentName: string, linkLabel?: string) => {
+            if (!excalidrawApiRef.current) return;
+
+            const elements = excalidrawApiRef.current.getSceneElements();
+            const selectedIds = Object.keys(
+                excalidrawApiRef.current.getAppState().selectedElementIds || {},
+            );
+
+            // Update selected elements with document link
+            const updatedElements = elements.map((el) => {
+                if (selectedIds.includes(el.id)) {
+                    // Remove any existing links first, then add new one
+                    const {
+                        requirementId: _r,
+                        documentId: _d,
+                        hyperlinkUrl: _h,
+                        ...rest
+                    } = el as ElementWithLinkProps;
+                    return {
+                        ...rest,
+                        linkedDocumentId,
+                        linkType: 'document' as LinkType,
+                        linkLabel: linkLabel || documentName,
+                    } as unknown as ExcalidrawElement;
+                }
+                return el;
+            });
+
+            excalidrawApiRef.current.updateScene({ elements: updatedElements });
+
+            // Trigger immediate save
+            const appState = excalidrawApiRef.current.getAppState();
+            const files = excalidrawApiRef.current.getFiles();
+            saveDiagram(updatedElements, appState, files, undefined, undefined, true);
+
+            // Force tooltip to re-evaluate by resetting the previous selection
+            prevSelectedElementRef.current = null;
+        },
+        [saveDiagram],
+    );
+
+    // Handler for hyperlink linking
+    const updateElementHyperlinkLink = useCallback(
+        (hyperlinkUrl: string, linkLabel?: string) => {
+            if (!excalidrawApiRef.current) return;
+
+            const elements = excalidrawApiRef.current.getSceneElements();
+            const selectedIds = Object.keys(
+                excalidrawApiRef.current.getAppState().selectedElementIds || {},
+            );
+
+            // Update selected elements with hyperlink
+            const updatedElements = elements.map((el) => {
+                if (selectedIds.includes(el.id)) {
+                    // Remove any existing links first, then add new one
+                    const {
+                        requirementId: _r,
+                        documentId: _d,
+                        linkedDocumentId: _ld,
+                        ...rest
+                    } = el as ElementWithLinkProps;
+                    return {
+                        ...rest,
+                        hyperlinkUrl,
+                        linkType: 'hyperlink' as LinkType,
+                        linkLabel: linkLabel || hyperlinkUrl,
+                    } as unknown as ExcalidrawElement;
+                }
+                return el;
+            });
+
+            excalidrawApiRef.current.updateScene({ elements: updatedElements });
+
+            // Trigger immediate save
+            const appState = excalidrawApiRef.current.getAppState();
+            const files = excalidrawApiRef.current.getFiles();
+            saveDiagram(updatedElements, appState, files, undefined, undefined, true);
+
+            // Force tooltip to re-evaluate by resetting the previous selection
+            prevSelectedElementRef.current = null;
+        },
+        [saveDiagram],
+    );
+
+    // Enhanced unlink that removes all link types
+    const removeAllLinks = useCallback(() => {
+        if (!excalidrawApiRef.current) return;
+
+        const elements = excalidrawApiRef.current.getSceneElements();
+        const selectedIds = Object.keys(
+            excalidrawApiRef.current.getAppState().selectedElementIds || {},
+        );
+
+        // Remove all link properties from selected elements
+        const updatedElements = elements.map((el) => {
+            if (selectedIds.includes(el.id)) {
+                const {
+                    requirementId: _r,
+                    documentId: _d,
+                    linkedDocumentId: _ld,
+                    hyperlinkUrl: _h,
+                    linkType: _lt,
+                    linkLabel: _ll,
+                    ...rest
+                } = el as ElementWithLinkProps;
+                return rest as ExcalidrawElement;
+            }
+            return el;
+        });
+
+        excalidrawApiRef.current.updateScene({ elements: updatedElements });
+
+        // Trigger immediate save
+        const appState = excalidrawApiRef.current.getAppState();
+        const files = excalidrawApiRef.current.getFiles();
+        saveDiagram(updatedElements, appState, files, undefined, undefined, true);
+    }, [saveDiagram]);
+
+    // Force save function for external trigger (used by unsaved warning dialog)
+    const forceSaveRef = useRef<(() => Promise<void>) | null>(null);
+    forceSaveRef.current = useCallback(async () => {
+        if (excalidrawApiRef.current) {
+            const elements = excalidrawApiRef.current.getSceneElements();
+            const appState = excalidrawApiRef.current.getAppState();
+            const files = excalidrawApiRef.current.getFiles();
+            await saveDiagram(elements, appState, files, undefined, undefined, true);
+        }
+    }, [saveDiagram]);
+
+    // Track and notify parent of dirty state changes
+    const prevDirtyStateRef = useRef<{ isDirty: boolean; hasContent: boolean } | null>(
+        null,
+    );
+    const checkAndNotifyDirtyState = useCallback(() => {
+        if (!excalidrawApiRef.current || !onDirtyStateChange) return;
+
+        const elements = excalidrawApiRef.current.getSceneElements();
+        const appState = excalidrawApiRef.current.getAppState();
+
+        // Check if there's any content (non-deleted elements)
+        const hasContent = elements.filter((el) => !el.isDeleted).length > 0;
+
+        // Check if there are unsaved changes
+        const isDirty = hasChanges(elements, appState);
+
+        // Only notify if state actually changed
+        const prevState = prevDirtyStateRef.current;
+        if (
+            !prevState ||
+            prevState.isDirty !== isDirty ||
+            prevState.hasContent !== hasContent
+        ) {
+            prevDirtyStateRef.current = { isDirty, hasContent };
+            onDirtyStateChange(isDirty, hasContent);
+        }
+    }, [hasChanges, onDirtyStateChange]);
 
     // Expose the API functions to parent
     const hasInitializedApiRef = useRef(false);
@@ -738,6 +955,11 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 addMermaidDiagram,
                 linkRequirement: updateElementRequirementLink,
                 unlinkRequirement: removeElementRequirementLink,
+                forceSave: async () => {
+                    if (forceSaveRef.current) {
+                        await forceSaveRef.current();
+                    }
+                },
             });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -753,6 +975,18 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             }
         }
     }, [externalDiagramId, loadDiagram]);
+
+    // Watch for external diagramName changes (e.g., from rename dialog)
+    useEffect(() => {
+        if (
+            externalDiagramName !== undefined &&
+            externalDiagramName !== null &&
+            externalDiagramName !== diagramName
+        ) {
+            setDiagramName(externalDiagramName);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [externalDiagramName]);
 
     // Reset loading state when component unmounts or when diagram ID changes
     useEffect(() => {
@@ -883,47 +1117,78 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
             const currentSelectionKey = selectedIds.sort().join(',');
 
             // Only notify parent if selection actually changed (prevents infinite loop)
-            if (
-                onSelectionChange &&
-                currentSelectionKey !== prevSelectionIdsRef.current
-            ) {
+            if (currentSelectionKey !== prevSelectionIdsRef.current) {
                 prevSelectionIdsRef.current = currentSelectionKey;
 
                 if (selectedIds.length > 0) {
                     const currentSelectedElements = elements.filter((el) =>
                         selectedIds.includes(el.id),
                     );
-                    onSelectionChange(currentSelectedElements);
+                    // Update local state for LinkingToolbar
+                    setLocalSelectedElements(currentSelectedElements);
+                    // Notify parent if callback provided
+                    if (onSelectionChange) {
+                        onSelectionChange(currentSelectedElements);
+                    }
                 } else {
-                    onSelectionChange([]);
+                    setLocalSelectedElements([]);
+                    if (onSelectionChange) {
+                        onSelectionChange([]);
+                    }
                 }
             }
 
-            // Handle existing requirement tooltip logic for already-linked elements
+            // Handle tooltip logic for all link types (requirement, document, hyperlink)
             if (selectedIds.length >= 1 && excalidrawApiRef.current) {
                 const selectedId = selectedIds[0];
                 // Only process if this is a new selection
                 if (prevSelectedElementRef.current !== selectedId) {
                     prevSelectedElementRef.current = selectedId;
 
-                    const selEl = elements.find((el) => el.id === selectedId);
-                    const reqId = (selEl as ElementWithRequirementProps)?.requirementId;
-                    const docId = (selEl as ElementWithRequirementProps)?.documentId;
+                    const selEl = elements.find((el) => el.id === selectedId) as
+                        | ElementWithLinkProps
+                        | undefined;
 
-                    if (selEl && reqId) {
-                        // Find all elements with the same requirementId
-                        const allSameRequirementElements = elements.filter(
-                            (el) =>
-                                (el as ElementWithRequirementProps)?.requirementId ===
-                                reqId,
-                        );
+                    // Check for any link type
+                    const hasRequirementLink = selEl?.requirementId;
+                    const hasDocumentLink = selEl?.linkedDocumentId;
+                    const hasHyperlinkLink = selEl?.hyperlinkUrl;
+                    const hasAnyLink =
+                        hasRequirementLink || hasDocumentLink || hasHyperlinkLink;
+
+                    if (selEl && hasAnyLink) {
+                        // Determine link type
+                        let linkType: LinkType = 'requirement';
+                        let linkIdentifier = '';
+
+                        if (hasRequirementLink) {
+                            linkType = 'requirement';
+                            linkIdentifier = selEl.requirementId!;
+                        } else if (hasDocumentLink) {
+                            linkType = 'document';
+                            linkIdentifier = selEl.linkedDocumentId!;
+                        } else if (hasHyperlinkLink) {
+                            linkType = 'hyperlink';
+                            linkIdentifier = selEl.hyperlinkUrl!;
+                        }
+
+                        // Find all elements with the same link
+                        const allSameLinkedElements = elements.filter((el) => {
+                            const elem = el as ElementWithLinkProps;
+                            if (linkType === 'requirement')
+                                return elem.requirementId === linkIdentifier;
+                            if (linkType === 'document')
+                                return elem.linkedDocumentId === linkIdentifier;
+                            if (linkType === 'hyperlink')
+                                return elem.hyperlinkUrl === linkIdentifier;
+                            return false;
+                        });
 
                         // Get connected elements
                         const relatedElements = getSpatialCluster(
-                            allSameRequirementElements,
+                            allSameLinkedElements,
                             selEl,
                         );
-
                         const boundingBox = calculateBoundingBox(relatedElements);
 
                         // Update the bounding box
@@ -932,27 +1197,27 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                             y: boundingBox.minY,
                             width: boundingBox.width,
                             height: boundingBox.height,
-                            requirementId: reqId,
+                            requirementId: linkIdentifier, // Using this for any link type
                         });
 
                         const zoom = appState.zoom.value;
                         const { scrollX, scrollY } = appState;
-                        const tooltipWidth = 120; // Approximate width of tooltip in pixels
-                        const boxRightX =
-                            boundingBox.minX +
-                            boundingBox.width -
-                            tooltipWidth / zoom -
-                            5; // Account for tooltip width
-                        const boxTopY = boundingBox.minY - 5; // Place it slightly above the top edge
+                        // Position at bottom-center of element
+                        const boxCenterX = boundingBox.minX + boundingBox.width / 2;
+                        const boxBottomY = boundingBox.minY + boundingBox.height;
 
-                        const screenX = (boxRightX + scrollX) * zoom;
-                        const screenY = (boxTopY + scrollY) * zoom;
+                        const screenX = (boxCenterX + scrollX) * zoom;
+                        const screenY = (boxBottomY + scrollY) * zoom;
 
                         setLinkTooltip({
                             x: screenX,
                             y: screenY,
-                            requirementId: reqId,
-                            documentId: docId,
+                            linkType,
+                            requirementId: selEl.requirementId,
+                            documentId: selEl.documentId,
+                            linkedDocumentId: selEl.linkedDocumentId,
+                            hyperlinkUrl: selEl.hyperlinkUrl,
+                            linkLabel: selEl.linkLabel,
                         });
                     } else {
                         setLinkTooltip(null);
@@ -968,8 +1233,11 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 setLinkTooltip(null);
                 setBoundingBoxOverlay(null);
             }
+
+            // Notify parent of dirty state changes for unsaved warning
+            checkAndNotifyDirtyState();
         },
-        [debouncedSave, onSelectionChange],
+        [debouncedSave, onSelectionChange, checkAndNotifyDirtyState],
     );
 
     // Function to calculate bounding box for a group of elements
@@ -1103,28 +1371,76 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
 
     return (
         <div className="h-full w-full min-h-[500px] relative">
-            <div className="absolute top-2.5 right-2.5 flex items-center gap-2.5 z-[1000]">
+            {/* Custom Toolbar - moves up and offsets left when side panel is open */}
+            <div
+                className={`absolute z-[1000] flex items-center gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg px-1.5 py-0.5 shadow-sm border border-gray-200 dark:border-gray-700 ${
+                    isSidePanelOpen
+                        ? 'bottom-16 left-1/2 -translate-x-1/2'
+                        : 'bottom-4 left-1/2 -translate-x-1/2'
+                }`}
+            >
+                {/* Condensed Save button - icon only, tooltip shows last saved time */}
                 <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-8 bg-white dark:bg-sidebar"
+                    className="h-6 w-6 p-0"
+                    title={
+                        lastSaved
+                            ? `Last saved: ${lastSaved.toLocaleTimeString()}\nClick to Save As...`
+                            : 'Not saved yet\nClick to Save As...'
+                    }
                     onClick={() => {
                         setNewDiagramName('');
                         setIsSaveAsDialogOpen(true);
                     }}
                 >
-                    <Save size={14} className="mr-1 dark:hover:text-white" /> Save As
+                    <Save size={12} />
                 </Button>
+
+                {/* Link button - only when elements selected */}
+                {localSelectedElements.length > 0 && (
+                    <>
+                        <div className="w-px h-3 bg-gray-300 dark:bg-gray-600" />
+                        <LinkingToolbar
+                            selectedElements={localSelectedElements}
+                            projectId={projectId}
+                            organizationId={organizationId}
+                            onLinkRequirement={(reqId, reqName, docId, _linkLabel) => {
+                                updateElementRequirementLink(reqId, reqName, docId);
+                            }}
+                            onLinkDocument={updateElementDocumentLink}
+                            onLinkHyperlink={updateElementHyperlinkLink}
+                            onUnlink={removeAllLinks}
+                            onViewLinkedContent={
+                                onLinkedElementClick
+                                    ? (info) => {
+                                          onLinkedElementClick({
+                                              type: info.type,
+                                              requirementId:
+                                                  info.type === 'requirement'
+                                                      ? info.contentId
+                                                      : undefined,
+                                              documentId: info.documentId,
+                                              linkedDocumentId:
+                                                  info.type === 'document'
+                                                      ? info.contentId
+                                                      : undefined,
+                                              hyperlinkUrl:
+                                                  info.type === 'hyperlink'
+                                                      ? info.contentId
+                                                      : undefined,
+                                              label: info.label,
+                                          });
+                                      }
+                                    : undefined
+                            }
+                        />
+                    </>
+                )}
             </div>
 
-            {lastSaved && (
-                <div className="absolute top-2.5 right-20 text-xs text-gray-400 dark:text-gray-400 z-[1000]">
-                    Last saved: {lastSaved.toLocaleTimeString()}
-                </div>
-            )}
-
             {authError && (
-                <div className="absolute top-12 left-2.5 text-sm text-red-600 bg-red-100 bg-opacity-80 p-2 rounded z-[1000]">
+                <div className="absolute top-14 left-2 text-sm text-red-600 bg-red-100 dark:bg-red-900/50 p-2 rounded z-[1000]">
                     {authError}
                 </div>
             )}
@@ -1183,43 +1499,114 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                 </DialogContent>
             </Dialog>
 
-            {/* Tooltip for requirement link */}
+            {/* Tooltip for linked elements - compact, at bottom-center of element (slight overlap OK) */}
             {linkTooltip && (
                 <div
-                    className="absolute z-[1001] px-2 py-1 bg-primary text-white text-xs rounded shadow cursor-pointer"
+                    className="absolute z-[1001] px-2 py-1 bg-gray-900/95 text-white text-xs rounded shadow-md cursor-pointer flex items-center gap-1.5 border border-gray-700/50 hover:bg-gray-800 transition-colors backdrop-blur-sm"
                     style={{
                         left: linkTooltip.x,
                         top: linkTooltip.y,
-                        transform: 'none',
+                        transform: 'translate(-50%, -100%)', // Center X, move up so bottom of tooltip is at element bottom
                     }}
-                    onClick={() => {
-                        if (typeof window !== 'undefined' && linkTooltip.requirementId) {
-                            sessionStorage.setItem(
-                                'jumpToRequirementId',
-                                linkTooltip.requirementId,
-                            );
+                    onClick={(e: React.MouseEvent) => {
+                        console.log('[LinkTooltip] Click - navigating with data:', {
+                            linkType: linkTooltip.linkType,
+                            documentId: linkTooltip.documentId,
+                            requirementId: linkTooltip.requirementId,
+                            linkedDocumentId: linkTooltip.linkedDocumentId,
+                            ctrlKey: e.ctrlKey,
+                            metaKey: e.metaKey,
+                        });
+
+                        // Check for Ctrl/Cmd+click to open in new tab (escape hatch)
+                        const openInNewTab = e.ctrlKey || e.metaKey;
+
+                        // If callback provided and not forcing new tab, use split view
+                        if (onLinkedElementClick && !openInNewTab) {
+                            const info: LinkedElementClickInfo = {
+                                type: linkTooltip.linkType,
+                                requirementId: linkTooltip.requirementId,
+                                documentId: linkTooltip.documentId,
+                                linkedDocumentId: linkTooltip.linkedDocumentId,
+                                hyperlinkUrl: linkTooltip.hyperlinkUrl,
+                                label: linkTooltip.linkLabel,
+                            };
+                            onLinkedElementClick(info);
+                            return;
                         }
 
-                        // Check if documentId exists before navigating
-                        if (linkTooltip.documentId) {
-                            router.push(
-                                `/org/${organizationId}/project/${projectId}/documents/${linkTooltip.documentId}`,
-                            );
-                        } else {
-                            console.error(
-                                'Cannot navigate: documentId is missing from element',
-                            );
+                        // Fallback: open in new tab (original behavior)
+                        if (linkTooltip.linkType === 'requirement') {
+                            // Navigate to requirement in document
+                            if (linkTooltip.documentId) {
+                                const url = `/org/${organizationId}/project/${projectId}/documents/${linkTooltip.documentId}?requirementId=${linkTooltip.requirementId}`;
+                                console.log('[LinkTooltip] Navigating to URL:', url);
+                                window.open(url, '_blank');
+                            } else {
+                                console.error(
+                                    'Cannot navigate: documentId is missing from element',
+                                );
+                            }
+                        } else if (linkTooltip.linkType === 'document') {
+                            // Navigate to document
+                            if (linkTooltip.linkedDocumentId) {
+                                const url = `/org/${organizationId}/project/${projectId}/documents/${linkTooltip.linkedDocumentId}`;
+                                window.open(url, '_blank');
+                            }
+                        } else if (linkTooltip.linkType === 'hyperlink') {
+                            // Open external hyperlink
+                            if (linkTooltip.hyperlinkUrl) {
+                                window.open(
+                                    linkTooltip.hyperlinkUrl,
+                                    '_blank',
+                                    'noopener,noreferrer',
+                                );
+                            }
                         }
                     }}
                 >
-                    Jump to Requirement
+                    {/* Color indicator dot */}
+                    <div
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: LINK_COLORS[linkTooltip.linkType] }}
+                    />
+                    {/* Link type icon */}
+                    {linkTooltip.linkType === 'requirement' && (
+                        <FileText size={11} className="flex-shrink-0 opacity-70" />
+                    )}
+                    {linkTooltip.linkType === 'document' && (
+                        <Link2 size={11} className="flex-shrink-0 opacity-70" />
+                    )}
+                    {linkTooltip.linkType === 'hyperlink' && (
+                        <ExternalLink size={11} className="flex-shrink-0 opacity-70" />
+                    )}
+                    {/* Label text */}
+                    <span className="truncate max-w-[180px]">
+                        {linkTooltip.linkLabel ||
+                            (linkTooltip.linkType === 'requirement'
+                                ? 'Jump to Requirement'
+                                : linkTooltip.linkType === 'document'
+                                  ? 'Open Document'
+                                  : linkTooltip.hyperlinkUrl)}
+                    </span>
+                    {/* Subtle external link indicator */}
+                    <ExternalLink size={10} className="flex-shrink-0 opacity-40" />
+                    {/* Small triangle pointer pointing down to element */}
+                    <div
+                        className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-0 h-0"
+                        style={{
+                            borderLeft: '4px solid transparent',
+                            borderRight: '4px solid transparent',
+                            borderTop: '4px solid rgb(17 24 39 / 0.95)',
+                        }}
+                    />
                 </div>
             )}
 
-            {/* Bounding box overlay for diagram from requirement */}
+            {/* Bounding box overlay for linked elements */}
             {boundingBoxOverlay && excalidrawApiRef.current && (
                 <div
-                    className="absolute z-[1000] pointer-events-none border-2 border-primary rounded-md"
+                    className="absolute z-[1000] pointer-events-none rounded-md"
                     style={{
                         left:
                             (boundingBoxOverlay.x +
@@ -1236,6 +1623,7 @@ const ExcalidrawWrapper: React.FC<ExcalidrawWrapperProps> = ({
                             boundingBoxOverlay.height *
                             excalidrawApiRef.current.getAppState().zoom.value,
                         opacity: 0.5,
+                        border: `2px solid ${linkTooltip ? LINK_COLORS[linkTooltip.linkType] : LINK_COLORS.requirement}`,
                     }}
                 />
             )}

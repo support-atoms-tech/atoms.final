@@ -69,6 +69,20 @@ export default {
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)',
             },
+            keyframes: {
+                'slide-in-right': {
+                    '0%': { transform: 'translateX(100%)', opacity: '0' },
+                    '100%': { transform: 'translateX(0)', opacity: '1' },
+                },
+                'slide-out-right': {
+                    '0%': { transform: 'translateX(0)', opacity: '1' },
+                    '100%': { transform: 'translateX(100%)', opacity: '0' },
+                },
+            },
+            animation: {
+                'slide-in-right': 'slide-in-right 150ms ease-out',
+                'slide-out-right': 'slide-out-right 150ms ease-in',
+            },
         },
     },
     plugins: [tailwindcssAnimate],

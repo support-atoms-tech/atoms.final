@@ -5,14 +5,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { cn } from '@/lib/utils';
-import { Database } from '@/types/base/database.types';
 
-type Requirement = Pick<
-    Database['public']['Tables']['requirements']['Row'],
-    'id' | 'name' | 'external_id' | 'description' | 'document_id'
->;
+interface Requirement {
+    id: string;
+    name: string;
+    external_id: string | null;
+    description: string | null;
+    document_id: string;
+}
 
 interface RequirementPickerProps {
     projectId: string;
@@ -40,58 +41,62 @@ export function RequirementPicker({
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
-    // Get authenticated Supabase client
-    const {
-        supabase,
-        isLoading: isAuthLoading,
-        error: authError,
-    } = useAuthenticatedSupabase();
-
-    // Fetch requirements for the project
+    // Fetch requirements via API route (bypasses RLS issues with service role client)
     useEffect(() => {
         const fetchRequirements = async () => {
-            if (!projectId || !supabase || isAuthLoading) return;
+            if (!projectId) return;
 
             setIsFetching(true);
             setFetchError(null);
 
             try {
-                // First, fetch all documents in the project
-                const { data: documents, error: docsError } = await supabase
-                    .from('documents')
-                    .select('id')
-                    .eq('project_id', projectId);
+                const response = await fetch(`/api/projects/${projectId}/requirements`);
 
-                if (docsError) {
-                    console.error('Error fetching documents:', docsError);
-                    setFetchError('Failed to load project documents');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Error fetching requirements:', errorData);
+                    setFetchError(errorData.error || 'Failed to load requirements');
                     return;
                 }
 
-                if (!documents || documents.length === 0) {
-                    // No documents in project - not an error, just empty state
-                    setRequirements([]);
-                    return;
+                const { requirements: data } = await response.json();
+
+                // Map the result to match our Requirement type
+                // Note: API returns nested `documents` object from JOIN, need to extract document_id
+                const mappedRequirements = (data || []).map(
+                    (item: Record<string, unknown>) => {
+                        // Handle both nested documents object (from JOIN) and flat document_id
+                        const documents = item.documents as { id: string } | undefined;
+                        const documentId = documents?.id || (item.document_id as string);
+
+                        return {
+                            id: item.id as string,
+                            name: item.name as string,
+                            external_id: item.external_id as string | null,
+                            description: item.description as string | null,
+                            document_id: documentId,
+                        };
+                    },
+                );
+
+                // Deduplicate requirements by ID (JOIN query can return duplicates)
+                const uniqueRequirements: Requirement[] = Array.from(
+                    new Map<string, Requirement>(
+                        mappedRequirements.map((r: Requirement) => [r.id, r]),
+                    ).values(),
+                );
+
+                // Debug: Log requirements count for diagnosis
+                console.log(
+                    `[RequirementPicker] Fetched ${mappedRequirements.length} requirements, ${uniqueRequirements.length} unique for project ${projectId}`,
+                );
+                if (uniqueRequirements.length === 0) {
+                    console.log(
+                        '[RequirementPicker] No requirements found - check if requirements exist in this project',
+                    );
                 }
 
-                const documentIds = documents.map((doc) => doc.id);
-
-                // Now fetch requirements from those documents
-                const { data, error } = await supabase
-                    .from('requirements')
-                    .select('id, name, external_id, description, document_id')
-                    .in('document_id', documentIds)
-                    .is('is_deleted', false)
-                    .order('name', { ascending: true })
-                    .limit(100);
-
-                if (error) {
-                    console.error('Error fetching requirements:', error);
-                    setFetchError('Failed to load requirements');
-                    return;
-                }
-
-                setRequirements(data || []);
+                setRequirements(uniqueRequirements);
             } catch (err) {
                 console.error('Error in fetchRequirements:', err);
                 setFetchError('An unexpected error occurred');
@@ -101,7 +106,7 @@ export function RequirementPicker({
         };
 
         fetchRequirements();
-    }, [projectId, supabase, isAuthLoading]);
+    }, [projectId]);
 
     // Filter requirements based on search query
     const filteredRequirements = useMemo(() => {
@@ -162,11 +167,7 @@ export function RequirementPicker({
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <ScrollArea className="h-[300px]">
-                    {authError ? (
-                        <div className="p-4 text-center text-sm text-destructive">
-                            Authentication error: {authError}
-                        </div>
-                    ) : isAuthLoading || isFetching ? (
+                    {isFetching ? (
                         <div className="p-4 text-center text-sm text-muted-foreground">
                             Loading requirements...
                         </div>

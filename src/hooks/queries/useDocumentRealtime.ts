@@ -105,15 +105,28 @@ export const useDocumentRealtime = ({
 
                 if (blocksError) throw blocksError;
 
-                // Fetch requirements for all blocks
-                const { data: requirementsData, error: requirementsError } = await client
-                    .from('requirements')
-                    .select('*')
-                    .is('is_deleted', false)
-                    .eq('document_id', documentId)
-                    .order('position');
-
-                if (requirementsError) throw requirementsError;
+                // Fetch requirements through API to bypass RLS issues with WorkOS org ID comparison
+                let requirementsData: Requirement[] = [];
+                try {
+                    const reqRes = await fetch(
+                        `/api/documents/${documentId}/requirements`,
+                        {
+                            method: 'GET',
+                            cache: 'no-store',
+                        },
+                    );
+                    if (!reqRes.ok) {
+                        const errorText = await reqRes.text();
+                        throw new Error(
+                            `Requirements API error: ${reqRes.status} ${errorText}`,
+                        );
+                    }
+                    const reqPayload = await reqRes.json();
+                    requirementsData = (reqPayload.requirements || []) as Requirement[];
+                } catch (e) {
+                    console.error('❌ Requirements fetch error:', e);
+                    throw e;
+                }
 
                 // Fetch columns for table blocks
                 const tableBlocks = blocksData.filter((block) => block.type === 'table');
@@ -230,17 +243,25 @@ export const useDocumentRealtime = ({
                     throw new Error(authError ?? 'Supabase client not available');
                 }
 
-                const client = supabase;
-
-                // Fetch requirements for the block
-                const { data: requirementsData, error: requirementsError } = await client
-                    .from('requirements')
-                    .select('*')
-                    .is('is_deleted', false)
-                    .eq('block_id', blockId)
-                    .order('position');
-
-                if (requirementsError) throw requirementsError;
+                // Fetch requirements for the block via API to bypass RLS issues
+                let requirementsData: Requirement[] = [];
+                try {
+                    const reqRes = await fetch(
+                        `/api/documents/${documentId}/requirements?blockId=${blockId}`,
+                        { method: 'GET', cache: 'no-store' },
+                    );
+                    if (!reqRes.ok) {
+                        const errorText = await reqRes.text();
+                        throw new Error(
+                            `Requirements API error: ${reqRes.status} ${errorText}`,
+                        );
+                    }
+                    const reqPayload = await reqRes.json();
+                    requirementsData = (reqPayload.requirements || []) as Requirement[];
+                } catch (e) {
+                    console.error('❌ Block requirements fetch error:', e);
+                    throw e;
+                }
 
                 // Fetch columns for the block via API route
                 let columnsData: ColumnRow[] = [] as unknown as ColumnRow[];
