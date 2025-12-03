@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { ProjectRole } from '@/lib/auth/permissions';
 import { queryKeys } from '@/lib/constants/queryKeys';
-import { debugConfig } from '@/lib/utils/env-validation';
 import { Project } from '@/types/base/projects.types';
 
 const useSupabaseClientOrThrow = () => {
@@ -61,19 +60,7 @@ export function useCreateProject() {
                 owned_by: input.owned_by,
             };
 
-            // Log exact query for RLS diagnosis
-            if (debugConfig.debugRLSQueries()) {
-                console.log('=== PROJECT INSERT QUERY DEBUG ===');
-                console.log(
-                    'Endpoint:',
-                    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/projects?select=*`,
-                );
-                console.log('Method:', 'POST');
-                console.log('Payload:', JSON.stringify(insertPayload, null, 2));
-                console.log('User ID:', input.owned_by);
-                console.log('Organization ID:', input.organization_id);
-                console.log('===================================');
-            }
+            console.log('Insert Payload: ', insertPayload);
 
             // Create the project
             const { data: project, error: projectError } = await client

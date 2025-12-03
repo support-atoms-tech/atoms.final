@@ -22,7 +22,6 @@ import { useToast } from '@/components/ui/use-toast';
 import { useCreateBaseOrgProperties } from '@/hooks/mutations/useDocumentMutations';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useUser } from '@/lib/providers/user.provider';
-import { debugConfig } from '@/lib/utils/env-validation';
 import {
     BillingPlan,
     OrganizationType,
@@ -125,16 +124,6 @@ export default function OrganizationForm({ onSuccess }: OrganizationFormProps) {
                 max_members: 5, // Default values
                 max_monthly_requests: 1000, // Default values
             };
-
-            // Debug logging
-            if (debugConfig.debugRLSQueries()) {
-                console.log('=== ORGANIZATION INSERT DEBUG ===');
-                console.log('User ID:', user.id);
-                console.log('User ID type:', typeof user.id);
-                console.log('User ID length:', user.id.length);
-                console.log('Insert payload:', JSON.stringify(insertPayload, null, 2));
-                console.log('================================');
-            }
 
             const { data: orgData, error: orgError } = await supabase
                 .from('organizations')

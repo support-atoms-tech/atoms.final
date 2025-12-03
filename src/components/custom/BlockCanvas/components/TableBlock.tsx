@@ -676,7 +676,6 @@ export const TableBlock: React.FC<BlockProps> = ({
                     defaultValue,
                     block.id,
                     userProfile.id,
-                    'TableBlock:addColumn:new',
                 );
                 // optimistically add the new column to local state for immediate ui feedback
                 if (result?.column) {
@@ -724,7 +723,6 @@ export const TableBlock: React.FC<BlockProps> = ({
                     defaultValue,
                     block.id,
                     userProfile.id,
-                    'TableBlock:addColumn:fromProperty',
                 );
                 if (result?.column) {
                     setOptimisticColumns((prev) => {

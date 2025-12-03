@@ -5,7 +5,6 @@ import { getOrCreateProfileForWorkOSUser } from '@/lib/auth/profile-sync';
 import { getDocumentDataServer } from '@/lib/db/server/documents.server';
 // No user-scoped client needed here; use service role for insertion to avoid UUID casting issues in policies
 import { getSupabaseServiceRoleClient } from '@/lib/supabase/supabase-service-role';
-import { debugConfig } from '@/lib/utils/env-validation';
 import { Json, TablesInsert } from '@/types/base/database.types';
 
 /**
@@ -152,8 +151,6 @@ export async function POST(
         const isRequirementsTable =
             tableKind === 'requirements' || tableKind === 'requirements_default';
 
-        const debugTable = debugConfig.debugLogging();
-
         let responseColumns: unknown[] = [];
         let blockWithContent = block;
         if (isRequirementsTable && organizationId) {
@@ -190,31 +187,6 @@ export async function POST(
                         propsErr,
                     );
                 } else if (Array.isArray(baseProps) && baseProps.length > 0) {
-                    if (debugTable) {
-                        const counts = baseProps.reduce<Record<string, number>>(
-                            (acc, prop) => {
-                                const key = (prop.name || '').toLowerCase().trim();
-                                if (!key) return acc;
-                                acc[key] = (acc[key] || 0) + 1;
-                                return acc;
-                            },
-                            {},
-                        );
-                        const duplicates = Object.entries(counts)
-                            .filter(([, count]) => count > 1)
-                            .map(([name, count]) => ({ name, count }));
-                        console.warn(
-                            '[Blocks API] Base properties for requirements table',
-                            {
-                                organizationId,
-                                documentId,
-                                blockId: block.id,
-                                basePropertyCount: baseProps.length,
-                                duplicates,
-                            },
-                        );
-                    }
-
                     const order = [
                         'external_id',
                         'name',

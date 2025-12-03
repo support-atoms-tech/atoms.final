@@ -161,67 +161,6 @@ export const isFeatureEnabled = {
 };
 
 /**
- * Centralized Debug Configuration
- *
- * Debug flags for development and troubleshooting.
- * These can be enabled via environment variables (NEXT_PUBLIC_DEBUG_*)
- * or by modifying the default values below.
- *
- * For team members: To enable debug logging, set the corresponding
- * environment variable to 'true' in your .env.local file, or modify
- * the default values in this configuration object.
- *
- * Note: These flags are automatically disabled in production builds
- * to prevent accidental exposure of debug information.
- */
-export const debugConfig = {
-    /**
-     * Enable detailed RLS (Row Level Security) query logging
-     * Helps diagnose permission issues with Supabase queries
-     */
-    debugRLSQueries: () => {
-        if (isProduction()) return false;
-        if (!env.ENABLE_DEBUG_LOGGING) return false;
-        return true;
-    },
-
-    /**
-     * Enable general debug logging (client/server)
-     * Controlled solely by ENABLE_DEBUG_LOGGING
-     */
-    debugLogging: () => {
-        if (isProduction()) return false;
-
-        if (typeof document !== 'undefined') {
-            const attr = document.body?.dataset?.enableDebugLogging;
-            if (typeof attr === 'string') {
-                return attr === 'true';
-            }
-        }
-
-        if (typeof window !== 'undefined') {
-            const winFlag = (
-                window as typeof window & {
-                    __ENABLE_DEBUG_LOGGING__?: boolean;
-                }
-            ).__ENABLE_DEBUG_LOGGING__;
-            if (typeof winFlag === 'boolean') {
-                return winFlag;
-            }
-        }
-
-        if (
-            typeof process !== 'undefined' &&
-            process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGGING === 'true'
-        ) {
-            return true;
-        }
-
-        return Boolean(env.ENABLE_DEBUG_LOGGING);
-    },
-};
-
-/**
  * API configuration helpers
  */
 export const apiConfig = {

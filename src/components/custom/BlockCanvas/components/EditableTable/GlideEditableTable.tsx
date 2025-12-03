@@ -51,7 +51,6 @@ import { dedupeColumnMetadataEntries } from '@/components/custom/BlockCanvas/uti
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useBroadcastCellUpdate } from '@/hooks/useBroadcastCellUpdate';
 import { useUser } from '@/lib/providers/user.provider';
-import { debugConfig } from '@/lib/utils/env-validation';
 import { useDocumentStore } from '@/store/document.store';
 
 import { DeleteConfirmDialog, TableControls, TableLoadingSkeleton } from './components';
@@ -76,9 +75,6 @@ const logTableDebug = (
     message: string,
     context?: Record<string, unknown> | undefined,
 ) => {
-    if (!debugConfig.debugLogging()) {
-        return;
-    }
     if (context) {
         console.log(`[GlideEditableTable] ${message}`, context);
     } else {
@@ -894,19 +890,9 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 return await pasteState.columnConfirmationPromise;
             }
 
-            if (debugConfig.debugLogging()) {
-                console.warn('[TableColumns] Starting column confirmation barrier', {
-                    tableId,
-                    documentId,
-                    blockId,
-                    columnIds,
-                    operationId,
-                });
-            } else {
-                console.debug(
-                    `[${operationId}] Starting column confirmation barrier for table ${tableId} with ${columnIds.length} columns...`,
-                );
-            }
+            console.debug(
+                `[${operationId}] Starting column confirmation barrier for table ${tableId} with ${columnIds.length} columns...`,
+            );
 
             const confirmationPromise = (async (): Promise<boolean> => {
                 try {
@@ -1414,16 +1400,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                     includeRows,
                     payload: metadataToSave,
                 });
-
-                if (debugConfig.debugLogging() && includeColumns) {
-                    console.warn('[TableColumns] Persisting column metadata snapshot', {
-                        blockId,
-                        documentId,
-                        columns: (metadataToSave.columns || []).slice(0, 10),
-                        columnCount: metadataToSave.columns?.length ?? 0,
-                        source: 'saveTableMetadata',
-                    });
-                }
 
                 await updateBlockMetadata(blockId, metadataToSave);
 
@@ -4115,20 +4091,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                 }> = [];
                 if (columnsNeeded > currentColumns.length) {
                     const existingColumnCount = currentColumns.length;
-                    if (debugConfig.debugLogging()) {
-                        console.warn(
-                            '[TableColumns] Missing columns detected during paste',
-                            {
-                                blockId,
-                                documentId,
-                                operationId,
-                                existingColumnCount,
-                                columnsNeeded,
-                                startColumn: startColFinal,
-                                maxPastedColumns,
-                            },
-                        );
-                    }
 
                     // Find the highest numbered "Column X" to determine next index
                     let highestColumnNumber = 0;
@@ -4310,20 +4272,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                         );
                                         const createStart = Date.now();
 
-                                        if (debugConfig.debugLogging()) {
-                                            console.warn(
-                                                '[TableColumns] Auto-creating column via createPropertyAndColumn',
-                                                {
-                                                    blockId,
-                                                    documentId,
-                                                    operationId,
-                                                    name,
-                                                    position,
-                                                    tempId,
-                                                    context: 'paste_sync:auto-create',
-                                                },
-                                            );
-                                        }
                                         const columnPromise = createPropertyAndColumn(
                                             name,
                                             'text',
@@ -4337,7 +4285,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             '',
                                             blockId,
                                             userId || '',
-                                            'paste_sync:auto-create',
                                         );
 
                                         // Store promise in both the Map (for tracking) and array (for Promise.all)
@@ -6807,7 +6754,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                                 defaultValue,
                                                 blockId,
                                                 userId,
-                                                'AddColumnDialog:new',
                                             );
 
                                         const newCol: any = {
@@ -6877,7 +6823,6 @@ export function GlideEditableTable<T extends BaseRow = BaseRow>(
                                             defaultValue,
                                             blockId,
                                             userId,
-                                            'AddColumnDialog:fromProperty',
                                         );
                                         const column = result.column;
                                         const property = result.property as
