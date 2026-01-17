@@ -1,3 +1,6 @@
+'use client';
+
+import { motion } from 'framer-motion';
 import { ArrowRightLeft, Layers, MessageCircle, Zap } from 'lucide-react';
 
 const groundbreakingFeatures = [
@@ -28,16 +31,25 @@ export function PolarionWhyGroundbreaking() {
             <div className="absolute top-0 left-0 w-full h-1 bg-white" />
             <div className="container mx-auto px-4">
                 {/* Section Title */}
-                <h2 className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center">
+                <motion.h2
+                    initial={{ opacity: 0, y: -20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}
+                    className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center"
+                >
                     WHY IT&apos;S GROUNDBREAKING
-                </h2>
+                </motion.h2>
 
                 {/* Features Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-16 lg:gap-24 max-w-6xl mx-auto">
                     {groundbreakingFeatures.map((feature, index) => (
-                        <div
+                        <motion.div
                             key={index}
-                            className="group relative border-t-2 border-white pt-8 hover:transform hover:scale-105 transition-all duration-300"
+                            initial={{ opacity: 0, y: 30 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6, delay: index * 0.15 }}
+                            whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+                            className="group relative border-t-2 border-white pt-8 will-change-transform"
                         >
                             {/* Title with Icon */}
                             <h3 className="text-xl md:text-2xl lg:text-3xl font-black mb-4 text-white tracking-tight flex items-start">
@@ -52,17 +64,22 @@ export function PolarionWhyGroundbreaking() {
 
                             {/* Hover Effect Line */}
                             <div className="absolute bottom-0 left-0 w-0 h-1 bg-white group-hover:w-full transition-all duration-300" />
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
 
                 {/* Additional Note */}
-                <div className="mt-16 md:mt-24 text-center">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.4 }}
+                    className="mt-16 md:mt-24 text-center"
+                >
                     <p className="text-lg md:text-xl text-[#B5B5B5] max-w-4xl mx-auto leading-relaxed">
                         (Read-only today for total data safety. Write-back lands next
                         release.)
                     </p>
-                </div>
+                </motion.div>
             </div>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-white" />
         </section>

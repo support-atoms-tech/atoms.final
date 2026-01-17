@@ -7,6 +7,7 @@ import { PolarionDemo } from '@/components/custom/Polarion/demo';
 import { PolarionHero } from '@/components/custom/Polarion/hero';
 import { PolarionImpact } from '@/components/custom/Polarion/impact';
 import { PolarionWhyGroundbreaking } from '@/components/custom/Polarion/why-groundbreaking';
+import { ScrollToTop } from '@/components/ui/scroll-to-top';
 
 export const metadata: Metadata = {
     title: 'Polarion Integration - ATOMS',
@@ -37,6 +38,7 @@ export default function Home() {
                     </div>
                 </main>
             </div>
+            <ScrollToTop />
         </div>
     );
 }

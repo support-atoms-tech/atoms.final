@@ -1,7 +1,26 @@
 'use client';
 
-import { AlertTriangle, Code, FileText } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { AlertTriangle, FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+
+// Custom Code Icon Component
+const CodeIcon = ({ className }: { className?: string }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+    >
+        <polyline points="16 18 22 12 16 6" />
+        <polyline points="8 6 2 12 8 18" />
+        <line x1="14" y1="4" x2="10" y2="20" stroke="white" />
+    </svg>
+);
 
 const demoFeatures = [
     {
@@ -18,7 +37,7 @@ const demoFeatures = [
         title: 'Code & Tests from Every Requirement',
         description:
             'Generates implementation and unit tests, grounded in your full spec—REQ IDs preserved.',
-        icon: Code,
+        icon: CodeIcon,
     },
 ];
 
@@ -56,11 +75,21 @@ export function PolarionDemo() {
             <div className="container mx-auto px-4">
                 {/* Demo Image */}
                 {/* Section Title */}
-                <h2 className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center">
+                <motion.h2
+                    initial={{ opacity: 0, y: -20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}
+                    className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center"
+                >
                     SEE IT IN ACTION
-                </h2>
+                </motion.h2>
 
-                <div className="relative">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.8 }}
+                    className="relative"
+                >
                     {/* Floating Demo Container */}
                     <div className="relative group">
                         {/* Main Image Container */}
@@ -82,7 +111,28 @@ export function PolarionDemo() {
                     </div>
 
                     {/* Feature Callouts */}
-                    <div className="absolute -left-8 top-1/2 transform -translate-y-1/2 hidden xl:block">
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6, delay: 0.3 }}
+                        className="absolute -left-8 top-[30%] transform -translate-y-1/2 hidden xl:block"
+                    >
+                        <div className="bg-white/40 backdrop-blur-md rounded-lg p-4 border border-white/30 shadow-lg">
+                            <div className="text-[#9B51E0] font-bold text-sm mb-1">
+                                Work Items
+                            </div>
+                            <div className="text-[#9B51E0] text-xs">
+                                Instant access & updates
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6, delay: 0.3 }}
+                        className="absolute -right-8 bottom-1/4 hidden xl:block"
+                    >
                         <div className="bg-white/40 backdrop-blur-md rounded-lg p-4 border border-white/30 shadow-lg">
                             <div className="text-white font-bold text-sm mb-1">
                                 AI Chat
@@ -91,25 +141,18 @@ export function PolarionDemo() {
                                 Natural language queries
                             </div>
                         </div>
-                    </div>
-
-                    <div className="absolute -right-8 bottom-1/4 hidden xl:block">
-                        <div className="bg-white/40 backdrop-blur-md rounded-lg p-4 border border-white/30 shadow-lg">
-                            <div className="text-white font-bold text-sm mb-1">
-                                Work Items
-                            </div>
-                            <div className="text-[#E5E5E5] text-xs">
-                                Instant access & updates
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
                 {/* Demo Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-16 lg:gap-24 max-w-6xl mx-auto">
                     {demoFeatures.map((feature, index) => (
-                        <div
+                        <motion.div
                             key={index}
-                            className="group relative border-t-2 border-white pt-8 text-center hover:transform hover:scale-105 transition-all duration-300"
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: index * 0.2 }}
+                            whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+                            className="group relative border-t-2 border-white pt-8 text-center will-change-transform"
                         >
                             {/* Icon */}
                             <div className="mb-6 flex justify-center">
@@ -128,7 +171,7 @@ export function PolarionDemo() {
 
                             {/* Hover Effect Line */}
                             <div className="absolute bottom-0 left-0 w-0 h-1 bg-white group-hover:w-full transition-all duration-300" />
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
             </div>

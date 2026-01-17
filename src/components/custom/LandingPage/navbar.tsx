@@ -24,6 +24,8 @@ export function Navbar() {
     const pathName = usePathname();
     const cookies = useCookies();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState('');
+    const [hasAnimated, setHasAnimated] = useState(false);
     const { isAuthenticated, isLoading, userProfile } = useAuth();
     const { signOut, isLoading: isSigningOut } = useSignOut();
     const router = useRouter();
@@ -35,6 +37,15 @@ export function Navbar() {
     const [, setPreferredOrgId] = useState<string | null>(null);
     const [_showLoadingSkeleton, _setShowLoadingSkeleton] = useState(false);
     const { getClientOrThrow } = useAuthenticatedSupabase();
+
+    // Trigger logo animation on first load
+    useEffect(() => {
+        // Set hasAnimated to true after animation completes (1 second)
+        const timer = setTimeout(() => {
+            setHasAnimated(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, []);
 
     useEffect(() => {
         const cookieOrgId = cookies.get('preferred_org_id');
@@ -53,23 +64,87 @@ export function Navbar() {
     }, [router]);
 
     const navLinks = [
-        { href: '/#features', label: 'Features' },
-        { href: '/#industries', label: 'Industries' },
-        { href: '/polarion', label: 'Polarion' },
-        { href: '/#contact', label: 'Contact' },
+        { href: '/#features', label: 'Features', section: 'features' },
+        { href: '/#industries', label: 'Industries', section: 'industries' },
+        { href: '/', label: 'Polarion', section: 'polarion' },
+        { href: '/#contact', label: 'Contact', section: 'contact' },
     ];
 
-    const NavLink = ({ href, label }: { href: string; label: string }) => (
-        <Link
-            href={href}
-            className="relative group text-lg text-white hover:text-gray-300 transition-colors uppercase font-bold whitespace-nowrap"
-            onClick={() => setIsMenuOpen(false)}
-        >
-            <span className="hidden md:inline lg:hidden">{label}</span>
-            <span className="inline md:hidden lg:inline">{label}</span>
-            <div className="absolute w-0 h-0.5 bg-primary group-hover:w-full transition-all duration-300" />
-        </Link>
-    );
+    useEffect(() => {
+        const handleScroll = () => {
+            // Only check scroll sections if we're on the home page
+            if (pathName === '/') {
+                const sections = ['features', 'industries', 'contact'];
+                const scrollPosition = window.scrollY + 150; // Offset from top
+
+                let currentSection = '';
+                let closestSection = '';
+                let closestDistance = Infinity;
+
+                // Find which section is currently in view or closest
+                for (const section of sections) {
+                    const element = document.getElementById(section);
+                    if (element) {
+                        const { offsetTop, offsetHeight } = element;
+                        const sectionMiddle = offsetTop + offsetHeight / 2;
+                        const distance = Math.abs(scrollPosition - sectionMiddle);
+
+                        // Check if scroll position is within section
+                        if (
+                            scrollPosition >= offsetTop &&
+                            scrollPosition < offsetTop + offsetHeight
+                        ) {
+                            currentSection = section;
+                            break;
+                        }
+
+                        // Track closest section
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            closestSection = section;
+                        }
+                    }
+                }
+
+                // Use current section if found, otherwise use closest
+                setActiveSection(currentSection || closestSection);
+            }
+        };
+
+        handleScroll();
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [pathName]);
+
+    const NavLink = ({
+        href,
+        label,
+        section,
+    }: {
+        href: string;
+        label: string;
+        section: string;
+    }) => {
+        const isActive = activeSection === section;
+
+        return (
+            <Link
+                href={href}
+                scroll={true}
+                className={`relative group text-lg uppercase font-bold whitespace-nowrap transition-colors ${
+                    isActive ? 'text-[#9B51E0]' : 'text-white hover:text-white'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+            >
+                {label}
+                <div
+                    className={`absolute bottom-0 left-0 h-0.5 bg-[#9B51E0] transition-all duration-300 ${
+                        isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                />
+            </Link>
+        );
+    };
 
     const setLoading = useCallback(
         (key: keyof typeof loadingStates, isLoading: boolean) => {
@@ -173,7 +248,7 @@ export function Navbar() {
                     </div>
                 </div>
             )}
-            <header className="fixed top-0 left-0 right-0 h-16 bg-black/90 backdrop-blur-md text-white border-b border-1px border-white z-50">
+            <header className="fixed top-0 left-0 right-0 h-16 bg-black/90 backdrop-blur-md text-white border-b border-white shadow-[0_1px_8px_0_rgba(255,255,255,0.3)] z-50">
                 {/* Show full-screen loading overlay when navigating to dashboard */}
 
                 <div className="relative h-full">
@@ -188,7 +263,9 @@ export function Navbar() {
                                     alt="Atoms logo"
                                     width={40}
                                     height={40}
-                                    className="object-contain invert object-center w-full h-full"
+                                    className={`object-contain invert object-center w-full h-full ${
+                                        !hasAnimated ? 'animate-logo-spin' : ''
+                                    }`}
                                     priority
                                 />
                             </div>
