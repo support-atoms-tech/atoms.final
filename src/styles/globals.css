@@ -359,3 +359,10 @@
         @apply bg-background text-foreground;
     }
 }
+
+/* Smooth FAQ accordion animations - Disable Radix defaults, let Framer Motion handle it */
+[data-radix-collapsible-content] {
+    animation: none !important;
+    transition: none !important;
+    overflow: hidden;
+}

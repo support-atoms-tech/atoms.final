@@ -24,11 +24,13 @@ export function PolarionHero() {
                                 initial={{ opacity: 0, y: -30 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.8, delay: 0.2 }}
-                                className="text-[32px] xs:text-[40px] sm:text-[48px] md:text-[64px] lg:text-[80px] xl:text-[96px] 2xl:text-[112px] font-black tracking-tighter text-white leading-none mb-8"
+                                className="font-black tracking-tighter text-white leading-none mb-8"
                             >
-                                <span className="block">POLARION</span>
-                                <span className="block whitespace-nowrap">
-                                    MEET CURSOR-LEVEL AI
+                                <span className="block text-[40px] xs:text-[48px] sm:text-[56px] md:text-[70px] lg:text-[86px] xl:text-[102px] 2xl:text-[114px]">
+                                    POLARION
+                                </span>
+                                <span className="block whitespace-nowrap text-[36px] xs:text-[44px] sm:text-[52px] md:text-[66px] lg:text-[82px] xl:text-[98px] 2xl:text-[110px]">
+                                    MEET CLAUDE-LEVEL AI
                                 </span>
                             </motion.h1>
 
@@ -50,8 +52,8 @@ export function PolarionHero() {
                                         separator=", "
                                         manualMode={false}
                                         blurAmount={3}
-                                        borderColor="#a78bfa"
-                                        glowColor="rgba(167, 139, 250, 0.6)"
+                                        borderColor="#7F00FF"
+                                        glowColor="rgba(127, 0, 255, 0.6)"
                                         animationDuration={0.8}
                                         pauseBetweenAnimations={1.5}
                                     />
@@ -70,10 +72,11 @@ export function PolarionHero() {
                                     color="white"
                                     speed="4s"
                                     thickness={2}
+                                    rounded={false}
                                     className="hover:scale-105 transition-transform duration-200"
                                 >
                                     <button
-                                        className="inline-flex items-center justify-center gap-2 relative overflow-hidden p-0.5 rounded-full group bg-gradient-to-br from-purple-600 to-blue-500"
+                                        className="inline-flex items-center justify-center gap-2 relative overflow-hidden p-0.5 group bg-gradient-to-br from-purple-600 to-blue-500"
                                         onClick={() =>
                                             window.open(
                                                 'mailto:hello@atoms.tech?subject=Polarian - ATOMS',
@@ -81,7 +84,7 @@ export function PolarionHero() {
                                             )
                                         }
                                     >
-                                        <span className="relative px-16 py-8 text-xl font-semibold text-white bg-black rounded-full group-hover:bg-gradient-to-br group-hover:from-purple-600 group-hover:to-blue-500 transition-all duration-200">
+                                        <span className="relative px-6 py-3 sm:px-8 sm:py-4 md:px-10 md:py-5 lg:px-12 lg:py-6 text-sm sm:text-base md:text-lg lg:text-xl font-semibold text-white bg-black group-hover:bg-[#7F00FF] transition-all duration-200">
                                             REQUEST DEMO
                                         </span>
                                     </button>

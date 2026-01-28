@@ -103,13 +103,13 @@ jobs:
 
             - name: Check for changes
               run: |
-                  if ! git diff --quiet; then
+                  if ! git diff --quiet -- src; then
                     echo "=== FILES THAT NEED FORMATTING ==="
-                    git diff --name-only
+                    git diff --name-only -- src
                     echo "\n=== DETAILED CHANGES ==="
-                    git diff --color
+                    git diff --color -- src
                     echo "\n=== LINE ENDING CHECK ==="
-                    git diff | grep -E '[\+\-]$' || echo "No line ending issues detected"
+                    git diff -- src | grep -E '[\+\-]$' || echo "No line ending issues detected"
                     echo "\nPrettier detected unformatted files. Please run 'bun prettier src --write' and commit changes."
                     exit 1
                   else

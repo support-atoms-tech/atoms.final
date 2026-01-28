@@ -46,6 +46,7 @@ export default function RootLayout({
                 <body
                     className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
                     data-enable-debug-logging={enableDebugLogging ? 'true' : 'false'}
+                    suppressHydrationWarning
                 >
                     <AuthKitProvider>
                         <CookiesProvider>

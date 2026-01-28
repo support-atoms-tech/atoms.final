@@ -7,6 +7,7 @@ type StarBorderProps<T extends React.ElementType> = React.ComponentPropsWithoutR
     color?: string;
     speed?: React.CSSProperties['animationDuration'];
     thickness?: number;
+    rounded?: boolean;
 };
 
 const StarBorder = <T extends React.ElementType = 'button'>({
@@ -15,6 +16,7 @@ const StarBorder = <T extends React.ElementType = 'button'>({
     color = 'white',
     speed = '5s',
     thickness = 2,
+    rounded = true,
     children,
     ...rest
 }: StarBorderProps<T>) => {
@@ -22,7 +24,7 @@ const StarBorder = <T extends React.ElementType = 'button'>({
 
     return (
         <Component
-            className={`relative inline-block overflow-hidden rounded-full ${className}`}
+            className={`relative inline-block overflow-hidden ${rounded ? 'rounded-full' : ''} ${className}`}
             {...(rest as React.ComponentPropsWithoutRef<T>)}
             style={{
                 padding: `${thickness}px 0`,

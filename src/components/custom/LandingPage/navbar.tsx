@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { Loader2, Menu, User, X } from 'lucide-react';
 import { useCookies } from 'next-client-cookies';
 import Image from 'next/image';
@@ -37,6 +38,29 @@ export function Navbar() {
     const [, setPreferredOrgId] = useState<string | null>(null);
     const [_showLoadingSkeleton, _setShowLoadingSkeleton] = useState(false);
     const { getClientOrThrow } = useAuthenticatedSupabase();
+    const OFFSET_PX = 16;
+    const [navYOffset, setNavYOffset] = useState(OFFSET_PX); // Start expanded at top
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // Set initial state based on scroll position
+        setNavYOffset(window.scrollY === 0 ? OFFSET_PX : 0);
+
+        const onScroll = () => {
+            const currentY = window.scrollY;
+
+            // Expanded when at the very top, collapsed otherwise
+            if (currentY === 0) {
+                setNavYOffset(OFFSET_PX);
+            } else {
+                setNavYOffset(0);
+            }
+        };
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     // Trigger logo animation on first load
     useEffect(() => {
@@ -235,6 +259,13 @@ export function Navbar() {
 
     return (
         <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: navYOffset === 0 ? 0 : 1 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="pointer-events-none fixed top-0 left-0 right-0 z-40 bg-black/40 backdrop-blur-xl"
+                style={{ height: OFFSET_PX + 12 }}
+            />
             {loadingStates.dashboard && (
                 <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
                     <div className="flex flex-col items-center space-y-4 text-center px-4">
@@ -248,7 +279,21 @@ export function Navbar() {
                     </div>
                 </div>
             )}
-            <header className="fixed top-0 left-0 right-0 h-16 bg-black/90 backdrop-blur-md text-white border-b border-white shadow-[0_1px_8px_0_rgba(255,255,255,0.3)] z-50">
+            <motion.header
+                initial={{ y: OFFSET_PX, scaleX: 0.94, borderRadius: 0 }}
+                animate={{
+                    y: navYOffset,
+                    scaleX: navYOffset === 0 ? 1 : 0.94,
+                    borderRadius: 0,
+                    borderColor:
+                        navYOffset === 0
+                            ? 'rgba(255, 255, 255, 1)'
+                            : 'rgba(255, 255, 255, 0.45)',
+                }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                style={{ transformOrigin: 'center' }}
+                className="fixed top-0 left-0 right-0 h-16 overflow-hidden bg-black/90 backdrop-blur-md text-white border-b border-white shadow-[0_1px_8px_0_rgba(255,255,255,0.3)] z-50"
+            >
                 {/* Show full-screen loading overlay when navigating to dashboard */}
 
                 <div className="relative h-full">
@@ -463,7 +508,7 @@ export function Navbar() {
                     )}
                     <GridBackground />
                 </div>
-            </header>
+            </motion.header>
         </>
     );
 }

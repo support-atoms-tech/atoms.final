@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
+import { BlurText } from '@/components/ui/blur-text';
+
 // Custom Code Icon Component
 const CodeIcon = ({ className }: { className?: string }) => (
     <svg
@@ -71,78 +73,53 @@ export function PolarionDemo() {
         return () => observer.disconnect();
     }, []);
     return (
-        <section className="border-none py-24 md:py-32 lg:py-40 relative bg-[#0f0f0f]  text-white">
-            <div className="container mx-auto px-4">
-                {/* Demo Image */}
+        <section className="relative py-12 md:py-16 bg-[#0f0f0f] scroll-smooth text-white">
+            <div className="max-w-[1800px] mx-auto px-4 md:px-8">
                 {/* Section Title */}
-                <motion.h2
-                    initial={{ opacity: 0, y: -20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                    className="text-[48px] sm:text-[64px] md:text-[80px] lg:text-[96px] xl:text-[112px] font-black tracking-tighter text-white leading-none mb-16 md:mb-24 text-center"
-                >
-                    SEE IT IN ACTION
-                </motion.h2>
+                <div className="mb-12 md:mb-16">
+                    <BlurText
+                        text="SEE IT IN ACTION"
+                        as="h2"
+                        delay={150}
+                        animateBy="words"
+                        direction="top"
+                        stepDuration={0.4}
+                        className="text-[32px] xs:text-[40px] sm:text-[48px] md:text-[60px] lg:text-[76px] xl:text-[92px] 2xl:text-[104px] font-black tracking-tighter text-white leading-none text-center w-full"
+                    />
+                </div>
 
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.8 }}
-                    className="relative"
-                >
-                    {/* Floating Demo Container */}
-                    <div className="relative group">
-                        {/* Main Image Container */}
-                        <div className="relative bg-black/50 backdrop-blur-sm rounded-0.1 border border-black/10 overflow-hidden shadow-2xl mb-10">
-                            <video
-                                ref={videoRef}
-                                src="/cursor__polarian-v.mp4"
-                                className="w-full h-auto object-cover"
-                                autoPlay
-                                muted
-                                loop
-                                playsInline
-                                poster="/cursor__polarian.jpg"
-                            />
-
-                            {/* Overlay with subtle gradient */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-                        </div>
-                    </div>
-
-                    {/* Feature Callouts */}
+                <div className="w-full max-w-[1200px] mx-auto mb-10">
                     <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.6, delay: 0.3 }}
-                        className="absolute -left-8 top-[30%] transform -translate-y-1/2 hidden xl:block"
+                        initial={{ opacity: 0, y: 30 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6 }}
+                        className="w-full"
                     >
-                        <div className="bg-white/40 backdrop-blur-md rounded-lg p-4 border border-white/30 shadow-lg">
-                            <div className="text-[#9B51E0] font-bold text-sm mb-1">
-                                Work Items
-                            </div>
-                            <div className="text-[#9B51E0] text-xs">
-                                Instant access & updates
+                        <div
+                            className={`relative bg-[#0f0f0f] backdrop-blur-sm overflow-hidden group h-full transition-all duration-300 p-4`}
+                        >
+                            <div className="relative w-full h-full">
+                                <video
+                                    ref={videoRef}
+                                    src="/demo1_steering_edited.mp4"
+                                    className="w-full h-full object-contain"
+                                    muted
+                                    loop
+                                    playsInline
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent pointer-events-none" />
+                                <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 lg:p-8 text-white z-10">
+                                    <h3 className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 tracking-tight">
+                                        Smart Requirements Steering
+                                    </h3>
+                                    <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-300/90">
+                                        AI-powered requirement navigation and management
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </motion.div>
-
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.6, delay: 0.3 }}
-                        className="absolute -right-8 bottom-1/4 hidden xl:block"
-                    >
-                        <div className="bg-white/40 backdrop-blur-md rounded-lg p-4 border border-white/30 shadow-lg">
-                            <div className="text-white font-bold text-sm mb-1">
-                                AI Chat
-                            </div>
-                            <div className="text-[#E5E5E5] text-xs">
-                                Natural language queries
-                            </div>
-                        </div>
-                    </motion.div>
-                </motion.div>
+                </div>
                 {/* Demo Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-16 lg:gap-24 max-w-6xl mx-auto">
                     {demoFeatures.map((feature, index) => (
@@ -156,7 +133,7 @@ export function PolarionDemo() {
                         >
                             {/* Icon */}
                             <div className="mb-6 flex justify-center">
-                                <feature.icon className="w-16 h-16 text-[#9B51E0] group-hover:text-white transition-colors duration-300" />
+                                <feature.icon className="w-16 h-16 text-[#7f00ff] group-hover:text-white transition-colors duration-300" />
                             </div>
 
                             {/* Title */}
