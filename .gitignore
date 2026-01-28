@@ -6,7 +6,6 @@
 /node_modules
 /.pnp
 .pnp.json
-/public
 /.history
 /reports/
 /memory/
@@ -40,6 +39,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# duplicate / backup media (originals live in public/ root)
+/public/originals
 
 # typescript
 *.tsbuildinfo
